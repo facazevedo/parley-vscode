@@ -1,0 +1,12 @@
+.env
+.env.*
+.npmrc
+.pypirc
+id_rsa
+id_ed25519
+*.pem
+*.key
+secrets.*
+node_modules/
+out/
+dist/

@@ -1,0 +1,188 @@
+{
+  "name": "parley-vscode",
+  "displayName": "Parley for VS Code",
+  "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
+  "version": "0.3.2",
+  "publisher": "mit-parley-community",
+  "license": "MIT",
+  "icon": "resources/icon.png",
+  "engines": {
+    "vscode": "^1.92.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:parley.chatView"
+  ],
+  "main": "./out/src/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "parley",
+          "title": "Parley",
+          "icon": "resources/parley.svg"
+        }
+      ]
+    },
+    "views": {
+      "parley": [
+        {
+          "type": "webview",
+          "id": "parley.chatView",
+          "name": "Chat"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "parley.setApiKey",
+        "title": "Parley: Set API Key",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.askSelection",
+        "title": "Parley: Ask About Selection",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.explainFile",
+        "title": "Parley: Explain Current File",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.refactorSelection",
+        "title": "Parley: Refactor Selection",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.generateTests",
+        "title": "Parley: Generate Tests",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.fixDiagnostics",
+        "title": "Parley: Fix Diagnostics",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.suggestTerminalCommand",
+        "title": "Parley: Suggest Terminal Command",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.generateImage",
+        "title": "Parley: Generate Image",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.toggleInlineCompletion",
+        "title": "Parley: Toggle Inline Completion",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.openChatWindow",
+        "title": "Parley: Open Chat Window",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.signOut",
+        "title": "Parley: Sign Out",
+        "category": "Parley"
+      }
+    ],
+    "configuration": {
+      "title": "Parley",
+      "properties": {
+        "parley.endpoint": {
+          "type": "string",
+          "default": "https://parley.api.mit.edu/v1",
+          "markdownDescription": "Base URL of the OpenAI-compatible MIT Parley API."
+        },
+        "parley.defaultAgent": {
+          "type": "string",
+          "default": "bedrock/claude-sonnet-4-6",
+          "markdownDescription": "Default model identifier (e.g. `bedrock/claude-sonnet-4-6`, `openai/gpt-5.1`, `google/gemini-3.1-pro`). Run `Parley: Set API Key` then pick from the model dropdown in the chat view."
+        },
+        "parley.stream": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Stream Parley replies token-by-token in the chat view."
+        },
+        "parley.agentMode": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Default state of the chat **Agent** toggle. In agent mode the model can read files, list directories, and search the workspace on its own (read-only tools)."
+        },
+        "parley.inlineCompletion.enabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show Parley inline (ghost-text) code completions as you type. Toggle quickly with `Parley: Toggle Inline Completion`."
+        },
+        "parley.inlineCompletion.model": {
+          "type": "string",
+          "default": "openai/gpt-5-nano",
+          "markdownDescription": "Model used for inline completions. Prefer a fast, inexpensive model."
+        },
+        "parley.inlineCompletion.debounceMs": {
+          "type": "number",
+          "default": 350,
+          "minimum": 0,
+          "markdownDescription": "Idle delay before requesting an inline completion, in milliseconds."
+        },
+        "parley.context.maxCharacters": {
+          "type": "number",
+          "default": 12000,
+          "minimum": 1000,
+          "markdownDescription": "Maximum characters of code/context to include in a request."
+        },
+        "parley.context.includeDiagnostics": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Include VS Code diagnostics when commands request problem context."
+        },
+        "parley.context.respectGitignore": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Respect workspace .gitignore patterns when collecting file context."
+        },
+        "parley.confirmBeforeSendingLargeContext": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show a context preview and confirmation before sending larger requests."
+        },
+        "parley.telemetry.enabled": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Enable extension telemetry. This extension currently sends no telemetry."
+        },
+        "parley.logLevel": {
+          "type": "string",
+          "default": "info",
+          "enum": [
+            "error",
+            "warn",
+            "info",
+            "debug"
+          ],
+          "markdownDescription": "Controls extension output verbosity. Secrets and prompt contents are never logged."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "npm run compile && node --test \"out/test/**/*.test.js\"",
+    "package": "vsce package --allow-missing-repository --no-rewrite-relative-links"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.12",
+    "@types/vscode": "^1.92.0",
+    "@vscode/vsce": "^2.32.0",
+    "typescript": "^5.5.4"
+  }
+}

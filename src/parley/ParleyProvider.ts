@@ -1,0 +1,36 @@
+import type {
+  AgentInfo,
+  ChatRequest,
+  ChatResponse,
+  CompletionRequest,
+  ImageRequest,
+  ImageResult,
+  ToolCall,
+  ToolDefinition
+} from './types';
+
+/**
+ * Optional per-request controls for {@link ParleyProvider.sendMessage}.
+ *
+ * When `onToken` is supplied the provider streams the assistant reply and
+ * invokes the callback for each incremental delta. When `tools`/`runTool` are
+ * supplied the provider runs an agentic loop, executing requested tools and
+ * feeding results back until the model produces a final answer.
+ */
+export interface SendMessageOptions {
+  readonly onToken?: (delta: string) => void;
+  readonly signal?: AbortSignal;
+  readonly tools?: readonly ToolDefinition[];
+  readonly runTool?: (call: ToolCall) => Promise<string>;
+  readonly onToolEvent?: (event: { readonly name: string; readonly args: string }) => void;
+  readonly maxToolRounds?: number;
+}
+
+export interface ParleyProvider {
+  readonly id: string;
+  listAgents(): Promise<readonly AgentInfo[]>;
+  sendMessage(request: ChatRequest, options?: SendMessageOptions): Promise<ChatResponse>;
+  complete(request: CompletionRequest, signal?: AbortSignal): Promise<string>;
+  generateImage(request: ImageRequest, signal?: AbortSignal): Promise<ImageResult>;
+  signOut(): Promise<void>;
+}
