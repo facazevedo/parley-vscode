@@ -72,7 +72,8 @@ export function activate(context: vscode.ExtensionContext): void {
         'Parley is open. To dock it like Codex, drag the Parley view header into the Secondary Side Bar, or use View: Toggle Secondary Side Bar Visibility first.'
       );
     }),
-    vscode.commands.registerCommand('parley.exportConversation', () => chatPanel.exportConversation())
+    vscode.commands.registerCommand('parley.exportConversation', () => chatPanel.exportConversation()),
+    vscode.commands.registerCommand('parley.compactConversation', () => chatPanel.compactConversation())
   );
 
   registerSetApiKeyCommand(context, commandDeps);

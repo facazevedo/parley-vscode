@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0
+
+### Added
+- Compact the conversation: a ⊟ toolbar button and `Parley: Compact Conversation` command summarize the chat (via the selected model) and replace the history with that summary, freeing up context. Client-side feature using the normal chat endpoint — works with any model.
+
+### Docs
+- Comprehensive README covering every feature, command, and setting.
+- Made the reasoning-effort caveat explicit (live testing was inconclusive; it may not currently take effect on Parley).
+
 ## 0.5.0
 
 ### Added

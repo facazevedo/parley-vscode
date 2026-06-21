@@ -1,107 +1,222 @@
 # Parley for VS Code
 
-`parley-vscode` is a Visual Studio Code extension for chatting with MIT Parley
-coding models from inside the editor — a Cursor-like sidebar with streaming
-replies, workspace context attachment, and diff-reviewed edits. It is built
-around a provider abstraction so the UI, context collection, diff review, and
-safety controls stay independent of transport.
+`parley-vscode` is a Visual Studio Code extension for working with **MIT Parley**
+coding models inside the editor — a Cursor-like experience with a streaming chat
+sidebar, inline (ghost-text) completions, an agent mode that can read your
+workspace, multimodal attachments, image generation, and diff-reviewed edits.
 
-## Current Integration Status
+It is built around a `ParleyProvider` abstraction, so the UI, context collection,
+diff review, and safety controls stay independent of the transport.
+
+---
+
+## Integration status
 
 Parley exposes an **OpenAI-compatible API** at `https://parley.api.mit.edu/v1`,
 authenticated with a personal `sk-parley-…` key. The extension talks to it
-directly — no browser/Touchstone step is needed for the API itself. Touchstone
+directly — **no browser/Touchstone step is needed for the API itself**. Touchstone
 only gates the Parley web app at `parley.mit.edu`, which is where you create your
 API key (**Settings → API Keys**).
 
 See [API_DISCOVERY.md](API_DISCOVERY.md) for the full API reference (endpoints,
-model IDs, streaming format).
+model IDs, streaming, tool-calling, vision, and image generation).
 
-## Getting Started
+---
 
-1. Create an API key at [parley.mit.edu](https://parley.mit.edu) → Settings → API Keys.
-2. In VS Code run **`Parley: Set API Key`** and paste it (stored in `SecretStorage`).
-3. Open the Parley sidebar, pick a model from the dropdown, and start chatting.
+## Getting started
+
+1. Create an API key at [parley.mit.edu](https://parley.mit.edu) → **Settings → API Keys**.
+2. In VS Code, run **`Parley: Set API Key`** (Command Palette) and paste it. The key is stored in VS Code `SecretStorage`, never in settings or logs. The key is verified against the API immediately.
+3. Click the **feather icon** in the Activity Bar to open the Parley chat, pick a model from the dropdown, and start chatting.
+
+---
 
 ## Features
 
-- **Streaming chat sidebar** with a model picker, Markdown + code rendering, **Stop**, and **+ New** conversation.
-- **Inline (ghost-text) completions** as you type, powered by a fast model. Toggle with `Parley: Toggle Inline Completion`.
-- **Agent mode** (chat **Agent** toggle): the model uses read-only tools — `read_file`, `list_directory`, `find_files` — to gather its own context. Edits still go through diff review; nothing is written or executed automatically.
-- **File & image attachments**: the 📎 button attaches text files (as context) or images (sent as multimodal input to vision-capable models).
-- **Image generation** via `gpt-image-1` (`Parley: Generate Image`) — saved into `parley-images/` and opened.
-- **Diff-reviewed edits**: proposed file changes open in a VS Code diff and require explicit acceptance before applying.
-- Editor commands route into the chat panel and stream their reply:
-  - `Parley: Ask About Selection`
-  - `Parley: Explain Current File`
-  - `Parley: Refactor Selection`
-  - `Parley: Generate Tests`
-  - `Parley: Fix Diagnostics`
-  - `Parley: Suggest Terminal Command`
-- **Export the conversation** to Markdown or JSON (⤓ toolbar button or `Parley: Export Conversation`) — each reply is tagged with the model that produced it.
-- Plus `Parley: Generate Image`, `Parley: Toggle Inline Completion`, `Parley: Set API Key`, `Parley: Open Chat Window`, and `Parley: Sign Out`.
-- Minimal context sharing by default, with preview before sending large context.
-- Sensitive file filtering for `.env`, `.npmrc`, `.pypirc`, private keys, PEM files, `secrets.*`, and hidden files (also enforced on agent-mode file reads).
-- `.parleyignore` support, plus optional `.gitignore` respect.
-- Terminal suggestions are shown for confirmation and inserted into a terminal without automatic execution.
+### 💬 Streaming chat sidebar
+A dedicated Parley view with:
+- **Model picker** populated live from `GET /v1/models` (Claude, GPT-5, Gemini, Llama families).
+- **Token-by-token streaming** with a **Stop** button to cancel mid-reply.
+- **Markdown rendering** with inline-code chips and fenced code blocks.
+- **+ New** to clear the conversation; **↻** to refresh the model list.
+- Modern assistant-style layout (your message as a rounded card, the reply as flowing text — no role labels).
+- `Enter` sends, `Shift+Enter` inserts a newline.
+- Conversation history is sent with each turn for multi-turn context.
 
-## Development
+### 🧠 Reasoning effort
+An **Effort** dropdown in the chat toolbar (and the `parley.reasoningEffort`
+setting) sends the standard `reasoning_effort` parameter — `minimal`, `low`,
+`medium`, or `high` — with chat, agent-mode, and inline-completion requests.
+`Default` omits the parameter.
 
-Install Node.js supported by the current VS Code extension tooling, then run:
+> ⚠️ **Not verified to take effect.** In live testing the Parley proxy *accepts*
+> `reasoning_effort` but showed **no clear behavioral change** — `high` was not
+> slower or heavier than `minimal`, no `reasoning_tokens` were reported, and even an
+> invalid value was accepted. So it may currently be a **no-op** on Parley's side
+> (the GPT-5 reasoning models are the most likely to respond if/when it's honored).
+> The control sends the standard parameter and is ready for when the backend enforces it.
 
-```bash
-npm install
-npm run compile
-npm test
-```
+### ⌨️ Inline (ghost-text) completions
+As you type, Parley suggests a completion at the cursor (Cursor-style ghost text),
+using a fast model and a fill-in-the-middle prompt around your cursor.
+- Toggle on/off with **`Parley: Toggle Inline Completion`**.
+- Configure the model and debounce via `parley.inlineCompletion.*`.
+- Only runs in real editor documents; cancels in-flight requests as you keep typing.
 
-Open the folder in VS Code and press `F5` to start an Extension Development Host.
+### 🤖 Agent mode
+Turn on the **Agent** checkbox in the composer to let the model gather its own
+context through an OpenAI tool-calling loop, using **read-only** tools:
+- `read_file` — read a workspace file
+- `list_directory` — list a directory
+- `find_files` — glob search the workspace
+
+Tool activity is shown inline (`⚙ read_file src/app.ts`). There is **no** write or
+execute tool — edits still flow through the diff-review step, sensitive files are
+refused, and paths are constrained to the workspace.
+
+### 📎 File & image attachments
+The **📎** button attaches files to your next message:
+- **Text files** are added as context.
+- **Images** (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.bmp`) are sent as multimodal `image_url` input to vision-capable models (Claude, Gemini, GPT-5).
+
+Attachments show as removable chips and are cleared after sending.
+
+### 🎨 Image generation
+**`Parley: Generate Image`** prompts for a description and size, calls
+`gpt-image-1`, saves the PNG to `parley-images/` in your workspace (or a location
+you choose), and opens it.
+
+### ✅ Diff-reviewed edits
+When a reply proposes file changes — as whole-file `File: <path>` blocks or unified
+diffs — they open in a **VS Code diff** and are applied **only after you accept**.
+Nothing is written automatically.
+
+### 💻 Editor commands
+These collect the relevant context and stream the reply into the chat panel:
+- **`Parley: Ask About Selection`**
+- **`Parley: Explain Current File`**
+- **`Parley: Refactor Selection`**
+- **`Parley: Generate Tests`**
+- **`Parley: Fix Diagnostics`**
+- **`Parley: Suggest Terminal Command`** — shows a command for confirmation and inserts it into a terminal (never auto-executes).
+
+### 📤 Export the conversation
+The **⤓** toolbar button or **`Parley: Export Conversation`** saves the whole chat
+to **Markdown** or **JSON**. Each assistant reply is tagged with the model that
+produced it, so exports remain accurate across mixed-model conversations.
+
+### 📦 Compact the conversation
+The **⊟** toolbar button or **`Parley: Compact Conversation`** asks the current
+model to summarize the conversation, then replaces the history with that summary so
+the chat can continue using far fewer tokens. This is a **client-side** feature
+built on the normal chat endpoint (Parley has no compaction endpoint), so it works
+with any model.
+
+### 🔒 Safety
+- **Sensitive-file filtering** excludes `.env`/`.env.*`, `.npmrc`, `.pypirc`, private keys, `*.pem`/`*.key`/`*.p12`/`*.pfx`, `secrets.*`, `id_rsa`/`id_ed25519`, `known_hosts`, `credentials`, and files under `.ssh`/`.aws`/`.azure`/`.gnupg`. Hidden files are excluded by default. The same filter applies to agent-mode file reads.
+- **`.parleyignore`** support, plus optional `.gitignore` respect.
+- **Large-context preview**: when attached context is large, a preview opens and you confirm before sending.
+- The API key lives in `SecretStorage`; prompts, code, headers, and tokens are never logged.
+
+---
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `Parley: Set API Key` | Store/verify your `sk-parley-…` key in SecretStorage |
+| `Parley: Open Chat Window` | Focus the Parley chat view |
+| `Parley: Ask About Selection` | Ask about the current selection |
+| `Parley: Explain Current File` | Explain the active file |
+| `Parley: Refactor Selection` | Refactor the selection (diff-reviewed) |
+| `Parley: Generate Tests` | Generate tests for the current file |
+| `Parley: Fix Diagnostics` | Fix reported problems with the smallest change |
+| `Parley: Suggest Terminal Command` | Suggest a shell command (manual confirm) |
+| `Parley: Generate Image` | Generate an image with `gpt-image-1` |
+| `Parley: Toggle Inline Completion` | Enable/disable ghost-text completions |
+| `Parley: Export Conversation` | Export the chat to Markdown or JSON |
+| `Parley: Compact Conversation` | Summarize the chat and replace history to free context |
+| `Parley: Sign Out` | Clear the stored API key |
+
+---
 
 ## Settings
 
-- `parley.endpoint`: Parley API base URL. Defaults to `https://parley.api.mit.edu/v1`.
-- `parley.defaultAgent`: Default model identifier, e.g. `bedrock/claude-sonnet-4-6`.
-- `parley.stream`: Stream replies token-by-token in the chat view (default `true`).
-- `parley.agentMode`: Default state of the chat **Agent** toggle (default `false`).
-- `parley.inlineCompletion.enabled`: Show inline ghost-text completions (default `true`).
-- `parley.inlineCompletion.model`: Model for completions (default `openai/gpt-5-nano`; prefer a fast one).
-- `parley.inlineCompletion.debounceMs`: Idle delay before requesting a completion (default `350`).
-- `parley.context.maxCharacters`: Maximum context size.
-- `parley.context.includeDiagnostics`: Include diagnostics when requested.
-- `parley.context.respectGitignore`: Respect `.gitignore` while collecting file context.
-- `parley.confirmBeforeSendingLargeContext`: Preview context before sending.
-- `parley.telemetry.enabled`: Defaults to `false`; no telemetry is currently emitted.
-- `parley.logLevel`: `error`, `warn`, `info`, or `debug`.
+| Setting | Default | Description |
+| --- | --- | --- |
+| `parley.endpoint` | `https://parley.api.mit.edu/v1` | OpenAI-compatible API base URL |
+| `parley.defaultAgent` | `bedrock/claude-sonnet-4-6` | Default model id |
+| `parley.stream` | `true` | Stream replies token-by-token |
+| `parley.reasoningEffort` | `default` | `default` \| `minimal` \| `low` \| `medium` \| `high` → `reasoning_effort` |
+| `parley.agentMode` | `false` | Default state of the chat **Agent** toggle |
+| `parley.inlineCompletion.enabled` | `true` | Show inline ghost-text completions |
+| `parley.inlineCompletion.model` | `openai/gpt-5-nano` | Model used for completions (prefer a fast one) |
+| `parley.inlineCompletion.debounceMs` | `350` | Idle delay before requesting a completion |
+| `parley.context.maxCharacters` | `12000` | Max characters of context per request |
+| `parley.context.includeDiagnostics` | `true` | Include diagnostics when a command requests them |
+| `parley.context.respectGitignore` | `true` | Respect `.gitignore` while collecting context |
+| `parley.confirmBeforeSendingLargeContext` | `true` | Preview/confirm before sending large context |
+| `parley.telemetry.enabled` | `false` | No telemetry is emitted |
+| `parley.logLevel` | `info` | `error` \| `warn` \| `info` \| `debug` |
+
+---
+
+## Models
+
+Model ids are provider-prefixed; the chat dropdown lists whatever `GET /v1/models`
+returns. Observed families include:
+
+- **Anthropic (Bedrock):** `bedrock/claude-haiku-4-5`, `claude-sonnet-4-6`, `claude-opus-4-6`, `claude-opus-4-7`
+- **OpenAI:** `openai/gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5.1`, `gpt-5.2`, `gpt-5.3-codex`, `gpt-5.4`, `gpt-5.5`, `gpt-image-1`
+- **Google:** `google/gemini-2.5-pro`, `gemini-3.0-flash`, `gemini-3.1-pro`
+- **Meta:** `bedrock/llama-4-maverick-17b`
+
+---
+
+## Docking like Codex
+
+VS Code does not let third-party extensions contribute to the Secondary Side Bar
+directly. To dock Parley there:
+
+1. Run **`Parley: Open Chat Window`**.
+2. Run **`View: Toggle Secondary Side Bar Visibility`** if it's hidden.
+3. Drag the **Chat** view header from the Parley sidebar into the Secondary Side Bar.
+
+VS Code remembers the layout afterward.
+
+---
+
+## Development
+
+```bash
+npm install
+npm run compile     # tsc -> out/
+npm test            # compile + node --test
+```
+
+Press `F5` to launch an Extension Development Host.
 
 ## Packaging
-
-The project uses the current VS Code packaging tool, `@vscode/vsce`:
 
 ```bash
 npm install
 npm run compile
-npm run package
+npm run package     # @vscode/vsce -> parley-vscode-<version>.vsix
 ```
 
-This creates a `.vsix` file that can be installed with:
+Install the result with:
 
 ```bash
-code --install-extension parley-vscode-0.3.0.vsix
+code --install-extension parley-vscode-0.6.0.vsix
 ```
 
 ## Architecture
 
-The official client lives in `src/parley/ParleyClient.ts` behind the
-`ParleyProvider` interface; the command, context, webview, and diff layers are
-transport-agnostic. The API key is stored in VS Code `SecretStorage`;
-credentials and request headers are never logged.
+- `src/parley/ParleyClient.ts` — the official client (chat + streaming + tool loop, `/models`, `/chat/completions`, `/images/generations`) behind the `ParleyProvider` interface.
+- `src/parley/tools.ts` — read-only agent tools.
+- `src/completion/` — the inline completion provider.
+- `src/context/` — selection/file/diagnostics/editor context collection, ignore rules, sensitive-file filtering.
+- `src/diff/` — unified-diff / `File:`-block parsing and diff-review-before-apply.
+- `src/webview/ChatPanel.ts` + `media/` — the chat UI.
 
-## Docking Like Codex
-
-VS Code does not let third-party extensions contribute directly to the Secondary Side Bar by default. To place Parley there:
-
-1. Run `Parley: Open Chat Window`.
-2. Run `View: Toggle Secondary Side Bar Visibility` if the secondary bar is hidden.
-3. Drag the `Chat` view header from the Parley sidebar into the Secondary Side Bar.
-
-VS Code remembers that layout after you move it.
+Authentication material uses `SecretStorage`; credentials and request headers are never logged. See [PRIVACY.md](PRIVACY.md) and [SECURITY.md](SECURITY.md).

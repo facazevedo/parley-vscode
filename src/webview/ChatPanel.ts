@@ -28,6 +28,7 @@ interface ChatPanelMessage {
     | 'attachFiles'
     | 'removeAttachment'
     | 'export'
+    | 'compact'
     | 'setApiKey';
   readonly prompt?: string;
   readonly agentId?: string;
@@ -147,6 +148,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         return;
       case 'export':
         await this.exportConversation();
+        return;
+      case 'compact':
+        await this.compactConversation();
         return;
       case 'removeAttachment':
         this.attachments = this.attachments.filter((item) => item.id !== message.id);
@@ -289,6 +293,65 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     await this.postState();
   }
 
+  /**
+   * Compact the conversation: ask the model to summarize it, then replace the
+   * history with that summary so the chat can continue with far fewer tokens.
+   * This is a client-side feature built on the normal chat endpoint — it works
+   * with any model; Parley itself has no compaction endpoint.
+   */
+  public async compactConversation(): Promise<void> {
+    if (this.busy) {
+      await vscode.window.showInformationMessage('Parley is still responding. Stop the current reply first.');
+      return;
+    }
+    if (this.history.length < 2) {
+      await vscode.window.showInformationMessage('Parley: not enough conversation to compact yet.');
+      return;
+    }
+
+    const settings = this.getSettings();
+    const model = this.selectedAgentId || settings.defaultAgent;
+    const transcript = this.history
+      .map((m) => `${m.role === 'user' ? 'User' : m.role === 'assistant' ? 'Assistant' : m.role}: ${m.content}`)
+      .join('\n\n');
+    const prompt =
+      'Summarize the conversation below so it can continue seamlessly with far fewer tokens. ' +
+      'Preserve key decisions, proposed code and file paths, the current goal, and any unresolved tasks. ' +
+      'Be concise but complete, and output only the summary.\n\n---\n' +
+      transcript;
+
+    this.busy = true;
+    await this.postState();
+    try {
+      const summary = await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: 'Compacting conversation…' },
+        async () => {
+          const response = await this.getProvider().sendMessage({
+            prompt,
+            messages: [{ role: 'user', content: prompt, createdAt: new Date().toISOString() }],
+            context: [],
+            agentId: model,
+            reasoningEffort: this.selectedEffort || undefined
+          });
+          return response.message.content;
+        }
+      );
+
+      this.history.length = 0;
+      this.history.push({
+        role: 'assistant',
+        content: `📦 **Compacted summary of the conversation so far**\n\n${summary}`,
+        createdAt: new Date().toISOString(),
+        model
+      });
+    } catch (error) {
+      await reportProviderError(this.commandDeps, error);
+    } finally {
+      this.busy = false;
+      await this.postState();
+    }
+  }
+
   /** Export the current conversation to a Markdown or JSON file. */
   public async exportConversation(): Promise<void> {
     if (this.history.length === 0) {
@@ -408,6 +471,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         <option value="high">Effort: High</option>
       </select>
       <button id="refresh" title="Refresh model list">↻</button>
+      <button id="compact" title="Compact conversation (summarize to free up context)">⊟</button>
       <button id="export" title="Export conversation">⤓</button>
       <button id="newChat" title="New conversation">+ New</button>
     </div>

@@ -1,6 +1,6 @@
 body { margin: 0; color: var(--vscode-foreground); background: var(--vscode-sideBar-background); font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); }
 .shell { display: flex; flex-direction: column; height: 100vh; }
-.toolbar { display: flex; gap: 6px; align-items: center; padding: 8px 10px; border-bottom: 1px solid var(--vscode-sideBar-border); }
+.toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 10px; border-bottom: 1px solid var(--vscode-sideBar-border); }
 select, textarea, button { font: inherit; }
 select { min-width: 0; flex: 1; color: var(--vscode-dropdown-foreground); background: var(--vscode-dropdown-background); border: 1px solid var(--vscode-dropdown-border); padding: 4px 6px; border-radius: 4px; }
 button { color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground)); background: var(--vscode-button-secondaryBackground, var(--vscode-button-background)); border: 0; padding: 5px 9px; cursor: pointer; border-radius: 4px; }
