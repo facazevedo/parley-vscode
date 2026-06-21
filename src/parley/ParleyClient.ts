@@ -12,7 +12,8 @@ import {
   type ChatResponse,
   type CompletionRequest,
   type ImageRequest,
-  type ImageResult
+  type ImageResult,
+  type TokenUsage
 } from './types';
 
 const SYSTEM_PROMPT = [
@@ -52,6 +53,11 @@ interface OpenAiModelList {
 interface ChatCompletionMessage {
   readonly content?: string | null;
   readonly tool_calls?: ReadonlyArray<{ id: string; type: string; function: { name: string; arguments: string } }>;
+}
+
+interface CompletionResult {
+  readonly content: string;
+  readonly usage?: TokenUsage;
 }
 
 /**
@@ -97,15 +103,16 @@ export class ParleyClient implements ParleyProvider {
     const effort = request.reasoningEffort || undefined;
 
     const useTools = Boolean(options?.tools && options.tools.length > 0 && options.runTool);
-    const content = useTools
+    const result = useTools
       ? await this.runToolLoop(messages, model, options as SendMessageOptions, effort)
       : await this.singleCompletion(messages, model, options, effort);
 
-    const proposedChanges = await extractProposedChanges(content);
+    const proposedChanges = await extractProposedChanges(result.content);
 
     return {
-      message: { role: 'assistant', content, createdAt: new Date().toISOString() },
-      proposedChanges: proposedChanges.length > 0 ? proposedChanges : undefined
+      message: { role: 'assistant', content: result.content, createdAt: new Date().toISOString(), usage: result.usage },
+      proposedChanges: proposedChanges.length > 0 ? proposedChanges : undefined,
+      usage: result.usage
     };
   }
 
@@ -162,11 +169,14 @@ export class ParleyClient implements ParleyProvider {
     model: string,
     options?: SendMessageOptions,
     effort?: string
-  ): Promise<string> {
+  ): Promise<CompletionResult> {
     const stream = Boolean(options?.onToken);
     const payload: Record<string, unknown> = { model, messages, stream };
     if (effort) {
       payload.reasoning_effort = effort;
+    }
+    if (stream) {
+      payload.stream_options = { include_usage: true };
     }
     const response = await this.request('/chat/completions', {
       method: 'POST',
@@ -175,7 +185,11 @@ export class ParleyClient implements ParleyProvider {
       signal: options?.signal
     });
 
-    return stream ? this.readStream(response, options?.onToken) : this.extractContent(await response.json());
+    if (stream) {
+      return this.readStream(response, options?.onToken);
+    }
+    const json = await response.json();
+    return { content: this.extractContent(json), usage: parseUsage(json) };
   }
 
   /** Run the OpenAI tool-calling loop until the model answers or rounds run out. */
@@ -184,7 +198,7 @@ export class ParleyClient implements ParleyProvider {
     model: string,
     options: SendMessageOptions,
     effort?: string
-  ): Promise<string> {
+  ): Promise<CompletionResult> {
     const convo = [...messages];
     const maxRounds = options.maxToolRounds ?? DEFAULT_MAX_TOOL_ROUNDS;
 
@@ -200,14 +214,17 @@ export class ParleyClient implements ParleyProvider {
         signal: options.signal
       });
 
-      const json = (await response.json()) as { choices?: Array<{ message?: ChatCompletionMessage }> };
+      const json = (await response.json()) as {
+        choices?: Array<{ message?: ChatCompletionMessage }>;
+        usage?: unknown;
+      };
       const message = json.choices?.[0]?.message;
       const toolCalls = message?.tool_calls ?? [];
 
       if (toolCalls.length === 0) {
         const content = typeof message?.content === 'string' ? message.content : '';
         options.onToken?.(content);
-        return content;
+        return { content, usage: parseUsage(json) };
       }
 
       convo.push({ role: 'assistant', content: message?.content ?? '', tool_calls: toolCalls });
@@ -230,7 +247,10 @@ export class ParleyClient implements ParleyProvider {
   }
 
   private buildMessages(request: ChatRequest): OpenAiMessage[] {
-    const messages: OpenAiMessage[] = [{ role: 'system', content: SYSTEM_PROMPT }];
+    const system = request.systemExtra
+      ? `${SYSTEM_PROMPT}\n\n# Project rules (from the workspace)\n${request.systemExtra}`
+      : SYSTEM_PROMPT;
+    const messages: OpenAiMessage[] = [{ role: 'system', content: system }];
 
     const history =
       request.messages.length > 0
@@ -270,15 +290,17 @@ export class ParleyClient implements ParleyProvider {
     return typeof content === 'string' ? content : '';
   }
 
-  private async readStream(response: Response, onToken?: (delta: string) => void): Promise<string> {
+  private async readStream(response: Response, onToken?: (delta: string) => void): Promise<CompletionResult> {
     if (!response.body) {
-      return this.extractContent(await response.json());
+      const json = await response.json();
+      return { content: this.extractContent(json), usage: parseUsage(json) };
     }
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
     let full = '';
+    let usage: TokenUsage | undefined;
 
     try {
       for (;;) {
@@ -297,12 +319,15 @@ export class ParleyClient implements ParleyProvider {
           }
           const data = line.slice(5).trim();
           if (data === '[DONE]') {
-            return full;
+            return { content: full, usage };
           }
-          const delta = this.extractDelta(data);
-          if (delta) {
-            full += delta;
-            onToken?.(delta);
+          const parsed = this.parseChunk(data);
+          if (parsed.usage) {
+            usage = parsed.usage;
+          }
+          if (parsed.delta) {
+            full += parsed.delta;
+            onToken?.(parsed.delta);
           }
         }
       }
@@ -314,17 +339,17 @@ export class ParleyClient implements ParleyProvider {
       }
     }
 
-    return full;
+    return { content: full, usage };
   }
 
-  private extractDelta(data: string): string {
+  private parseChunk(data: string): { delta: string; usage?: TokenUsage } {
     try {
-      const parsed = JSON.parse(data) as { choices?: Array<{ delta?: { content?: string } }> };
+      const parsed = JSON.parse(data) as { choices?: Array<{ delta?: { content?: string } }>; usage?: unknown };
       const delta = parsed.choices?.[0]?.delta?.content;
-      return typeof delta === 'string' ? delta : '';
+      return { delta: typeof delta === 'string' ? delta : '', usage: parseUsage(parsed) };
     } catch {
       this.logger.debug('Skipped an unparseable streaming chunk.');
-      return '';
+      return { delta: '' };
     }
   }
 
@@ -379,6 +404,19 @@ export class ParleyClient implements ParleyProvider {
     }
     return `Parley request failed (HTTP ${response.status})${detail ? `: ${detail.slice(0, 300)}` : ''}.`;
   }
+}
+
+function parseUsage(payload: unknown): TokenUsage | undefined {
+  const usage = (payload as { usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } })
+    ?.usage;
+  if (!usage || (usage.prompt_tokens == null && usage.completion_tokens == null && usage.total_tokens == null)) {
+    return undefined;
+  }
+  return {
+    prompt: usage.prompt_tokens ?? 0,
+    completion: usage.completion_tokens ?? 0,
+    total: usage.total_tokens ?? (usage.prompt_tokens ?? 0) + (usage.completion_tokens ?? 0)
+  };
 }
 
 /** Strip code fences and stray commentary a model may wrap around a completion. */

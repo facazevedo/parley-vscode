@@ -48,8 +48,51 @@ export const AGENT_TOOLS: readonly ToolDefinition[] = [
         required: ['glob']
       }
     }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'write_file',
+      description:
+        'Create or overwrite a workspace file with the given full contents. The user reviews the change in a diff and must accept it before it is applied.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Workspace-relative path to write.' },
+          content: { type: 'string', description: 'The COMPLETE new file contents.' }
+        },
+        required: ['path', 'content']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'run_command',
+      description:
+        'Request to run a shell command in the workspace root. The user must approve each command before it runs; returns combined stdout/stderr.',
+      parameters: {
+        type: 'object',
+        properties: { command: { type: 'string', description: 'The shell command to run.' } },
+        required: ['command']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'fetch_url',
+      description: 'Fetch a public web page over HTTPS and return its text content (HTML stripped, truncated).',
+      parameters: {
+        type: 'object',
+        properties: { url: { type: 'string', description: 'An https:// URL to fetch.' } },
+        required: ['url']
+      }
+    }
   }
 ];
+
+const MAX_FETCH_CHARS = 12000;
 
 /** Execute an agent tool call against the workspace and return a string result. */
 export async function runAgentTool(call: ToolCall): Promise<string> {
@@ -72,8 +115,36 @@ export async function runAgentTool(call: ToolCall): Promise<string> {
       return listDirectory(root, String(args.path ?? '.'));
     case 'find_files':
       return findFiles(String(args.glob ?? ''));
+    case 'fetch_url':
+      return fetchUrl(String(args.url ?? ''));
     default:
       return `Error: unknown tool "${call.name}".`;
+  }
+}
+
+async function fetchUrl(url: string): Promise<string> {
+  if (!/^https:\/\//i.test(url)) {
+    return 'Error: only https:// URLs are allowed.';
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(url, { signal: controller.signal, headers: { Accept: 'text/html,text/plain' } });
+    if (!response.ok) {
+      return `Error: HTTP ${response.status} fetching ${url}.`;
+    }
+    const raw = await response.text();
+    const text = raw
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return text.length > MAX_FETCH_CHARS ? `${text.slice(0, MAX_FETCH_CHARS)}\n\n[truncated]` : text;
+  } catch (error) {
+    return `Error: could not fetch ${url} (${error instanceof Error ? error.message : 'unknown'}).`;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.7.0
+
+### Added
+- **Agentic editing.** Agent mode gains `write_file` (diff-reviewed + checkpointed), `run_command` (per-command confirmation, returns output), and `fetch_url` (read a web page) on top of the existing read tools.
+- **Inline edit (Ctrl+Alt+K / Cmd+Alt+K)** — `Parley: Edit Selection (Inline)`: select code, describe a change, review the diff, apply.
+- **Checkpoints** — `Parley: Revert Last Edit` undoes the most recent agent/inline edit.
+- **@file mentions** in the composer attach referenced files as context.
+- **Project rules** — `.parleyrules` / `AGENTS.md` / `.cursorrules` in the workspace root is injected into the system prompt.
+- **Persistent sessions** — the conversation and your model/effort/agent-mode choices survive reloads (per workspace).
+- **Token-usage readout** under each reply (model + total tokens) when the API reports it; streaming requests now set `stream_options.include_usage`.
+
+### Notes
+- Semantic `@codebase` search is not offered: the Parley API has no `/v1/embeddings` endpoint.
+
 ## 0.6.0
 
 ### Added

@@ -5,6 +5,7 @@ import { registerExplainFileCommand } from './commands/explainFile';
 import { registerFixDiagnosticsCommand } from './commands/fixDiagnostics';
 import { registerGenerateImageCommand } from './commands/generateImage';
 import { registerGenerateTestsCommand } from './commands/generateTests';
+import { registerInlineEditCommand } from './commands/inlineEdit';
 import { registerRefactorSelectionCommand } from './commands/refactorSelection';
 import { registerSetApiKeyCommand } from './commands/setApiKey';
 import { registerSignOutCommand } from './commands/signOut';
@@ -12,6 +13,7 @@ import { registerSuggestTerminalCommand } from './commands/suggestTerminalComman
 import { registerToggleInlineCompletionCommand } from './commands/toggleInlineCompletion';
 import { ParleyInlineCompletionProvider } from './completion/inlineCompletionProvider';
 import { getSettings } from './config/settings';
+import { CheckpointStore } from './diff/checkpoints';
 import { ProposedContentProvider } from './diff/showDiff';
 import { Logger } from './logging/logger';
 import { ParleyAuthStore } from './parley/auth';
@@ -23,6 +25,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const logger = new Logger();
   const auth = new ParleyAuthStore(context.secrets);
   const diffProvider = new ProposedContentProvider();
+  const checkpoints = new CheckpointStore();
   let settings = getSettings();
   let provider: ParleyProvider = createParleyProvider(settings, auth, logger);
   logger.setLevel(settings.logLevel);
@@ -53,7 +56,15 @@ export function activate(context: vscode.ExtensionContext): void {
     diffProvider
   };
 
-  const chatPanel = new ChatPanel(context.extensionUri, () => provider, () => settings, logger, commandDeps);
+  const chatPanel = new ChatPanel(
+    context.extensionUri,
+    () => provider,
+    () => settings,
+    logger,
+    commandDeps,
+    context.workspaceState,
+    checkpoints
+  );
   // Route prompt-style commands into the chat panel so replies stream in-conversation.
   commandDeps.runPrompt = (prompt, options) => chatPanel.submitExternalPrompt(prompt, options);
 
@@ -73,10 +84,15 @@ export function activate(context: vscode.ExtensionContext): void {
       );
     }),
     vscode.commands.registerCommand('parley.exportConversation', () => chatPanel.exportConversation()),
-    vscode.commands.registerCommand('parley.compactConversation', () => chatPanel.compactConversation())
+    vscode.commands.registerCommand('parley.compactConversation', () => chatPanel.compactConversation()),
+    vscode.commands.registerCommand('parley.revertLastEdit', async () => {
+      const label = await checkpoints.revertLast();
+      await vscode.window.showInformationMessage(label ? `Parley reverted: ${label}.` : 'Parley: nothing to revert.');
+    })
   );
 
   registerSetApiKeyCommand(context, commandDeps);
+  registerInlineEditCommand(context, commandDeps, checkpoints);
   registerAskSelectionCommand(context, commandDeps);
   registerExplainFileCommand(context, commandDeps);
   registerRefactorSelectionCommand(context, commandDeps);

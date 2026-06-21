@@ -205,6 +205,17 @@
       return;
     }
     history.replaceChildren();
-    msg.history.forEach((item) => bubble(item.role, renderMd(item.content)));
+    msg.history.forEach((item) => {
+      const content = bubble(item.role, renderMd(item.content));
+      if (item.role === 'assistant' && (item.model || (item.usage && item.usage.total))) {
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        const parts = [];
+        if (item.model) parts.push(item.model);
+        if (item.usage && item.usage.total) parts.push(item.usage.total + ' tokens');
+        meta.textContent = parts.join(' · ');
+        content.parentNode.append(meta);
+      }
+    });
   });
 })();

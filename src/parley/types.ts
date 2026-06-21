@@ -1,11 +1,19 @@
 export type MessageRole = 'user' | 'assistant' | 'system';
 
+export interface TokenUsage {
+  readonly prompt: number;
+  readonly completion: number;
+  readonly total: number;
+}
+
 export interface ChatMessage {
   readonly role: MessageRole;
   readonly content: string;
   readonly createdAt: string;
   /** Model that produced an assistant message (for export/labeling). */
   readonly model?: string;
+  /** Token usage reported for an assistant message, if available. */
+  readonly usage?: TokenUsage;
 }
 
 export interface ContextAttachment {
@@ -36,6 +44,8 @@ export interface ChatRequest {
   readonly context: readonly ContextAttachment[];
   readonly images?: readonly ImageAttachment[];
   readonly reasoningEffort?: ReasoningEffort;
+  /** Extra system-prompt text (e.g. project rules from .parleyrules / AGENTS.md). */
+  readonly systemExtra?: string;
 }
 
 /** OpenAI-style function tool definition. */
@@ -94,6 +104,7 @@ export interface ChatResponse {
   readonly message: ChatMessage;
   readonly proposedChanges?: readonly ProposedFileChange[];
   readonly terminalSuggestions?: readonly TerminalSuggestion[];
+  readonly usage?: TokenUsage;
 }
 
 export interface AgentInfo {

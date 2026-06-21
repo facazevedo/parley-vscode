@@ -64,15 +64,33 @@ using a fast model and a fill-in-the-middle prompt around your cursor.
 - Only runs in real editor documents; cancels in-flight requests as you keep typing.
 
 ### 🤖 Agent mode
-Turn on the **Agent** checkbox in the composer to let the model gather its own
-context through an OpenAI tool-calling loop, using **read-only** tools:
-- `read_file` — read a workspace file
-- `list_directory` — list a directory
-- `find_files` — glob search the workspace
+Turn on the **Agent** checkbox in the composer to let the model work through an
+OpenAI tool-calling loop. Tool activity is shown inline (`⚙ read_file src/app.ts`).
 
-Tool activity is shown inline (`⚙ read_file src/app.ts`). There is **no** write or
-execute tool — edits still flow through the diff-review step, sensitive files are
-refused, and paths are constrained to the workspace.
+- `read_file`, `list_directory`, `find_files` — gather context (read-only)
+- `write_file` — create/edit a file; **opens a diff and requires your approval** before applying (and is checkpointed for revert)
+- `run_command` — run a shell command; **requires per-command confirmation**, then returns its output to the model
+- `fetch_url` — fetch a public `https://` page as text
+
+Sensitive files are refused, file paths are constrained to the workspace, and no
+edit or command happens without your explicit approval.
+
+### ✏️ Inline edit (Ctrl+Alt+K)
+Select code, press **`Ctrl+Alt+K`** (`Cmd+Alt+K` on macOS) or run
+**`Parley: Edit Selection (Inline)`**, describe the change, and review the diff
+before it's applied — a Cursor-style Cmd-K edit without leaving the editor.
+Applied edits are checkpointed; **`Parley: Revert Last Edit`** undoes the most recent one.
+
+### 🏷️ @-mentions & project rules
+- Type **`@path/to/file`** in the composer to attach that file as context.
+- A **`.parleyrules`**, **`AGENTS.md`**, or **`.cursorrules`** file in the workspace root is auto-injected into the system prompt as project rules.
+
+> Semantic `@codebase` search isn't offered because the Parley API exposes no
+> embeddings endpoint; use `@file` mentions or agent mode's `find_files` instead.
+
+### 💾 Persistent sessions & usage
+- The conversation (and your model/effort/agent-mode choices) **persists across reloads** per workspace.
+- Each reply shows a subtle footer with the **model** and **token usage** when the API reports it.
 
 ### 📎 File & image attachments
 The **📎** button attaches files to your next message:
@@ -132,6 +150,8 @@ with any model.
 | `Parley: Generate Tests` | Generate tests for the current file |
 | `Parley: Fix Diagnostics` | Fix reported problems with the smallest change |
 | `Parley: Suggest Terminal Command` | Suggest a shell command (manual confirm) |
+| `Parley: Edit Selection (Inline)` | Inline edit of the selection (`Ctrl+Alt+K` / `Cmd+Alt+K`) |
+| `Parley: Revert Last Edit` | Undo the most recent agent/inline edit |
 | `Parley: Generate Image` | Generate an image with `gpt-image-1` |
 | `Parley: Toggle Inline Completion` | Enable/disable ghost-text completions |
 | `Parley: Export Conversation` | Export the chat to Markdown or JSON |
@@ -207,13 +227,15 @@ npm run package     # @vscode/vsce -> parley-vscode-<version>.vsix
 Install the result with:
 
 ```bash
-code --install-extension parley-vscode-0.6.0.vsix
+code --install-extension parley-vscode-0.7.0.vsix
 ```
 
 ## Architecture
 
 - `src/parley/ParleyClient.ts` — the official client (chat + streaming + tool loop, `/models`, `/chat/completions`, `/images/generations`) behind the `ParleyProvider` interface.
-- `src/parley/tools.ts` — read-only agent tools.
+- `src/parley/tools.ts` — agent tools (read, web fetch; writes/commands are mediated by the panel with review + confirmation).
+- `src/diff/checkpoints.ts` — revertable file-write checkpoints for agent/inline edits.
+- `src/commands/inlineEdit.ts` — Ctrl+Alt+K inline edit.
 - `src/completion/` — the inline completion provider.
 - `src/context/` — selection/file/diagnostics/editor context collection, ignore rules, sensitive-file filtering.
 - `src/diff/` — unified-diff / `File:`-block parsing and diff-review-before-apply.

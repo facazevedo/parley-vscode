@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -94,6 +94,16 @@
         "category": "Parley"
       },
       {
+        "command": "parley.inlineEdit",
+        "title": "Parley: Edit Selection (Inline)",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.revertLastEdit",
+        "title": "Parley: Revert Last Edit",
+        "category": "Parley"
+      },
+      {
         "command": "parley.openChatWindow",
         "title": "Parley: Open Chat Window",
         "category": "Parley"
@@ -102,6 +112,14 @@
         "command": "parley.signOut",
         "title": "Parley: Sign Out",
         "category": "Parley"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "parley.inlineEdit",
+        "key": "ctrl+alt+k",
+        "mac": "cmd+alt+k",
+        "when": "editorTextFocus"
       }
     ],
     "configuration": {

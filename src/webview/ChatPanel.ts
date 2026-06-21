@@ -9,11 +9,24 @@ import {
   type CommandDependencies,
   type ContextOptions
 } from '../commands/common';
+import { exec } from 'child_process';
 import { totalCharacters } from '../context/contextPreview';
+import { isSensitiveFile } from '../context/sensitiveFileFilter';
+import type { CheckpointStore } from '../diff/checkpoints';
+import { showProposedDiff } from '../diff/showDiff';
 import type { Logger } from '../logging/logger';
 import type { ParleyProvider } from '../parley/ParleyProvider';
 import { AGENT_TOOLS, runAgentTool } from '../parley/tools';
-import type { AgentInfo, ChatMessage, ContextAttachment, ImageAttachment, ReasoningEffort } from '../parley/types';
+import type {
+  AgentInfo,
+  ChatMessage,
+  ContextAttachment,
+  ImageAttachment,
+  ReasoningEffort,
+  ToolCall
+} from '../parley/types';
+
+const PROJECT_RULES_FILES = ['.parleyrules', 'AGENTS.md', '.cursorrules'];
 
 interface ChatPanelMessage {
   readonly type:
@@ -80,11 +93,26 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     private readonly getProvider: () => ParleyProvider,
     private readonly getSettings: () => ParleySettings,
     private readonly logger: Logger,
-    private readonly commandDeps: CommandDependencies
+    private readonly commandDeps: CommandDependencies,
+    private readonly state: vscode.Memento,
+    private readonly checkpoints: CheckpointStore
   ) {
-    this.selectedAgentId = this.getSettings().defaultAgent;
-    this.selectedEffort = this.getSettings().reasoningEffort;
-    this.agentMode = this.getSettings().agentMode;
+    const settings = this.getSettings();
+    // Restore the previous session if present, else fall back to settings defaults.
+    const savedHistory = this.state.get<ChatMessage[]>('parley.history');
+    if (Array.isArray(savedHistory)) {
+      this.history.push(...savedHistory);
+    }
+    this.selectedAgentId = this.state.get<string>('parley.selectedAgentId', settings.defaultAgent);
+    this.selectedEffort = normalizeEffort(this.state.get<string>('parley.selectedEffort', settings.reasoningEffort));
+    this.agentMode = this.state.get<boolean>('parley.agentMode', settings.agentMode);
+  }
+
+  private save(): void {
+    void this.state.update('parley.history', this.history);
+    void this.state.update('parley.selectedAgentId', this.selectedAgentId);
+    void this.state.update('parley.selectedEffort', this.selectedEffort);
+    void this.state.update('parley.agentMode', this.agentMode);
   }
 
   public resolveWebviewView(webviewView: vscode.WebviewView): void {
@@ -136,12 +164,15 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         return;
       case 'agentChanged':
         this.selectedAgentId = message.agentId ?? this.selectedAgentId;
+        this.save();
         return;
       case 'agentModeChanged':
         this.agentMode = Boolean(message.value);
+        this.save();
         return;
       case 'effortChanged':
         this.selectedEffort = normalizeEffort(message.effort);
+        this.save();
         return;
       case 'attachFiles':
         await this.pickAttachments();
@@ -180,8 +211,10 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     const settings = this.getSettings();
     const collected = await collectCommandContext(contextOptions, settings);
     const textAttachments = this.attachments.filter((a) => a.kind === 'text').map((a) => a.text!);
-    const context = [...collected, ...textAttachments];
+    const mentions = await this.resolveMentions(prompt, settings);
+    const context = [...collected, ...textAttachments, ...mentions];
     const images = this.attachments.filter((a) => a.kind === 'image').map((a) => a.image!);
+    const systemExtra = await this.readProjectRules();
 
     // Per-message chat stays frictionless; only confirm when the attached context
     // is large. (The diff-review-before-apply step still gates any file changes.)
@@ -214,13 +247,14 @@ export class ChatPanel implements vscode.WebviewViewProvider {
           context,
           agentId,
           images: images.length > 0 ? images : undefined,
-          reasoningEffort: this.selectedEffort || undefined
+          reasoningEffort: this.selectedEffort || undefined,
+          systemExtra
         },
         {
           signal: this.abortController.signal,
           onToken: useStream ? (delta) => this.post({ type: 'streamDelta', delta }) : undefined,
           tools: this.agentMode ? AGENT_TOOLS : undefined,
-          runTool: this.agentMode ? runAgentTool : undefined,
+          runTool: this.agentMode ? (call) => this.runTool(call) : undefined,
           onToolEvent: this.agentMode
             ? (event) => this.post({ type: 'toolEvent', name: event.name, args: event.args })
             : undefined
@@ -402,6 +436,141 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     return lines.join('\n');
   }
 
+  /** Tool runner for agent mode: read tools delegate to the read-only runner; writes/commands need UI + checkpoints. */
+  private async runTool(call: ToolCall): Promise<string> {
+    if (call.name === 'write_file') {
+      return this.toolWriteFile(call);
+    }
+    if (call.name === 'run_command') {
+      return this.toolRunCommand(call);
+    }
+    return runAgentTool(call);
+  }
+
+  private async toolWriteFile(call: ToolCall): Promise<string> {
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+    if (!root) {
+      return 'Error: no workspace folder is open.';
+    }
+    let args: { path?: string; content?: string };
+    try {
+      args = JSON.parse(call.arguments || '{}');
+    } catch {
+      return 'Error: arguments were not valid JSON.';
+    }
+    const rel = String(args.path ?? '').replace(/^[/\\]+/, '');
+    const content = String(args.content ?? '');
+    if (!rel) {
+      return 'Error: path is required.';
+    }
+    if (isSensitiveFile(rel)) {
+      return 'Error: refusing to write a sensitive file.';
+    }
+
+    const uri = vscode.Uri.joinPath(root, rel);
+    let original = '';
+    try {
+      original = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
+    } catch {
+      original = '';
+    }
+    const proposedText = content.endsWith('\n') ? content : `${content}\n`;
+    await showProposedDiff(
+      { filePath: uri.fsPath, originalText: original, proposedText, title: `Agent edit: ${rel}` },
+      this.commandDeps.diffProvider
+    );
+    const answer = await vscode.window.showInformationMessage(
+      `Parley agent wants to ${original ? 'edit' : 'create'} ${rel}. Apply?`,
+      { modal: true },
+      'Apply',
+      'Reject'
+    );
+    if (answer !== 'Apply') {
+      return `User rejected the edit to ${rel}.`;
+    }
+    await this.checkpoints.applyWithCheckpoint(uri, proposedText, `edit ${rel}`);
+    return `Applied edit to ${rel}.`;
+  }
+
+  private async toolRunCommand(call: ToolCall): Promise<string> {
+    let args: { command?: string };
+    try {
+      args = JSON.parse(call.arguments || '{}');
+    } catch {
+      return 'Error: arguments were not valid JSON.';
+    }
+    const command = String(args.command ?? '').trim();
+    if (!command) {
+      return 'Error: command is required.';
+    }
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    const answer = await vscode.window.showWarningMessage(
+      `Parley agent wants to run a command in ${folder?.name ?? 'the workspace'}:\n\n${command}`,
+      { modal: true },
+      'Run',
+      'Skip'
+    );
+    if (answer !== 'Run') {
+      return 'User declined to run the command.';
+    }
+    return runShellCommand(command, folder?.uri.fsPath);
+  }
+
+  /** Resolve `@path` mentions in the prompt into file context attachments. */
+  private async resolveMentions(prompt: string, settings: ParleySettings): Promise<ContextAttachment[]> {
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+    if (!root) {
+      return [];
+    }
+    const out: ContextAttachment[] = [];
+    const seen = new Set<string>();
+    const pattern = /(?:^|\s)@([^\s@]+)/g;
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(prompt))) {
+      const rel = match[1].replace(/[.,;:)]+$/, '');
+      if (seen.has(rel) || isSensitiveFile(rel)) {
+        continue;
+      }
+      seen.add(rel);
+      try {
+        const uri = vscode.Uri.joinPath(root, rel);
+        const raw = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
+        const content = raw.length > settings.contextMaxCharacters ? raw.slice(0, settings.contextMaxCharacters) : raw;
+        out.push({
+          id: `mention-${rel}`,
+          kind: 'user-file',
+          label: `@${rel}`,
+          filePath: uri.fsPath,
+          content,
+          characterCount: content.length,
+          truncated: raw.length > content.length
+        });
+      } catch {
+        // Not a readable file (probably a normal "@mention" word) — ignore.
+      }
+    }
+    return out;
+  }
+
+  /** Read the first present project-rules file and return its contents for the system prompt. */
+  private async readProjectRules(): Promise<string | undefined> {
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+    if (!root) {
+      return undefined;
+    }
+    for (const name of PROJECT_RULES_FILES) {
+      try {
+        const raw = Buffer.from(await vscode.workspace.fs.readFile(vscode.Uri.joinPath(root, name))).toString('utf8');
+        if (raw.trim().length > 0) {
+          return raw.slice(0, 8000);
+        }
+      } catch {
+        // Not present; try the next.
+      }
+    }
+    return undefined;
+  }
+
   private async refreshAgents(): Promise<void> {
     try {
       this.agents = await this.getProvider().listAgents();
@@ -422,6 +591,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   }
 
   private async postState(): Promise<void> {
+    this.save();
     const hasKey = Boolean(await this.commandDeps.auth.getToken());
     this.post({
       type: 'state',
@@ -504,6 +674,21 @@ export class ChatPanel implements vscode.WebviewViewProvider {
 
 function normalizeEffort(value: string | undefined): ReasoningEffort {
   return value === 'minimal' || value === 'low' || value === 'medium' || value === 'high' ? value : '';
+}
+
+/** Run a shell command in cwd, returning combined stdout/stderr (truncated). User-approved per call. */
+function runShellCommand(command: string, cwd: string | undefined): Promise<string> {
+  return new Promise((resolve) => {
+    exec(command, { cwd, timeout: 60000, maxBuffer: 1024 * 1024, windowsHide: true }, (error, stdout, stderr) => {
+      const out = `${stdout ?? ''}${stderr ? `\n[stderr]\n${stderr}` : ''}`.trim();
+      const body = out.length > 8000 ? `${out.slice(0, 8000)}\n[truncated]` : out;
+      if (error && !out) {
+        resolve(`Command failed: ${error.message}`);
+      } else {
+        resolve(body || '(no output)');
+      }
+    });
+  });
 }
 
 function getNonce(): string {
