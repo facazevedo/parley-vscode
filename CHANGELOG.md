@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.0
+
+### Added
+- Export the conversation: a ⤓ toolbar button and `Parley: Export Conversation` command save the whole chat as Markdown or JSON. Each assistant reply is tagged with the model that produced it (works across any/mixed models).
+
 ## 0.4.0
 
 ### Added

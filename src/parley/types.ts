@@ -4,6 +4,8 @@ export interface ChatMessage {
   readonly role: MessageRole;
   readonly content: string;
   readonly createdAt: string;
+  /** Model that produced an assistant message (for export/labeling). */
+  readonly model?: string;
 }
 
 export interface ContextAttachment {

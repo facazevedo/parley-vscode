@@ -27,6 +27,7 @@ interface ChatPanelMessage {
     | 'effortChanged'
     | 'attachFiles'
     | 'removeAttachment'
+    | 'export'
     | 'setApiKey';
   readonly prompt?: string;
   readonly agentId?: string;
@@ -144,6 +145,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       case 'attachFiles':
         await this.pickAttachments();
         return;
+      case 'export':
+        await this.exportConversation();
+        return;
       case 'removeAttachment':
         this.attachments = this.attachments.filter((item) => item.id !== message.id);
         await this.postState();
@@ -219,7 +223,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         }
       );
 
-      this.history.push(response.message);
+      this.history.push({ ...response.message, model: agentId });
       this.busy = false;
       this.abortController = undefined;
       this.post({ type: 'streamEnd' });
@@ -283,6 +287,56 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       }
     }
     await this.postState();
+  }
+
+  /** Export the current conversation to a Markdown or JSON file. */
+  public async exportConversation(): Promise<void> {
+    if (this.history.length === 0) {
+      await vscode.window.showInformationMessage('Parley: there is no conversation to export yet.');
+      return;
+    }
+
+    const choice = await vscode.window.showQuickPick(
+      [
+        { label: 'Markdown (.md)', ext: 'md', json: false },
+        { label: 'JSON (.json)', ext: 'json', json: true }
+      ],
+      { title: 'Export Parley conversation', placeHolder: 'Choose a format' }
+    );
+    if (!choice) {
+      return;
+    }
+
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const fileName = `parley-conversation-${stamp}.${choice.ext}`;
+    const folder = vscode.workspace.workspaceFolders?.[0]?.uri;
+    const uri = await vscode.window.showSaveDialog({
+      defaultUri: folder ? vscode.Uri.joinPath(folder, fileName) : undefined,
+      saveLabel: 'Export',
+      filters: choice.json ? { JSON: ['json'] } : { Markdown: ['md'] }
+    });
+    if (!uri) {
+      return;
+    }
+
+    const content = choice.json ? JSON.stringify(this.history, null, 2) : this.toMarkdown();
+    await vscode.workspace.fs.writeFile(uri, Buffer.from(content, 'utf8'));
+    await vscode.commands.executeCommand('vscode.open', uri);
+    void vscode.window.showInformationMessage(`Parley conversation exported to ${vscode.workspace.asRelativePath(uri)}.`);
+  }
+
+  private toMarkdown(): string {
+    const lines: string[] = ['# Parley conversation', '', `_Exported ${new Date().toLocaleString()}_`, ''];
+    for (const message of this.history) {
+      if (message.role === 'user') {
+        lines.push('## You', '', message.content, '');
+      } else if (message.role === 'assistant') {
+        lines.push(`## Parley${message.model ? ` · ${message.model}` : ''}`, '', message.content, '');
+      } else {
+        lines.push(`## ${message.role}`, '', message.content, '');
+      }
+    }
+    return lines.join('\n');
   }
 
   private async refreshAgents(): Promise<void> {
@@ -354,6 +408,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         <option value="high">Effort: High</option>
       </select>
       <button id="refresh" title="Refresh model list">↻</button>
+      <button id="export" title="Export conversation">⤓</button>
       <button id="newChat" title="New conversation">+ New</button>
     </div>
     <div id="banner" class="banner"></div>

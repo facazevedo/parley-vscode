@@ -100,6 +100,7 @@
   });
   $('refresh').addEventListener('click', () => vscode.postMessage({ type: 'refreshAgents' }));
   $('newChat').addEventListener('click', () => vscode.postMessage({ type: 'newChat' }));
+  $('export').addEventListener('click', () => vscode.postMessage({ type: 'export' }));
   attachBtn.addEventListener('click', () => vscode.postMessage({ type: 'attachFiles' }));
   stopBtn.addEventListener('click', () => vscode.postMessage({ type: 'stop' }));
   agent.addEventListener('change', () => vscode.postMessage({ type: 'agentChanged', agentId: agent.value }));

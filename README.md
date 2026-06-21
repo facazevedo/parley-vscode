@@ -38,6 +38,7 @@ model IDs, streaming format).
   - `Parley: Generate Tests`
   - `Parley: Fix Diagnostics`
   - `Parley: Suggest Terminal Command`
+- **Export the conversation** to Markdown or JSON (⤓ toolbar button or `Parley: Export Conversation`) — each reply is tagged with the model that produced it.
 - Plus `Parley: Generate Image`, `Parley: Toggle Inline Completion`, `Parley: Set API Key`, `Parley: Open Chat Window`, and `Parley: Sign Out`.
 - Minimal context sharing by default, with preview before sending large context.
 - Sensitive file filtering for `.env`, `.npmrc`, `.pypirc`, private keys, PEM files, `secrets.*`, and hidden files (also enforced on agent-mode file reads).
