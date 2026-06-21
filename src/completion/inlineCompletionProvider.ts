@@ -58,7 +58,13 @@ export class ParleyInlineCompletionProvider implements vscode.InlineCompletionIt
     const cancelSub = token.onCancellationRequested(() => controller.abort());
     try {
       const completion = await this.getProvider().complete(
-        { prefix, suffix, languageId: document.languageId, model: settings.inlineCompletionModel },
+        {
+          prefix,
+          suffix,
+          languageId: document.languageId,
+          model: settings.inlineCompletionModel,
+          reasoningEffort: settings.reasoningEffort
+        },
         controller.signal
       );
       if (token.isCancellationRequested || completion.trim().length === 0) {

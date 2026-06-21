@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import type { ReasoningEffort } from '../parley/types';
 
 export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
 
@@ -10,6 +11,7 @@ export interface ParleySettings {
   readonly endpoint: string;
   readonly defaultAgent: string;
   readonly stream: boolean;
+  readonly reasoningEffort: ReasoningEffort;
   readonly agentMode: boolean;
   readonly inlineCompletionEnabled: boolean;
   readonly inlineCompletionModel: string;
@@ -32,6 +34,7 @@ export function getSettings(): ParleySettings {
     endpoint: config.get<string>('endpoint', DEFAULT_ENDPOINT).trim() || DEFAULT_ENDPOINT,
     defaultAgent: config.get<string>('defaultAgent', DEFAULT_MODEL).trim() || DEFAULT_MODEL,
     stream: config.get<boolean>('stream', true),
+    reasoningEffort: normalizeEffort(config.get<string>('reasoningEffort', 'default')),
     agentMode: config.get<boolean>('agentMode', false),
     inlineCompletionEnabled: inline.get<boolean>('enabled', true),
     inlineCompletionModel: inline.get<string>('model', DEFAULT_COMPLETION_MODEL).trim() || DEFAULT_COMPLETION_MODEL,
@@ -43,4 +46,9 @@ export function getSettings(): ParleySettings {
     telemetryEnabled: telemetry.get<boolean>('enabled', false),
     logLevel: config.get<LogLevel>('logLevel', 'info')
   };
+}
+
+/** Map the setting value to a ReasoningEffort; "default" (or anything unknown) means "don't send". */
+function normalizeEffort(value: string): ReasoningEffort {
+  return value === 'minimal' || value === 'low' || value === 'medium' || value === 'high' ? value : '';
 }

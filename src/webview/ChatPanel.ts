@@ -13,7 +13,7 @@ import { totalCharacters } from '../context/contextPreview';
 import type { Logger } from '../logging/logger';
 import type { ParleyProvider } from '../parley/ParleyProvider';
 import { AGENT_TOOLS, runAgentTool } from '../parley/tools';
-import type { AgentInfo, ChatMessage, ContextAttachment, ImageAttachment } from '../parley/types';
+import type { AgentInfo, ChatMessage, ContextAttachment, ImageAttachment, ReasoningEffort } from '../parley/types';
 
 interface ChatPanelMessage {
   readonly type:
@@ -24,11 +24,13 @@ interface ChatPanelMessage {
     | 'contextOptionsChanged'
     | 'agentChanged'
     | 'agentModeChanged'
+    | 'effortChanged'
     | 'attachFiles'
     | 'removeAttachment'
     | 'setApiKey';
   readonly prompt?: string;
   readonly agentId?: string;
+  readonly effort?: string;
   readonly value?: boolean;
   readonly id?: string;
   readonly contextOptions?: ContextOptions;
@@ -59,6 +61,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private readonly history: ChatMessage[] = [];
   private agents: readonly AgentInfo[] = [];
   private selectedAgentId = '';
+  private selectedEffort: ReasoningEffort = '';
   private contextOptions: Required<ContextOptions> = { ...DEFAULT_CONTEXT_OPTIONS };
   private agentMode = false;
   private attachments: PendingAttachment[] = [];
@@ -78,6 +81,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     private readonly commandDeps: CommandDependencies
   ) {
     this.selectedAgentId = this.getSettings().defaultAgent;
+    this.selectedEffort = this.getSettings().reasoningEffort;
     this.agentMode = this.getSettings().agentMode;
   }
 
@@ -133,6 +137,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         return;
       case 'agentModeChanged':
         this.agentMode = Boolean(message.value);
+        return;
+      case 'effortChanged':
+        this.selectedEffort = normalizeEffort(message.effort);
         return;
       case 'attachFiles':
         await this.pickAttachments();
@@ -193,7 +200,14 @@ export class ChatPanel implements vscode.WebviewViewProvider {
 
     try {
       const response = await provider.sendMessage(
-        { prompt, messages: this.history, context, agentId, images: images.length > 0 ? images : undefined },
+        {
+          prompt,
+          messages: this.history,
+          context,
+          agentId,
+          images: images.length > 0 ? images : undefined,
+          reasoningEffort: this.selectedEffort || undefined
+        },
         {
           signal: this.abortController.signal,
           onToken: useStream ? (delta) => this.post({ type: 'streamDelta', delta }) : undefined,
@@ -300,6 +314,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       busy: this.busy,
       agentMode: this.agentMode,
       selectedAgentId: this.selectedAgentId,
+      selectedEffort: this.selectedEffort,
       contextOptions: this.contextOptions,
       attachments: this.attachments.map((a) => ({ id: a.id, label: a.label, kind: a.kind }))
     });
@@ -331,6 +346,13 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   <div class="shell">
     <div class="toolbar">
       <select id="agent" aria-label="Parley model"></select>
+      <select id="effort" aria-label="Reasoning effort" title="Reasoning effort">
+        <option value="">Effort: Default</option>
+        <option value="minimal">Effort: Minimal</option>
+        <option value="low">Effort: Low</option>
+        <option value="medium">Effort: Medium</option>
+        <option value="high">Effort: High</option>
+      </select>
       <button id="refresh" title="Refresh model list">↻</button>
       <button id="newChat" title="New conversation">+ New</button>
     </div>
@@ -359,6 +381,10 @@ export class ChatPanel implements vscode.WebviewViewProvider {
 </body>
 </html>`;
   }
+}
+
+function normalizeEffort(value: string | undefined): ReasoningEffort {
+  return value === 'minimal' || value === 'low' || value === 'medium' || value === 'high' ? value : '';
 }
 
 function getNonce(): string {

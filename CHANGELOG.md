@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0
+
+### Added
+- Reasoning-effort control: `parley.reasoningEffort` setting plus an **Effort** dropdown in the chat toolbar (Default/Minimal/Low/Medium/High). Sent to the API as `reasoning_effort` for chat, agent-mode, and inline completions. Note: the Parley proxy accepts the parameter, but observable effect varies by model.
+
 ## 0.3.2
 
 ### Changed

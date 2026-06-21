@@ -94,11 +94,12 @@ export class ParleyClient implements ParleyProvider {
   public async sendMessage(request: ChatRequest, options?: SendMessageOptions): Promise<ChatResponse> {
     const model = request.agentId?.trim() || this.defaultModel;
     const messages = this.buildMessages(request);
+    const effort = request.reasoningEffort || undefined;
 
     const useTools = Boolean(options?.tools && options.tools.length > 0 && options.runTool);
     const content = useTools
-      ? await this.runToolLoop(messages, model, options as SendMessageOptions)
-      : await this.singleCompletion(messages, model, options);
+      ? await this.runToolLoop(messages, model, options as SendMessageOptions, effort)
+      : await this.singleCompletion(messages, model, options, effort);
 
     const proposedChanges = await extractProposedChanges(content);
 
@@ -114,17 +115,22 @@ export class ParleyClient implements ParleyProvider {
       `Insert code at <CURSOR>. Reply with only the text to insert.\n\n` +
       `${request.prefix}<CURSOR>${request.suffix}`;
 
+    const payload: Record<string, unknown> = {
+      model: request.model,
+      messages: [
+        { role: 'system', content: COMPLETION_SYSTEM },
+        { role: 'user', content: userPrompt }
+      ],
+      stream: false
+    };
+    if (request.reasoningEffort) {
+      payload.reasoning_effort = request.reasoningEffort;
+    }
+
     const response = await this.request('/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: request.model,
-        messages: [
-          { role: 'system', content: COMPLETION_SYSTEM },
-          { role: 'user', content: userPrompt }
-        ],
-        stream: false
-      }),
+      body: JSON.stringify(payload),
       signal
     });
 
@@ -151,12 +157,21 @@ export class ParleyClient implements ParleyProvider {
     await this.auth.clear();
   }
 
-  private async singleCompletion(messages: OpenAiMessage[], model: string, options?: SendMessageOptions): Promise<string> {
+  private async singleCompletion(
+    messages: OpenAiMessage[],
+    model: string,
+    options?: SendMessageOptions,
+    effort?: string
+  ): Promise<string> {
     const stream = Boolean(options?.onToken);
+    const payload: Record<string, unknown> = { model, messages, stream };
+    if (effort) {
+      payload.reasoning_effort = effort;
+    }
     const response = await this.request('/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, messages, stream }),
+      body: JSON.stringify(payload),
       signal: options?.signal
     });
 
@@ -164,15 +179,24 @@ export class ParleyClient implements ParleyProvider {
   }
 
   /** Run the OpenAI tool-calling loop until the model answers or rounds run out. */
-  private async runToolLoop(messages: OpenAiMessage[], model: string, options: SendMessageOptions): Promise<string> {
+  private async runToolLoop(
+    messages: OpenAiMessage[],
+    model: string,
+    options: SendMessageOptions,
+    effort?: string
+  ): Promise<string> {
     const convo = [...messages];
     const maxRounds = options.maxToolRounds ?? DEFAULT_MAX_TOOL_ROUNDS;
 
     for (let round = 0; round < maxRounds; round += 1) {
+      const roundPayload: Record<string, unknown> = { model, messages: convo, tools: options.tools, stream: false };
+      if (effort) {
+        roundPayload.reasoning_effort = effort;
+      }
       const response = await this.request('/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, messages: convo, tools: options.tools, stream: false }),
+        body: JSON.stringify(roundPayload),
         signal: options.signal
       });
 
@@ -202,7 +226,7 @@ export class ParleyClient implements ParleyProvider {
 
     // Out of tool rounds: ask once more without tools so the model commits to an answer.
     this.logger.debug(`Tool loop hit ${maxRounds} rounds; requesting a final answer.`);
-    return this.singleCompletion(convo, model, { onToken: options.onToken, signal: options.signal });
+    return this.singleCompletion(convo, model, { onToken: options.onToken, signal: options.signal }, effort);
   }
 
   private buildMessages(request: ChatRequest): OpenAiMessage[] {

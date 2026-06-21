@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -111,6 +111,18 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "Stream Parley replies token-by-token in the chat view."
+        },
+        "parley.reasoningEffort": {
+          "type": "string",
+          "default": "default",
+          "enum": [
+            "default",
+            "minimal",
+            "low",
+            "medium",
+            "high"
+          ],
+          "markdownDescription": "Reasoning effort sent to the model as `reasoning_effort`. `default` omits the parameter. Override per-session from the chat toolbar. Note: support depends on the model — some Parley models may not change behavior."
         },
         "parley.agentMode": {
           "type": "boolean",

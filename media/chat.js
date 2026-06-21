@@ -5,6 +5,7 @@
   const $ = (id) => document.getElementById(id);
   const history = $('history');
   const agent = $('agent');
+  const effortSel = $('effort');
   const banner = $('banner');
   const form = $('composer');
   const prompt = $('prompt');
@@ -102,6 +103,7 @@
   attachBtn.addEventListener('click', () => vscode.postMessage({ type: 'attachFiles' }));
   stopBtn.addEventListener('click', () => vscode.postMessage({ type: 'stop' }));
   agent.addEventListener('change', () => vscode.postMessage({ type: 'agentChanged', agentId: agent.value }));
+  effortSel.addEventListener('change', () => vscode.postMessage({ type: 'effortChanged', effort: effortSel.value }));
   agentModeBox.addEventListener('change', () =>
     vscode.postMessage({ type: 'agentModeChanged', value: agentModeBox.checked })
   );
@@ -176,6 +178,7 @@
       }
     });
     agentModeBox.checked = Boolean(msg.agentMode);
+    effortSel.value = msg.selectedEffort || '';
     renderAttachments(msg.attachments);
 
     stopBtn.style.display = msg.busy ? '' : 'none';

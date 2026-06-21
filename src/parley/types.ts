@@ -24,12 +24,16 @@ export interface ImageAttachment {
   readonly dataUri: string;
 }
 
+/** Reasoning effort level. Empty string means "don't send the parameter". */
+export type ReasoningEffort = '' | 'minimal' | 'low' | 'medium' | 'high';
+
 export interface ChatRequest {
   readonly prompt: string;
   readonly agentId?: string;
   readonly messages: readonly ChatMessage[];
   readonly context: readonly ContextAttachment[];
   readonly images?: readonly ImageAttachment[];
+  readonly reasoningEffort?: ReasoningEffort;
 }
 
 /** OpenAI-style function tool definition. */
@@ -56,6 +60,7 @@ export interface CompletionRequest {
   readonly suffix: string;
   readonly languageId: string;
   readonly model: string;
+  readonly reasoningEffort?: ReasoningEffort;
 }
 
 /** Image generation request for `gpt-image-1`. */
