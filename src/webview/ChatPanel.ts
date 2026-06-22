@@ -632,37 +632,44 @@ export class ChatPanel implements vscode.WebviewViewProvider {
 <body>
   <div class="shell">
     <div class="toolbar">
-      <select id="agent" aria-label="Parley model"></select>
-      <select id="effort" aria-label="Reasoning effort" title="Reasoning effort">
-        <option value="">Effort: Default</option>
-        <option value="minimal">Effort: Minimal</option>
-        <option value="low">Effort: Low</option>
-        <option value="medium">Effort: Medium</option>
-        <option value="high">Effort: High</option>
-      </select>
-      <button id="refresh" title="Refresh model list">↻</button>
-      <button id="compact" title="Compact conversation (summarize to free up context)">⊟</button>
-      <button id="export" title="Export conversation">⤓</button>
-      <button id="newChat" title="New conversation">+ New</button>
+      <span class="title">Parley</span>
+      <span class="grow"></span>
+      <button id="newChat" title="New conversation" aria-label="New conversation">＋</button>
+      <button id="compact" title="Compact conversation (summarize to free up context)" aria-label="Compact conversation">⊟</button>
+      <button id="export" title="Export conversation" aria-label="Export conversation">⤓</button>
+      <button id="refresh" title="Refresh model list" aria-label="Refresh model list">↻</button>
     </div>
     <div id="banner" class="banner"></div>
     <div id="history" class="history"><div class="empty">Ask Parley about your code.</div></div>
     <form id="composer" class="composer">
-      <div class="ctx">
-        <label><input id="includeSelection" type="checkbox" checked> Selection</label>
-        <label><input id="includeCurrentFile" type="checkbox"> File</label>
-        <label><input id="includeOpenEditors" type="checkbox"> Open editors</label>
-        <label><input id="includeDiagnostics" type="checkbox"> Diagnostics</label>
-        <label><input id="includeUserSelectedFiles" type="checkbox"> Pick files</label>
-        <label title="Let Parley read files, list directories, and search the workspace on its own"><input id="agentMode" type="checkbox"> Agent</label>
-      </div>
+      <details class="ctx-wrap">
+        <summary>Context</summary>
+        <div class="ctx">
+          <label><input id="includeSelection" type="checkbox" checked> Selection</label>
+          <label><input id="includeCurrentFile" type="checkbox"> File</label>
+          <label><input id="includeOpenEditors" type="checkbox"> Open editors</label>
+          <label><input id="includeDiagnostics" type="checkbox"> Diagnostics</label>
+          <label><input id="includeUserSelectedFiles" type="checkbox"> Pick files</label>
+          <label title="Let Parley read files, list directories, search, edit (with review), and run commands (with confirmation)"><input id="agentMode" type="checkbox"> Agent</label>
+        </div>
+      </details>
       <div id="attachments" class="attachments"></div>
-      <textarea id="prompt" placeholder="Ask Parley…  (Enter to send, Shift+Enter for newline)"></textarea>
-      <div class="row">
-        <button type="button" id="attach" title="Attach files or images">📎</button>
-        <span class="grow"></span>
-        <button type="button" id="stop" style="display:none">Stop</button>
-        <button type="submit" id="sendBtn" class="primary">Send</button>
+      <div class="inputbox">
+        <textarea id="prompt" placeholder="Ask Parley…  (@file to attach · Enter to send · Shift+Enter for newline)"></textarea>
+        <div class="actions">
+          <select id="agent" class="model" aria-label="Parley model"></select>
+          <select id="effort" class="effort" aria-label="Reasoning effort" title="Reasoning effort">
+            <option value="">Default</option>
+            <option value="minimal">Minimal</option>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+          <button type="button" id="attach" title="Attach files or images" aria-label="Attach files or images">📎</button>
+          <span class="grow"></span>
+          <button type="button" id="stop" style="display:none">Stop</button>
+          <button type="submit" id="sendBtn" class="primary">Send</button>
+        </div>
       </div>
     </form>
   </div>

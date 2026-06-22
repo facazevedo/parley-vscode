@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.1
+
+### Changed
+- Reorganized the chat UI to be cleaner (Claude Code-like): slim header with just session actions (new/compact/export/refresh); the model and reasoning-effort pickers now live in a unified input box at the bottom alongside attach/send; context toggles tucked into a collapsible "Context" disclosure.
+
 ## 0.7.0
 
 ### Added
