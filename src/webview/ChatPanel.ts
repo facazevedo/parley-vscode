@@ -16,6 +16,7 @@ import type { CheckpointStore } from '../diff/checkpoints';
 import { showProposedDiff } from '../diff/showDiff';
 import type { Logger } from '../logging/logger';
 import type { ParleyProvider } from '../parley/ParleyProvider';
+import { extractMentionPaths } from '../parley/parsing';
 import { AGENT_TOOLS, runAgentTool } from '../parley/tools';
 import type {
   AgentInfo,
@@ -42,12 +43,19 @@ interface ChatPanelMessage {
     | 'removeAttachment'
     | 'export'
     | 'compact'
+    | 'openHistory'
+    | 'copyText'
+    | 'openLink'
+    | 'mentionQuery'
     | 'setApiKey';
   readonly prompt?: string;
   readonly agentId?: string;
   readonly effort?: string;
   readonly value?: boolean;
   readonly id?: string;
+  readonly text?: string;
+  readonly url?: string;
+  readonly query?: string;
   readonly contextOptions?: ContextOptions;
 }
 
@@ -67,6 +75,12 @@ interface PendingAttachment {
   readonly kind: 'image' | 'text';
   readonly image?: ImageAttachment;
   readonly text?: ContextAttachment;
+}
+
+interface SavedSession {
+  readonly title: string;
+  readonly savedAt: string;
+  readonly history: ChatMessage[];
 }
 
 export class ChatPanel implements vscode.WebviewViewProvider {
@@ -158,9 +172,13 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         return;
       case 'newChat':
         this.abortController?.abort();
+        this.archiveCurrent();
         this.history.length = 0;
         this.attachments = [];
         await this.postState();
+        return;
+      case 'openHistory':
+        await this.openPastConversation();
         return;
       case 'agentChanged':
         this.selectedAgentId = message.agentId ?? this.selectedAgentId;
@@ -182,6 +200,19 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         return;
       case 'compact':
         await this.compactConversation();
+        return;
+      case 'copyText':
+        await vscode.env.clipboard.writeText(message.text ?? '');
+        return;
+      case 'openLink': {
+        const url = message.url ?? '';
+        if (/^https?:\/\//i.test(url)) {
+          await vscode.env.openExternal(vscode.Uri.parse(url));
+        }
+        return;
+      }
+      case 'mentionQuery':
+        await this.sendMentionResults(message.query ?? '');
         return;
       case 'removeAttachment':
         this.attachments = this.attachments.filter((item) => item.id !== message.id);
@@ -386,6 +417,47 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     }
   }
 
+  /** Archive the current conversation into the saved-sessions list (most recent first, capped). */
+  private archiveCurrent(): void {
+    if (this.history.length === 0) {
+      return;
+    }
+    const firstUser = this.history.find((m) => m.role === 'user');
+    const title = (firstUser?.content ?? 'Conversation').replace(/\s+/g, ' ').trim().slice(0, 60) || 'Conversation';
+    const sessions = this.state.get<SavedSession[]>('parley.sessions', []);
+    sessions.unshift({ title, savedAt: new Date().toISOString(), history: [...this.history] });
+    void this.state.update('parley.sessions', sessions.slice(0, 20));
+  }
+
+  /** Pick a previously archived conversation and load it back into the chat. */
+  public async openPastConversation(): Promise<void> {
+    const sessions = this.state.get<SavedSession[]>('parley.sessions', []);
+    if (sessions.length === 0) {
+      await vscode.window.showInformationMessage('Parley: no saved conversations yet. (Conversations are archived when you start a new one.)');
+      return;
+    }
+    const pick = await vscode.window.showQuickPick(
+      sessions.map((s, index) => ({
+        label: s.title || 'Conversation',
+        description: `${new Date(s.savedAt).toLocaleString()} · ${s.history.length} msgs`,
+        index
+      })),
+      { title: 'Open a past Parley conversation' }
+    );
+    if (!pick) {
+      return;
+    }
+    const chosen = sessions[pick.index];
+    this.archiveCurrent();
+    this.history.length = 0;
+    this.history.push(...chosen.history);
+    this.attachments = [];
+    await vscode.commands.executeCommand('workbench.view.extension.parley');
+    await vscode.commands.executeCommand('parley.chatView.focus');
+    await this.ready;
+    await this.postState();
+  }
+
   /** Export the current conversation to a Markdown or JSON file. */
   public async exportConversation(): Promise<void> {
     if (this.history.length === 0) {
@@ -523,15 +595,10 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       return [];
     }
     const out: ContextAttachment[] = [];
-    const seen = new Set<string>();
-    const pattern = /(?:^|\s)@([^\s@]+)/g;
-    let match: RegExpExecArray | null;
-    while ((match = pattern.exec(prompt))) {
-      const rel = match[1].replace(/[.,;:)]+$/, '');
-      if (seen.has(rel) || isSensitiveFile(rel)) {
+    for (const rel of extractMentionPaths(prompt)) {
+      if (isSensitiveFile(rel)) {
         continue;
       }
-      seen.add(rel);
       try {
         const uri = vscode.Uri.joinPath(root, rel);
         const raw = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
@@ -550,6 +617,29 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       }
     }
     return out;
+  }
+
+  /** Answer an @-mention autocomplete query with matching workspace file paths. */
+  private async sendMentionResults(query: string): Promise<void> {
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!root) {
+      this.post({ type: 'mentionResults', items: [] });
+      return;
+    }
+    const cleaned = query.replace(/[^\w./-]/g, '');
+    const glob = cleaned ? `**/*${cleaned}*` : '**/*';
+    let items: string[] = [];
+    try {
+      const files = await vscode.workspace.findFiles(glob, '{**/node_modules/**,**/.git/**,**/out/**,**/dist/**}', 30);
+      items = files
+        .map((uri) => path.relative(root, uri.fsPath).replace(/\\/g, '/'))
+        .filter((rel) => !isSensitiveFile(rel))
+        .sort((a, b) => a.length - b.length)
+        .slice(0, 8);
+    } catch {
+      items = [];
+    }
+    this.post({ type: 'mentionResults', items });
   }
 
   /** Read the first present project-rules file and return its contents for the system prompt. */
@@ -635,6 +725,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       <span class="title">Parley</span>
       <span class="grow"></span>
       <button id="newChat" title="New conversation" aria-label="New conversation">＋</button>
+      <button id="historyBtn" title="Past conversations" aria-label="Past conversations">🕘</button>
       <button id="compact" title="Compact conversation (summarize to free up context)" aria-label="Compact conversation">⊟</button>
       <button id="export" title="Export conversation" aria-label="Export conversation">⤓</button>
       <button id="refresh" title="Refresh model list" aria-label="Refresh model list">↻</button>
@@ -655,6 +746,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       </details>
       <div id="attachments" class="attachments"></div>
       <div class="inputbox">
+        <div id="mentions" class="mentions" style="display:none"></div>
         <textarea id="prompt" placeholder="Ask Parley…  (@file to attach · Enter to send · Shift+Enter for newline)"></textarea>
         <div class="actions">
           <select id="agent" class="model" aria-label="Parley model"></select>

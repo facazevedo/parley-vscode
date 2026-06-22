@@ -81,6 +81,22 @@ export const AGENT_TOOLS: readonly ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'search_text',
+      description:
+        'Search file CONTENTS across the workspace for a substring (case-insensitive). Returns matching "path:line: text" results. Use this to find where something is defined or used.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Text to search for in file contents.' },
+          glob: { type: 'string', description: 'Optional glob to limit files, e.g. "src/**/*.ts". Defaults to all files.' }
+        },
+        required: ['query']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'fetch_url',
       description: 'Fetch a public web page over HTTPS and return its text content (HTML stripped, truncated).',
       parameters: {
@@ -93,6 +109,9 @@ export const AGENT_TOOLS: readonly ToolDefinition[] = [
 ];
 
 const MAX_FETCH_CHARS = 12000;
+const MAX_SEARCH_FILES = 400;
+const MAX_SEARCH_RESULTS = 40;
+const MAX_LINE_LEN = 220;
 
 /** Execute an agent tool call against the workspace and return a string result. */
 export async function runAgentTool(call: ToolCall): Promise<string> {
@@ -115,11 +134,61 @@ export async function runAgentTool(call: ToolCall): Promise<string> {
       return listDirectory(root, String(args.path ?? '.'));
     case 'find_files':
       return findFiles(String(args.glob ?? ''));
+    case 'search_text':
+      return searchText(String(args.query ?? ''), args.glob ? String(args.glob) : undefined);
     case 'fetch_url':
       return fetchUrl(String(args.url ?? ''));
     default:
       return `Error: unknown tool "${call.name}".`;
   }
+}
+
+async function searchText(query: string, glob?: string): Promise<string> {
+  if (!query.trim()) {
+    return 'Error: query is required.';
+  }
+  const needle = query.toLowerCase();
+  const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '';
+  let files: vscode.Uri[];
+  try {
+    files = await vscode.workspace.findFiles(glob || '**/*', '{**/node_modules/**,**/.git/**,**/out/**,**/dist/**}', MAX_SEARCH_FILES);
+  } catch (error) {
+    return `Error: search failed (${error instanceof Error ? error.message : 'unknown'}).`;
+  }
+
+  const results: string[] = [];
+  for (const uri of files) {
+    if (results.length >= MAX_SEARCH_RESULTS) {
+      break;
+    }
+    const rel = path.relative(root, uri.fsPath).replace(/\\/g, '/');
+    if (isSensitiveFile(rel)) {
+      continue;
+    }
+    let text: string;
+    try {
+      const bytes = await vscode.workspace.fs.readFile(uri);
+      if (bytes.includes(0)) {
+        continue; // skip binary files
+      }
+      text = Buffer.from(bytes).toString('utf8');
+    } catch {
+      continue;
+    }
+    const lines = text.split('\n');
+    for (let i = 0; i < lines.length && results.length < MAX_SEARCH_RESULTS; i += 1) {
+      if (lines[i].toLowerCase().includes(needle)) {
+        const trimmed = lines[i].trim().slice(0, MAX_LINE_LEN);
+        results.push(`${rel}:${i + 1}: ${trimmed}`);
+      }
+    }
+  }
+
+  if (results.length === 0) {
+    return '[no matches]';
+  }
+  const header = results.length >= MAX_SEARCH_RESULTS ? `[showing first ${MAX_SEARCH_RESULTS} matches]\n` : '';
+  return header + results.join('\n');
 }
 
 async function fetchUrl(url: string): Promise<string> {

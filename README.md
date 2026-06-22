@@ -68,6 +68,7 @@ Turn on the **Agent** checkbox in the composer to let the model work through an
 OpenAI tool-calling loop. Tool activity is shown inline (`⚙ read_file src/app.ts`).
 
 - `read_file`, `list_directory`, `find_files` — gather context (read-only)
+- `search_text` — grep file **contents** across the workspace (the practical stand-in for semantic codebase search)
 - `write_file` — create/edit a file; **opens a diff and requires your approval** before applying (and is checkpointed for revert)
 - `run_command` — run a shell command; **requires per-command confirmation**, then returns its output to the model
 - `fetch_url` — fetch a public `https://` page as text
@@ -82,15 +83,19 @@ before it's applied — a Cursor-style Cmd-K edit without leaving the editor.
 Applied edits are checkpointed; **`Parley: Revert Last Edit`** undoes the most recent one.
 
 ### 🏷️ @-mentions & project rules
-- Type **`@path/to/file`** in the composer to attach that file as context.
+- Type **`@`** in the composer to get a **file autocomplete** — pick a file (↑/↓, Enter) to attach it as context.
 - A **`.parleyrules`**, **`AGENTS.md`**, or **`.cursorrules`** file in the workspace root is auto-injected into the system prompt as project rules.
 
 > Semantic `@codebase` search isn't offered because the Parley API exposes no
-> embeddings endpoint; use `@file` mentions or agent mode's `find_files` instead.
+> embeddings endpoint; use `@file` mentions or agent mode's `search_text` / `find_files`.
 
-### 💾 Persistent sessions & usage
+### 💾 Sessions, history & usage
 - The conversation (and your model/effort/agent-mode choices) **persists across reloads** per workspace.
+- **Past conversations** are archived when you start a new one; reopen them with 🕘 or **`Parley: Open Past Conversation`**.
 - Each reply shows a subtle footer with the **model** and **token usage** when the API reports it.
+
+### 🖋️ Rich replies
+Replies render Markdown — headings, lists, **bold**, links (open externally), inline-code chips, and fenced code blocks with a hover **Copy** button. If a request overflows the model's context window, Parley detects it and suggests **Compact**.
 
 ### 📎 File & image attachments
 The **📎** button attaches files to your next message:
@@ -156,6 +161,7 @@ with any model.
 | `Parley: Toggle Inline Completion` | Enable/disable ghost-text completions |
 | `Parley: Export Conversation` | Export the chat to Markdown or JSON |
 | `Parley: Compact Conversation` | Summarize the chat and replace history to free context |
+| `Parley: Open Past Conversation` | Reopen an archived conversation |
 | `Parley: Sign Out` | Clear the stored API key |
 
 ---
@@ -210,11 +216,15 @@ VS Code remembers the layout afterward.
 
 ```bash
 npm install
-npm run compile     # tsc -> out/
-npm test            # compile + node --test
+npm run compile      # tsc -> out/
+npm test             # compile + node --test
+npm run lint         # eslint
+npm run format       # prettier --write
 ```
 
-Press `F5` to launch an Extension Development Host.
+Press `F5` to launch an Extension Development Host. CI (GitHub Actions) compiles,
+tests, and packages on every push; pushing a `vX.Y.Z` tag publishes a GitHub
+Release with the `.vsix` attached.
 
 ## Packaging
 
@@ -227,7 +237,7 @@ npm run package     # @vscode/vsce -> parley-vscode-<version>.vsix
 Install the result with:
 
 ```bash
-code --install-extension parley-vscode-0.7.0.vsix
+code --install-extension parley-vscode-0.8.0.vsix
 ```
 
 ## Architecture

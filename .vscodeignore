@@ -8,3 +8,6 @@ out/test/**
 tsconfig.json
 .gitignore
 .parleyignore
+.github/**
+.eslintrc.json
+.prettierrc.json

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.8.0
+
+### Added
+- **`search_text` agent tool** — grep file contents across the workspace (practical stand-in for semantic codebase search).
+- **`@`-mention autocomplete** — typing `@` shows a file picker (↑/↓/Enter) that attaches the file as context.
+- **Past conversations** — conversations are archived on "New"; reopen with 🕘 or `Parley: Open Past Conversation`.
+- **Richer Markdown** — headings, lists, external links, and fenced code blocks with a hover **Copy** button.
+- **Context-limit handling** — token-limit errors now suggest running Compact instead of showing a raw error.
+
+### Engineering
+- Unit tests for the new pure parsing logic (`src/parley/parsing.ts`).
+- **GitHub Actions**: CI (compile + test + package on push/PR) and a Release workflow that attaches the `.vsix` to a GitHub Release on `vX.Y.Z` tags.
+- ESLint + Prettier configs and `lint`/`format` scripts; removed a stale empty directory.
+
 ## 0.7.1
 
 ### Changed

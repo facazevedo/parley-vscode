@@ -1,6 +1,7 @@
 import type { Logger } from '../logging/logger';
 import { renderPromptWithContext } from '../context/renderPromptWithContext';
 import { extractProposedChanges } from '../diff/extractChanges';
+import { cleanCompletion, isContextLengthError, parseUsage } from './parsing';
 import { ParleyAuthStore } from './auth';
 import type { ParleyProvider, SendMessageOptions } from './ParleyProvider';
 import {
@@ -402,29 +403,10 @@ export class ParleyClient implements ParleyProvider {
     if (response.status === 429) {
       return 'Parley rate limit reached (HTTP 429). Please wait a moment and retry.';
     }
+    if (isContextLengthError(response.status, detail)) {
+      return 'This conversation is too long for the model\'s context window. Run "Parley: Compact Conversation" (⊟) or start a new chat, then retry.';
+    }
     return `Parley request failed (HTTP ${response.status})${detail ? `: ${detail.slice(0, 300)}` : ''}.`;
   }
 }
 
-function parseUsage(payload: unknown): TokenUsage | undefined {
-  const usage = (payload as { usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } })
-    ?.usage;
-  if (!usage || (usage.prompt_tokens == null && usage.completion_tokens == null && usage.total_tokens == null)) {
-    return undefined;
-  }
-  return {
-    prompt: usage.prompt_tokens ?? 0,
-    completion: usage.completion_tokens ?? 0,
-    total: usage.total_tokens ?? (usage.prompt_tokens ?? 0) + (usage.completion_tokens ?? 0)
-  };
-}
-
-/** Strip code fences and stray commentary a model may wrap around a completion. */
-function cleanCompletion(raw: string): string {
-  let text = raw;
-  const fenceMatch = text.match(/^```[\w.+-]*\n([\s\S]*?)```\s*$/);
-  if (fenceMatch) {
-    text = fenceMatch[1];
-  }
-  return text.replace(/\s+$/, '');
-}
