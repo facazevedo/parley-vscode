@@ -203,8 +203,15 @@ export class ParleyClient implements ParleyProvider {
     const convo = [...messages];
     const maxRounds = options.maxToolRounds ?? DEFAULT_MAX_TOOL_ROUNDS;
 
+    let lastUsage: TokenUsage | undefined;
     for (let round = 0; round < maxRounds; round += 1) {
-      const roundPayload: Record<string, unknown> = { model, messages: convo, tools: options.tools, stream: false };
+      const roundPayload: Record<string, unknown> = {
+        model,
+        messages: convo,
+        tools: options.tools,
+        stream: true,
+        stream_options: { include_usage: true }
+      };
       if (effort) {
         roundPayload.reasoning_effort = effort;
       }
@@ -215,40 +222,142 @@ export class ParleyClient implements ParleyProvider {
         signal: options.signal
       });
 
-      const json = (await response.json()) as {
-        choices?: Array<{ message?: ChatCompletionMessage }>;
-        usage?: unknown;
-      };
-      const message = json.choices?.[0]?.message;
-      const toolCalls = message?.tool_calls ?? [];
-
-      if (toolCalls.length === 0) {
-        const content = typeof message?.content === 'string' ? message.content : '';
-        options.onToken?.(content);
-        return { content, usage: parseUsage(json) };
+      // Stream this round live: narration tokens go to onToken; tool calls are
+      // reassembled from the streamed deltas. This is what makes the agent's
+      // activity appear token-by-token (Claude-Code style).
+      const result = await this.streamRound(response, options.onToken);
+      if (result.usage) {
+        lastUsage = result.usage;
       }
 
-      const narration = typeof message?.content === 'string' ? message.content.trim() : '';
-      if (narration) {
-        options.onAgentNote?.(narration);
+      if (result.toolCalls.length === 0) {
+        return { content: result.content, usage: lastUsage };
       }
-      convo.push({ role: 'assistant', content: message?.content ?? '', tool_calls: toolCalls });
-      for (const call of toolCalls) {
-        const args = call.function?.arguments ?? '{}';
-        options.onToolEvent?.({ name: call.function?.name ?? 'tool', args });
-        let result: string;
+
+      convo.push({
+        role: 'assistant',
+        content: result.content,
+        tool_calls: result.toolCalls.map((tc) => ({
+          id: tc.id,
+          type: 'function',
+          function: { name: tc.name, arguments: tc.arguments }
+        }))
+      });
+      for (const tc of result.toolCalls) {
+        options.onToolEvent?.({ name: tc.name, args: tc.arguments });
+        let toolResult: string;
         try {
-          result = await options.runTool!({ id: call.id, name: call.function?.name ?? '', arguments: args });
+          toolResult = await options.runTool!({ id: tc.id, name: tc.name, arguments: tc.arguments });
         } catch (error) {
-          result = `Error: ${error instanceof Error ? error.message : 'tool failed'}`;
+          toolResult = `Error: ${error instanceof Error ? error.message : 'tool failed'}`;
         }
-        convo.push({ role: 'tool', tool_call_id: call.id, content: result.slice(0, MAX_TOOL_RESULT_CHARS) });
+        convo.push({ role: 'tool', tool_call_id: tc.id, content: toolResult.slice(0, MAX_TOOL_RESULT_CHARS) });
       }
     }
 
     // Out of tool rounds: ask once more without tools so the model commits to an answer.
     this.logger.debug(`Tool loop hit ${maxRounds} rounds; requesting a final answer.`);
-    return this.singleCompletion(convo, model, { onToken: options.onToken, signal: options.signal }, effort);
+    const final = await this.singleCompletion(convo, model, { onToken: options.onToken, signal: options.signal }, effort);
+    return { content: final.content, usage: final.usage ?? lastUsage };
+  }
+
+  /** Stream one chat-completions round, surfacing text via onToken and reassembling tool calls from deltas. */
+  private async streamRound(
+    response: Response,
+    onToken?: (delta: string) => void
+  ): Promise<{ content: string; toolCalls: Array<{ id: string; name: string; arguments: string }>; usage?: TokenUsage }> {
+    if (!response.body) {
+      const json = (await response.json()) as { choices?: Array<{ message?: ChatCompletionMessage }> };
+      const message = json.choices?.[0]?.message;
+      const text = typeof message?.content === 'string' ? message.content : '';
+      if (text) {
+        onToken?.(text);
+      }
+      const toolCalls = (message?.tool_calls ?? []).map((t) => ({
+        id: t.id,
+        name: t.function?.name ?? '',
+        arguments: t.function?.arguments ?? ''
+      }));
+      return { content: text, toolCalls, usage: parseUsage(json) };
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    const toolMap = new Map<number, { id: string; name: string; arguments: string }>();
+    let buffer = '';
+    let content = '';
+    let usage: TokenUsage | undefined;
+    let done = false;
+
+    try {
+      while (!done) {
+        const chunk = await reader.read();
+        if (chunk.done) {
+          break;
+        }
+        buffer += decoder.decode(chunk.value, { stream: true });
+        let newlineIndex: number;
+        while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+          const line = buffer.slice(0, newlineIndex).trim();
+          buffer = buffer.slice(newlineIndex + 1);
+          if (!line.startsWith('data:')) {
+            continue;
+          }
+          const data = line.slice(5).trim();
+          if (data === '[DONE]') {
+            done = true;
+            break;
+          }
+          let parsed: {
+            choices?: Array<{ delta?: { content?: string; tool_calls?: Array<Record<string, unknown>> } }>;
+            usage?: unknown;
+          };
+          try {
+            parsed = JSON.parse(data);
+          } catch {
+            continue;
+          }
+          const maybeUsage = parseUsage(parsed);
+          if (maybeUsage) {
+            usage = maybeUsage;
+          }
+          const delta = parsed.choices?.[0]?.delta;
+          if (typeof delta?.content === 'string' && delta.content) {
+            content += delta.content;
+            onToken?.(delta.content);
+          }
+          if (Array.isArray(delta?.tool_calls)) {
+            for (const fragment of delta.tool_calls) {
+              const idx = typeof fragment.index === 'number' ? fragment.index : 0;
+              const current = toolMap.get(idx) ?? { id: '', name: '', arguments: '' };
+              const fn = fragment.function as { name?: string; arguments?: string } | undefined;
+              if (typeof fragment.id === 'string') {
+                current.id = fragment.id;
+              }
+              if (fn?.name) {
+                current.name = fn.name;
+              }
+              if (typeof fn?.arguments === 'string') {
+                current.arguments += fn.arguments;
+              }
+              toolMap.set(idx, current);
+            }
+          }
+        }
+      }
+    } finally {
+      try {
+        reader.releaseLock();
+      } catch {
+        // Reader may already be released.
+      }
+    }
+
+    const toolCalls = [...toolMap.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([, value]) => value)
+      .filter((value) => value.name.length > 0);
+    return { content, toolCalls, usage };
   }
 
   private buildMessages(request: ChatRequest): OpenAiMessage[] {

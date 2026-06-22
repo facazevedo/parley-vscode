@@ -23,8 +23,6 @@ export interface SendMessageOptions {
   readonly tools?: readonly ToolDefinition[];
   readonly runTool?: (call: ToolCall) => Promise<string>;
   readonly onToolEvent?: (event: { readonly name: string; readonly args: string }) => void;
-  /** Intermediate assistant narration emitted between tool calls ("what it's doing now"). */
-  readonly onAgentNote?: (text: string) => void;
   readonly maxToolRounds?: number;
 }
 

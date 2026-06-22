@@ -295,8 +295,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
           runTool: toolsEnabled ? (call) => this.runTool(call) : undefined,
           onToolEvent: toolsEnabled
             ? (event) => this.post({ type: 'toolEvent', name: event.name, args: event.args })
-            : undefined,
-          onAgentNote: toolsEnabled ? (text) => this.post({ type: 'agentNote', text }) : undefined
+            : undefined
         }
       );
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.9.2
+
+### Changed
+- **Token-streamed agent activity** (Claude-Code style): the agent's tool rounds now stream, so the model's narration appears **token-by-token** interleaved with the action lines (`▸ Reading…`, `▸ Running…`), instead of arriving per step. Tool calls are reassembled from the streamed deltas.
+
 ## 0.9.1
 
 ### Added

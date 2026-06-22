@@ -75,8 +75,10 @@ Pick a **Mode** from the popover in the composer (the `Mode ▾` button) — Cur
 | **Auto** | Agent decides and applies edits automatically. |
 | **Full access** ⚠ | **CAUTION** — auto-applies edits **and runs shell commands without asking**. |
 
-In any tool mode the model works through an OpenAI tool-calling loop, shown inline
-(`⚙ read_file src/app.ts`). Shell commands require confirmation in every mode
+In any tool mode the model works through an OpenAI tool-calling loop. Its narration
+**streams token-by-token**, interleaved with live action lines (`▸ Reading src/app.ts`,
+`▸ Running: npm test`, `▸ Editing …`) — so you see what it's doing as it happens.
+Shell commands require confirmation in every mode
 **except Full access**, which runs them automatically — use it only when you trust
 the task. Edits are always checkpointed (`Parley: Revert Last Edit`).
 
@@ -250,7 +252,7 @@ npm run package     # @vscode/vsce -> parley-vscode-<version>.vsix
 Install the result with:
 
 ```bash
-code --install-extension parley-vscode-0.9.1.vsix
+code --install-extension parley-vscode-0.9.2.vsix
 ```
 
 ## Architecture
