@@ -7,12 +7,22 @@ export const DEFAULT_ENDPOINT = 'https://parley.api.mit.edu/v1';
 export const DEFAULT_MODEL = 'bedrock/claude-sonnet-4-6';
 export const DEFAULT_COMPLETION_MODEL = 'openai/gpt-5-nano';
 
+/**
+ * Chat interaction mode (Cursor/Claude-style):
+ * - `chat`  — answer only; no file tools
+ * - `ask`   — agent tools; approve each edit
+ * - `edit`  — agent tools; apply edits automatically (revertible)
+ * - `plan`  — agent reads the repo read-only and proposes a plan; no changes
+ * - `auto`  — agent decides and applies edits automatically
+ */
+export type ChatMode = 'chat' | 'ask' | 'edit' | 'plan' | 'auto';
+
 export interface ParleySettings {
   readonly endpoint: string;
   readonly defaultAgent: string;
   readonly stream: boolean;
   readonly reasoningEffort: ReasoningEffort;
-  readonly agentMode: boolean;
+  readonly defaultMode: ChatMode;
   readonly inlineCompletionEnabled: boolean;
   readonly inlineCompletionModel: string;
   readonly inlineCompletionDebounceMs: number;
@@ -35,7 +45,7 @@ export function getSettings(): ParleySettings {
     defaultAgent: config.get<string>('defaultAgent', DEFAULT_MODEL).trim() || DEFAULT_MODEL,
     stream: config.get<boolean>('stream', true),
     reasoningEffort: normalizeEffort(config.get<string>('reasoningEffort', 'default')),
-    agentMode: config.get<boolean>('agentMode', false),
+    defaultMode: normalizeMode(config.get<string>('defaultMode', 'chat')),
     inlineCompletionEnabled: inline.get<boolean>('enabled', true),
     inlineCompletionModel: inline.get<string>('model', DEFAULT_COMPLETION_MODEL).trim() || DEFAULT_COMPLETION_MODEL,
     inlineCompletionDebounceMs: inline.get<number>('debounceMs', 350),
@@ -51,4 +61,8 @@ export function getSettings(): ParleySettings {
 /** Map the setting value to a ReasoningEffort; "default" (or anything unknown) means "don't send". */
 function normalizeEffort(value: string): ReasoningEffort {
   return value === 'minimal' || value === 'low' || value === 'medium' || value === 'high' ? value : '';
+}
+
+function normalizeMode(value: string): ChatMode {
+  return value === 'ask' || value === 'edit' || value === 'plan' || value === 'auto' ? value : 'chat';
 }

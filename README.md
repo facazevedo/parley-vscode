@@ -63,9 +63,19 @@ using a fast model and a fill-in-the-middle prompt around your cursor.
 - Configure the model and debounce via `parley.inlineCompletion.*`.
 - Only runs in real editor documents; cancels in-flight requests as you keep typing.
 
-### 🤖 Agent mode
-Turn on the **Agent** checkbox in the composer to let the model work through an
-OpenAI tool-calling loop. Tool activity is shown inline (`⚙ read_file src/app.ts`).
+### 🤖 Modes (agent)
+Pick a **Mode** from the popover in the composer (the `Mode ▾` button) — Cursor/Claude-style:
+
+| Mode | Behavior |
+| --- | --- |
+| **Chat** | Answer only; no file tools (default). |
+| **Ask before edits** | Agent proposes edits; you approve each one in a diff. |
+| **Edit automatically** | Agent applies edits without asking (checkpointed/revertible). |
+| **Plan** | Agent explores **read-only** and presents a numbered plan; makes no changes. |
+| **Auto** | Agent decides and applies edits automatically. |
+
+In any tool mode the model works through an OpenAI tool-calling loop, shown inline
+(`⚙ read_file src/app.ts`). **Shell commands always require confirmation, in every mode.**
 
 - `read_file`, `list_directory`, `find_files` — gather context (read-only)
 - `search_text` — grep file **contents** across the workspace (the practical stand-in for semantic codebase search)
@@ -174,7 +184,7 @@ with any model.
 | `parley.defaultAgent` | `bedrock/claude-sonnet-4-6` | Default model id |
 | `parley.stream` | `true` | Stream replies token-by-token |
 | `parley.reasoningEffort` | `default` | `default` \| `minimal` \| `low` \| `medium` \| `high` → `reasoning_effort` |
-| `parley.agentMode` | `false` | Default state of the chat **Agent** toggle |
+| `parley.defaultMode` | `chat` | Default mode: `chat` \| `ask` \| `edit` \| `plan` \| `auto` |
 | `parley.inlineCompletion.enabled` | `true` | Show inline ghost-text completions |
 | `parley.inlineCompletion.model` | `openai/gpt-5-nano` | Model used for completions (prefer a fast one) |
 | `parley.inlineCompletion.debounceMs` | `350` | Idle delay before requesting a completion |
@@ -237,7 +247,7 @@ npm run package     # @vscode/vsce -> parley-vscode-<version>.vsix
 Install the result with:
 
 ```bash
-code --install-extension parley-vscode-0.8.1.vsix
+code --install-extension parley-vscode-0.9.0.vsix
 ```
 
 ## Architecture

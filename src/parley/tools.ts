@@ -108,6 +108,11 @@ export const AGENT_TOOLS: readonly ToolDefinition[] = [
   }
 ];
 
+/** The subset of tools that never modify the workspace — used by Plan mode. */
+export const READ_ONLY_TOOLS: readonly ToolDefinition[] = AGENT_TOOLS.filter(
+  (tool) => tool.function.name !== 'write_file' && tool.function.name !== 'run_command'
+);
+
 const MAX_FETCH_CHARS = 12000;
 const MAX_SEARCH_FILES = 400;
 const MAX_SEARCH_RESULTS = 40;

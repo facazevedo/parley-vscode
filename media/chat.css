@@ -71,6 +71,22 @@ button:disabled { opacity: 0.5; cursor: default; }
 .mentions { position: absolute; left: 6px; right: 6px; bottom: calc(100% - 2px); max-height: 180px; overflow: auto; z-index: 5; background: var(--vscode-dropdown-background); border: 1px solid var(--vscode-dropdown-border); border-radius: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); }
 .mention-item { padding: 4px 9px; cursor: pointer; font-family: var(--vscode-editor-font-family, monospace); font-size: 0.85em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mention-item.active, .mention-item:hover { background: var(--vscode-list-activeSelectionBackground); color: var(--vscode-list-activeSelectionForeground); }
+
+.modebtn { white-space: nowrap; }
+.modepanel { position: absolute; left: 6px; bottom: calc(100% - 2px); width: min(320px, calc(100% - 12px)); z-index: 6; background: var(--vscode-menu-background, var(--vscode-dropdown-background)); color: var(--vscode-menu-foreground, var(--vscode-foreground)); border: 1px solid var(--vscode-menu-border, var(--vscode-dropdown-border)); border-radius: 8px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4); padding: 6px; }
+.mp-head { font-size: 0.72em; text-transform: uppercase; letter-spacing: .06em; color: var(--vscode-descriptionForeground); padding: 6px 8px 3px; }
+.mp-note { text-transform: none; letter-spacing: 0; opacity: 0.85; }
+.mp-item { display: block; width: 100%; text-align: left; background: transparent; color: inherit; border: 0; border-radius: 6px; padding: 6px 26px 6px 8px; cursor: pointer; position: relative; }
+.mp-item:hover { background: var(--vscode-list-hoverBackground); }
+.mp-item.active { background: var(--vscode-list-activeSelectionBackground); color: var(--vscode-list-activeSelectionForeground); }
+.mp-item.active::after { content: '✓'; position: absolute; right: 9px; top: 6px; }
+.mp-name { display: block; font-size: 0.92em; }
+.mp-desc { display: block; font-size: 0.78em; opacity: 0.75; }
+.mp-sep { height: 1px; background: var(--vscode-menu-separatorBackground, var(--vscode-sideBar-border)); margin: 5px 4px; }
+.mp-effort { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 6px 4px; }
+.mp-effort button { font-size: 0.8em; padding: 2px 8px; border: 1px solid var(--vscode-dropdown-border); border-radius: 12px; background: transparent; color: inherit; cursor: pointer; }
+.mp-effort button.active { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border-color: var(--vscode-button-background); }
+.mp-foot { font-size: 0.74em; color: var(--vscode-descriptionForeground); padding: 4px 8px 2px; }
 .inputbox:focus-within { border-color: var(--vscode-focusBorder); }
 .inputbox textarea { min-height: 54px; resize: vertical; width: 100%; box-sizing: border-box; border: 0; background: transparent; color: var(--vscode-input-foreground); padding: 4px; outline: none; }
 .actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }

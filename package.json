@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -157,10 +157,24 @@
           ],
           "markdownDescription": "Reasoning effort sent to the model as `reasoning_effort`. `default` omits the parameter. **Note: the Parley gateway does not currently honor this parameter** (verified across GPT-5, Claude, and Gemini models — no change in behavior). It is sent for forward-compatibility in case Parley enables it."
         },
-        "parley.agentMode": {
-          "type": "boolean",
-          "default": false,
-          "markdownDescription": "Default state of the chat **Agent** toggle. In agent mode the model can read files, list directories, and search the workspace on its own (read-only tools)."
+        "parley.defaultMode": {
+          "type": "string",
+          "default": "chat",
+          "enum": [
+            "chat",
+            "ask",
+            "edit",
+            "plan",
+            "auto"
+          ],
+          "enumDescriptions": [
+            "Answer only — no file tools",
+            "Agent tools; approve each edit in a diff",
+            "Agent tools; apply edits automatically (revertible)",
+            "Agent reads the repo read-only and proposes a plan",
+            "Agent decides and applies edits automatically"
+          ],
+          "markdownDescription": "Default chat **Mode**, also switchable from the Mode popover in the composer. Shell commands always require confirmation regardless of mode."
         },
         "parley.inlineCompletion.enabled": {
           "type": "boolean",

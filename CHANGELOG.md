@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.0
+
+### Added
+- **Modes popover** (Cursor/Claude-style) in the composer, replacing the Agent checkbox: **Chat**, **Ask before edits**, **Edit automatically**, **Plan**, **Auto**. The reasoning-effort control moved into the same popover.
+  - *Ask* shows a diff to approve each edit; *Edit*/*Auto* apply edits automatically (still checkpointed/revertible); *Plan* gives the agent read-only tools and asks for a plan; *Chat* uses no tools.
+  - Shell commands (`run_command`) always require confirmation, in every mode.
+- `parley.defaultMode` setting (replaces `parley.agentMode`).
+
 ## 0.8.1
 
 ### Changed

@@ -1,6 +1,6 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import type { ParleySettings } from '../config/settings';
+import type { ChatMode, ParleySettings } from '../config/settings';
 import {
   collectCommandContext,
   handleResponse,
@@ -17,7 +17,7 @@ import { showProposedDiff } from '../diff/showDiff';
 import type { Logger } from '../logging/logger';
 import type { ParleyProvider } from '../parley/ParleyProvider';
 import { extractMentionPaths } from '../parley/parsing';
-import { AGENT_TOOLS, runAgentTool } from '../parley/tools';
+import { AGENT_TOOLS, READ_ONLY_TOOLS, runAgentTool } from '../parley/tools';
 import type {
   AgentInfo,
   ChatMessage,
@@ -37,7 +37,7 @@ interface ChatPanelMessage {
     | 'refreshAgents'
     | 'contextOptionsChanged'
     | 'agentChanged'
-    | 'agentModeChanged'
+    | 'modeChanged'
     | 'effortChanged'
     | 'attachFiles'
     | 'removeAttachment'
@@ -51,6 +51,7 @@ interface ChatPanelMessage {
   readonly prompt?: string;
   readonly agentId?: string;
   readonly effort?: string;
+  readonly mode?: string;
   readonly value?: boolean;
   readonly id?: string;
   readonly text?: string;
@@ -92,7 +93,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private selectedAgentId = '';
   private selectedEffort: ReasoningEffort = '';
   private contextOptions: Required<ContextOptions> = { ...DEFAULT_CONTEXT_OPTIONS };
-  private agentMode = false;
+  private mode: ChatMode = 'chat';
   private attachments: PendingAttachment[] = [];
   private busy = false;
   private abortController?: AbortController;
@@ -119,14 +120,14 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     }
     this.selectedAgentId = this.state.get<string>('parley.selectedAgentId', settings.defaultAgent);
     this.selectedEffort = normalizeEffort(this.state.get<string>('parley.selectedEffort', settings.reasoningEffort));
-    this.agentMode = this.state.get<boolean>('parley.agentMode', settings.agentMode);
+    this.mode = normalizeMode(this.state.get<string>('parley.mode', settings.defaultMode));
   }
 
   private save(): void {
     void this.state.update('parley.history', this.history);
     void this.state.update('parley.selectedAgentId', this.selectedAgentId);
     void this.state.update('parley.selectedEffort', this.selectedEffort);
-    void this.state.update('parley.agentMode', this.agentMode);
+    void this.state.update('parley.mode', this.mode);
   }
 
   public resolveWebviewView(webviewView: vscode.WebviewView): void {
@@ -184,9 +185,10 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         this.selectedAgentId = message.agentId ?? this.selectedAgentId;
         this.save();
         return;
-      case 'agentModeChanged':
-        this.agentMode = Boolean(message.value);
+      case 'modeChanged':
+        this.mode = normalizeMode(message.mode);
         this.save();
+        await this.postState();
         return;
       case 'effortChanged':
         this.selectedEffort = normalizeEffort(message.effort);
@@ -245,7 +247,12 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     const mentions = await this.resolveMentions(prompt, settings);
     const context = [...collected, ...textAttachments, ...mentions];
     const images = this.attachments.filter((a) => a.kind === 'image').map((a) => a.image!);
-    const systemExtra = await this.readProjectRules();
+    const toolsEnabled = this.mode !== 'chat';
+    const planNote =
+      this.mode === 'plan'
+        ? 'You are in PLAN mode. Do NOT edit files or run commands. Use the read-only tools to explore the codebase, then present a concise, numbered plan of the changes you would make.'
+        : undefined;
+    const systemExtra = [await this.readProjectRules(), planNote].filter(Boolean).join('\n\n') || undefined;
 
     // Per-message chat stays frictionless; only confirm when the attached context
     // is large. (The diff-review-before-apply step still gates any file changes.)
@@ -284,9 +291,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         {
           signal: this.abortController.signal,
           onToken: useStream ? (delta) => this.post({ type: 'streamDelta', delta }) : undefined,
-          tools: this.agentMode ? AGENT_TOOLS : undefined,
-          runTool: this.agentMode ? (call) => this.runTool(call) : undefined,
-          onToolEvent: this.agentMode
+          tools: toolsEnabled ? (this.mode === 'plan' ? READ_ONLY_TOOLS : AGENT_TOOLS) : undefined,
+          runTool: toolsEnabled ? (call) => this.runTool(call) : undefined,
+          onToolEvent: toolsEnabled
             ? (event) => this.post({ type: 'toolEvent', name: event.name, args: event.args })
             : undefined
         }
@@ -547,6 +554,13 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       original = '';
     }
     const proposedText = content.endsWith('\n') ? content : `${content}\n`;
+
+    // In "edit"/"auto" modes apply without prompting; "ask" shows a diff to approve.
+    if (this.mode === 'edit' || this.mode === 'auto') {
+      await this.checkpoints.applyWithCheckpoint(uri, proposedText, `edit ${rel}`);
+      return `Applied edit to ${rel} (auto).`;
+    }
+
     await showProposedDiff(
       { filePath: uri.fsPath, originalText: original, proposedText, title: `Agent edit: ${rel}` },
       this.commandDeps.diffProvider
@@ -689,7 +703,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       agents: this.agents,
       hasKey,
       busy: this.busy,
-      agentMode: this.agentMode,
+      mode: this.mode,
       selectedAgentId: this.selectedAgentId,
       selectedEffort: this.selectedEffort,
       contextOptions: this.contextOptions,
@@ -741,24 +755,33 @@ export class ChatPanel implements vscode.WebviewViewProvider {
           <label><input id="includeOpenEditors" type="checkbox"> Open editors</label>
           <label><input id="includeDiagnostics" type="checkbox"> Diagnostics</label>
           <label><input id="includeUserSelectedFiles" type="checkbox"> Pick files</label>
-          <label title="Let Parley read files, list directories, search, edit (with review), and run commands (with confirmation)"><input id="agentMode" type="checkbox"> Agent</label>
         </div>
       </details>
       <div id="attachments" class="attachments"></div>
       <div class="inputbox">
         <div id="mentions" class="mentions" style="display:none"></div>
+        <div id="modePanel" class="modepanel" style="display:none">
+          <div class="mp-head">Modes</div>
+          <button type="button" class="mp-item" data-mode="chat"><span class="mp-name">Chat</span><span class="mp-desc">Answer only — no file access</span></button>
+          <button type="button" class="mp-item" data-mode="ask"><span class="mp-name">Ask before edits</span><span class="mp-desc">Agent proposes edits; you approve each one</span></button>
+          <button type="button" class="mp-item" data-mode="edit"><span class="mp-name">Edit automatically</span><span class="mp-desc">Agent applies edits without asking (revertible)</span></button>
+          <button type="button" class="mp-item" data-mode="plan"><span class="mp-name">Plan mode</span><span class="mp-desc">Agent explores read-only and presents a plan</span></button>
+          <button type="button" class="mp-item" data-mode="auto"><span class="mp-name">Auto mode</span><span class="mp-desc">Agent decides and applies edits automatically</span></button>
+          <div class="mp-sep"></div>
+          <div class="mp-head">Reasoning effort <span class="mp-note">— not honored by Parley yet</span></div>
+          <div class="mp-effort">
+            <button type="button" data-effort="">Default</button>
+            <button type="button" data-effort="minimal">Min</button>
+            <button type="button" data-effort="low">Low</button>
+            <button type="button" data-effort="medium">Med</button>
+            <button type="button" data-effort="high">High</button>
+          </div>
+          <div class="mp-foot">Shell commands always ask before running.</div>
+        </div>
         <textarea id="prompt" placeholder="Ask Parley…  (@file to attach · Enter to send · Shift+Enter for newline)"></textarea>
         <div class="actions">
           <select id="agent" class="model" aria-label="Parley model"></select>
-          <select id="effort" class="effort" aria-label="Reasoning effort" title="Reasoning effort — Parley does not honor this yet; it is sent for forward-compatibility.">
-            <optgroup label="Reasoning effort — not honored by Parley yet">
-              <option value="">Default</option>
-              <option value="minimal">Minimal</option>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-            </optgroup>
-          </select>
+          <button type="button" id="modeBtn" class="modebtn" title="Mode &amp; effort" aria-label="Mode">Chat ▾</button>
           <button type="button" id="attach" title="Attach files or images" aria-label="Attach files or images">📎</button>
           <span class="grow"></span>
           <button type="button" id="stop" style="display:none">Stop</button>
@@ -775,6 +798,10 @@ export class ChatPanel implements vscode.WebviewViewProvider {
 
 function normalizeEffort(value: string | undefined): ReasoningEffort {
   return value === 'minimal' || value === 'low' || value === 'medium' || value === 'high' ? value : '';
+}
+
+function normalizeMode(value: string | undefined): ChatMode {
+  return value === 'ask' || value === 'edit' || value === 'plan' || value === 'auto' ? value : 'chat';
 }
 
 /** Run a shell command in cwd, returning combined stdout/stderr (truncated). User-approved per call. */
