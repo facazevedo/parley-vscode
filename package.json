@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.9.8",
+  "version": "0.10.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -99,6 +99,11 @@
         "category": "Parley"
       },
       {
+        "command": "parley.regenerate",
+        "title": "Parley: Regenerate Last Response",
+        "category": "Parley"
+      },
+      {
         "command": "parley.openPastConversation",
         "title": "Parley: Open Past Conversation",
         "category": "Parley"
@@ -111,6 +116,11 @@
       {
         "command": "parley.revertLastEdit",
         "title": "Parley: Revert Last Edit",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.revertAll",
+        "title": "Parley: Revert All Edits",
         "category": "Parley"
       },
       {
@@ -207,6 +217,12 @@
           "default": 0,
           "minimum": 0,
           "markdownDescription": "Token budget per conversation. When the conversation's total token usage reaches this, Parley stops and asks you to raise the limit or start a new conversation. **`0` means unlimited (default).** Set it from `Parley: Set Token Limit`."
+        },
+        "parley.autoCompactTokens": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "markdownDescription": "When the conversation's estimated size exceeds this many tokens, automatically compact (summarize) it before the next turn to control cost and avoid context-window errors. **`0` disables (default).** (Compaction is lossy — it replaces history with a summary.) The agent loop also trims stale tool outputs automatically regardless of this setting."
         },
         "parley.inlineCompletion.enabled": {
           "type": "boolean",

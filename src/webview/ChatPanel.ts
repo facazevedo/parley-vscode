@@ -231,12 +231,70 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         return;
       case 'send':
         if (message.prompt?.trim()) {
-          await this.runTurn(message.prompt.trim(), this.contextOptions);
+          const text = message.prompt.trim();
+          if (text.startsWith('/') && (await this.handleSlash(text))) {
+            return;
+          }
+          await this.runTurn(text, this.contextOptions);
         }
         return;
       default:
         return;
     }
+  }
+
+  /** Rough token estimate of the current conversation (~4 chars/token). */
+  private estimateHistoryTokens(): number {
+    return Math.round(this.history.reduce((n, m) => n + (m.content?.length ?? 0), 0) / 4);
+  }
+
+  /** Handle composer slash commands. Returns true if the input was a known command. */
+  private async handleSlash(input: string): Promise<boolean> {
+    const cmd = input.slice(1).split(/\s+/)[0].toLowerCase();
+    switch (cmd) {
+      case 'clear':
+      case 'new':
+        this.archiveCurrent();
+        this.history.length = 0;
+        this.attachments = [];
+        this.sessionTokens = 0;
+        await this.postState();
+        return true;
+      case 'compact':
+        await this.compactConversation();
+        return true;
+      case 'help':
+        this.history.push({
+          role: 'assistant',
+          content:
+            '**Slash commands**\n- `/clear` (or `/new`) — start a new conversation\n- `/compact` — summarize to free up context\n- `/help` — this list\n\nMost actions also have commands in the Command Palette (search "Parley").',
+          createdAt: new Date().toISOString()
+        });
+        await this.postState();
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  /** Re-run the last user message (drop the responses after it). */
+  public async regenerateLast(): Promise<void> {
+    if (this.busy) {
+      await vscode.window.showInformationMessage('Parley is still responding.');
+      return;
+    }
+    let i = this.history.length - 1;
+    while (i >= 0 && this.history[i].role !== 'user') {
+      i -= 1;
+    }
+    if (i < 0) {
+      await vscode.window.showInformationMessage('Parley: nothing to regenerate yet.');
+      return;
+    }
+    const prompt = this.history[i].content;
+    this.history.length = i; // runTurn re-adds the user message
+    await this.postState();
+    await this.runTurn(prompt, this.contextOptions);
   }
 
   private async runTurn(prompt: string, contextOptions: ContextOptions): Promise<void> {
@@ -246,6 +304,13 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     }
 
     const settings = this.getSettings();
+    if (
+      settings.autoCompactTokens > 0 &&
+      this.history.length >= 4 &&
+      this.estimateHistoryTokens() > settings.autoCompactTokens
+    ) {
+      await this.compactConversation();
+    }
     if (settings.tokenLimit > 0 && this.sessionTokens >= settings.tokenLimit) {
       await vscode.window.showWarningMessage(
         `Parley token limit reached for this conversation (${this.sessionTokens.toLocaleString()} / ${settings.tokenLimit.toLocaleString()}). Start a new conversation or raise "parley.tokenLimit".`
@@ -280,7 +345,14 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     const agentId = this.selectedAgentId || settings.defaultAgent;
     const canAutoContinue = toolsEnabled && this.mode !== 'plan' && settings.autoContinue;
 
+    if (images.length > 0 && !isLikelyVisionModel(agentId)) {
+      void vscode.window.showWarningMessage(
+        `${agentId} may not accept images. For image input, pick a Claude, Gemini, or GPT-5 model.`
+      );
+    }
+
     let turnTokens = 0;
+    const cpStart = this.checkpoints.size;
     this.post({ type: 'tokens', total: 0 });
 
     try {
@@ -354,6 +426,15 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         }
         auto += 1;
         continuation = 'Continue. If the task is already fully complete, reply with <DONE>.';
+      }
+
+      const changed = this.checkpoints.changedSince(cpStart);
+      if (changed.length > 0) {
+        this.history.push({
+          role: 'assistant',
+          content: `✏️ Changed ${changed.length} file${changed.length === 1 ? '' : 's'}: ${changed.join(', ')}\n_Run "Parley: Revert Last Edit" or "Parley: Revert All Edits" to undo._`,
+          createdAt: new Date().toISOString()
+        });
       }
       this.busy = false;
       this.abortController = undefined;
@@ -661,13 +742,22 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       return `Error: could not read "${rel}" — does it exist? Use write_file to create new files.`;
     }
     const idx = original.indexOf(oldText);
-    if (idx === -1) {
-      return `Error: old_text was not found in ${rel}. Re-read the file and copy an exact snippet (including whitespace).`;
+    let proposedText: string | undefined;
+    if (idx !== -1) {
+      if (original.indexOf(oldText, idx + oldText.length) !== -1) {
+        return `Error: old_text appears more than once in ${rel}. Include more surrounding context so it is unique.`;
+      }
+      proposedText = original.slice(0, idx) + newText + original.slice(idx + oldText.length);
+    } else {
+      // Fallback: match by trimmed lines so indentation/trailing-whitespace differences still apply.
+      proposedText = replaceByTrimmedLines(original, oldText, newText);
+      if (proposedText === undefined) {
+        return `Error: old_text was not found in ${rel} (even ignoring indentation). Re-read the file with read_file and copy an exact snippet.`;
+      }
+      if (proposedText === '') {
+        return `Error: old_text matches more than one place in ${rel}. Include more surrounding context so it is unique.`;
+      }
     }
-    if (original.indexOf(oldText, idx + oldText.length) !== -1) {
-      return `Error: old_text appears more than once in ${rel}. Include more surrounding context so it is unique.`;
-    }
-    const proposedText = original.slice(0, idx) + newText + original.slice(idx + oldText.length);
     return this.applyProposedEdit(uri, rel, original, proposedText);
   }
 
@@ -719,7 +809,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         return 'User declined to run the command.';
       }
     }
-    return runShellCommand(command, folder?.uri.fsPath);
+    return runShellCommand(command, folder?.uri.fsPath, this.abortController?.signal);
   }
 
   /** Resolve `@path` mentions in the prompt into file context attachments. */
@@ -928,10 +1018,62 @@ function normalizeMode(value: string | undefined): ChatMode {
   return value === 'ask' || value === 'edit' || value === 'plan' || value === 'auto' || value === 'full' ? value : 'chat';
 }
 
-/** Run a shell command in cwd, returning combined stdout/stderr (truncated). User-approved per call. */
-function runShellCommand(command: string, cwd: string | undefined): Promise<string> {
+/** Heuristic: model families on Parley that accept image input. */
+function isLikelyVisionModel(model: string): boolean {
+  return /claude|gemini|gpt-5/i.test(model);
+}
+
+/**
+ * Apply an edit by matching trimmed lines (tolerant of indentation / trailing whitespace).
+ * Returns the new text, `undefined` if no match, or `''` if the match is ambiguous.
+ */
+function replaceByTrimmedLines(original: string, oldText: string, newText: string): string | undefined | '' {
+  const oldLines = oldText.replace(/\r/g, '').split('\n').map((l) => l.trim());
+  while (oldLines.length && oldLines[0] === '') {
+    oldLines.shift();
+  }
+  while (oldLines.length && oldLines[oldLines.length - 1] === '') {
+    oldLines.pop();
+  }
+  if (oldLines.length === 0) {
+    return undefined;
+  }
+
+  const fileLines = original.split('\n');
+  const fileTrim = fileLines.map((l) => l.trim());
+  const matches: number[] = [];
+  for (let i = 0; i + oldLines.length <= fileTrim.length; i += 1) {
+    let ok = true;
+    for (let j = 0; j < oldLines.length; j += 1) {
+      if (fileTrim[i + j] !== oldLines[j]) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) {
+      matches.push(i);
+    }
+  }
+  if (matches.length === 0) {
+    return undefined;
+  }
+  if (matches.length > 1) {
+    return '';
+  }
+  const at = matches[0];
+  const replaced = [...fileLines.slice(0, at), ...newText.replace(/\r/g, '').split('\n'), ...fileLines.slice(at + oldLines.length)];
+  return replaced.join('\n');
+}
+
+/** Run a shell command in cwd, returning combined stdout/stderr (truncated). User-approved per call.
+ *  Passing the turn's AbortSignal lets Stop actually kill the child process. */
+function runShellCommand(command: string, cwd: string | undefined, signal?: AbortSignal): Promise<string> {
   return new Promise((resolve) => {
-    exec(command, { cwd, timeout: 60000, maxBuffer: 1024 * 1024, windowsHide: true }, (error, stdout, stderr) => {
+    exec(command, { cwd, timeout: 60000, maxBuffer: 1024 * 1024, windowsHide: true, signal }, (error, stdout, stderr) => {
+      if (error && (error as { name?: string }).name === 'AbortError') {
+        resolve('Command was stopped by the user.');
+        return;
+      }
       const out = `${stdout ?? ''}${stderr ? `\n[stderr]\n${stderr}` : ''}`.trim();
       const body = out.length > 8000 ? `${out.slice(0, 8000)}\n[truncated]` : out;
       if (error && !out) {

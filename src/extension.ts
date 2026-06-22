@@ -85,10 +85,17 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('parley.exportConversation', () => chatPanel.exportConversation()),
     vscode.commands.registerCommand('parley.compactConversation', () => chatPanel.compactConversation()),
+    vscode.commands.registerCommand('parley.regenerate', () => chatPanel.regenerateLast()),
     vscode.commands.registerCommand('parley.openPastConversation', () => chatPanel.openPastConversation()),
     vscode.commands.registerCommand('parley.revertLastEdit', async () => {
       const label = await checkpoints.revertLast();
       await vscode.window.showInformationMessage(label ? `Parley reverted: ${label}.` : 'Parley: nothing to revert.');
+    }),
+    vscode.commands.registerCommand('parley.revertAll', async () => {
+      const count = await checkpoints.revertAll();
+      await vscode.window.showInformationMessage(
+        count > 0 ? `Parley reverted ${count} edit${count === 1 ? '' : 's'}.` : 'Parley: nothing to revert.'
+      );
     }),
     vscode.commands.registerCommand('parley.setTokenLimit', async () => {
       const current = getSettings().tokenLimit;

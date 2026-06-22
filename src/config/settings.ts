@@ -28,6 +28,7 @@ export interface ParleySettings {
   readonly maxToolRounds: number;
   readonly maxAutoContinue: number;
   readonly tokenLimit: number;
+  readonly autoCompactTokens: number;
   readonly inlineCompletionEnabled: boolean;
   readonly inlineCompletionModel: string;
   readonly inlineCompletionDebounceMs: number;
@@ -55,6 +56,7 @@ export function getSettings(): ParleySettings {
     maxToolRounds: clampInt(config.get<number>('maxToolRounds', 25), 1, 200),
     maxAutoContinue: clampInt(config.get<number>('maxAutoContinue', 25), 0, 200),
     tokenLimit: Math.max(0, Math.floor(config.get<number>('tokenLimit', 0))),
+    autoCompactTokens: Math.max(0, Math.floor(config.get<number>('autoCompactTokens', 0))),
     inlineCompletionEnabled: inline.get<boolean>('enabled', true),
     inlineCompletionModel: inline.get<string>('model', DEFAULT_COMPLETION_MODEL).trim() || DEFAULT_COMPLETION_MODEL,
     inlineCompletionDebounceMs: inline.get<number>('debounceMs', 350),

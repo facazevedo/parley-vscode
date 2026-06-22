@@ -61,6 +61,25 @@ interface CompletionResult {
   readonly usage?: TokenUsage;
 }
 
+const TOOL_OMITTED = '[earlier tool output omitted to save context]';
+
+/** Replace all but the most recent `keepLast` tool-result messages with a short placeholder. */
+function trimOldToolMessages(convo: OpenAiMessage[], keepLast: number): void {
+  const toolIndexes: number[] = [];
+  for (let i = 0; i < convo.length; i += 1) {
+    if (convo[i].role === 'tool') {
+      toolIndexes.push(i);
+    }
+  }
+  const cutoff = toolIndexes.length - keepLast;
+  for (let k = 0; k < cutoff; k += 1) {
+    const i = toolIndexes[k];
+    if (convo[i].content !== TOOL_OMITTED) {
+      convo[i] = { ...convo[i], content: TOOL_OMITTED };
+    }
+  }
+}
+
 /**
  * Official Parley provider. Parley exposes an OpenAI-compatible gateway at
  * `https://parley.api.mit.edu/v1`, authenticated with a `sk-parley-…` bearer
@@ -213,6 +232,7 @@ export class ParleyClient implements ParleyProvider {
 
     let lastUsage: TokenUsage | undefined;
     for (let round = 0; round < maxRounds; round += 1) {
+      trimOldToolMessages(convo, 8); // keep the convo from ballooning across many tool rounds
       const roundPayload: Record<string, unknown> = {
         model,
         messages: convo,

@@ -30,6 +30,22 @@ export class CheckpointStore {
     return this.stack.length;
   }
 
+  /** Unique file basenames checkpointed at or after `start` (for a "changed this turn" summary). */
+  public changedSince(start: number): string[] {
+    const names = this.stack.slice(start).map((c) => c.uri.fsPath.replace(/\\/g, '/').split('/').pop() || c.label);
+    return [...new Set(names)];
+  }
+
+  /** Revert every checkpointed write (most-recent first). Returns how many were reverted. */
+  public async revertAll(): Promise<number> {
+    let count = 0;
+    while (this.stack.length > 0) {
+      await this.revertLast();
+      count += 1;
+    }
+    return count;
+  }
+
   /** Revert the most recent checkpointed write. Returns its label, or undefined if none. */
   public async revertLast(): Promise<string | undefined> {
     const cp = this.stack.pop();

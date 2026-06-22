@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.10.0
+
+### Added
+- **Changed-files summary** after an agent turn ("✏️ Changed N files: …") and **`Parley: Revert All Edits`** to undo a whole turn's changes.
+- **Slash commands** in the composer — `/clear`, `/compact`, `/help` — and **`Parley: Regenerate Last Response`**.
+- **Auto-compaction** (`parley.autoCompactTokens`, opt-in) — summarize the conversation before a turn once it exceeds the configured token estimate, to control cost and avoid context-window errors.
+- **Marketplace / Open VSX publishing** wired into the release workflow (gated on `VSCE_PAT` / `OVSX_PAT` repo secrets; no-ops until set).
+
+### Changed / fixed
+- **Stop now kills a running shell command** (the child process is aborted), not just the API request.
+- **The agent loop trims stale tool outputs** automatically, so long multi-step turns stop re-sending old file dumps — cheaper and less likely to overflow context.
+- **`edit_file` is whitespace-tolerant** — if an exact snippet match fails, it falls back to matching by trimmed lines (handles indentation/trailing-space differences).
+- **Warns** when you attach an image to a model that likely lacks vision (Claude/Gemini/GPT-5 are vision-capable).
+
+### Deferred
+- Per-hunk accept/reject inline diff (needs a custom diff UI) and full VS Code integration tests in CI (headless-Electron infra) — noted as future work.
+
 ## 0.9.8
 
 ### Added

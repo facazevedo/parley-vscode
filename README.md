@@ -97,7 +97,11 @@ corrected to the exact API count per round).
 - `fetch_url` — fetch a public `https://` page as text
 
 Sensitive files are refused, file paths are constrained to the workspace, and no
-edit or command happens without your explicit approval.
+edit or command happens without your explicit approval. **Stop** aborts in-flight
+work *and kills a running command*. After a turn, a **"Changed N files"** summary
+lists what was edited (undo with `Parley: Revert All Edits`). The agent loop also
+trims stale tool output and (optionally) auto-compacts to control cost. Composer
+**slash commands**: `/clear`, `/compact`, `/help`.
 
 ### ✏️ Inline edit (Ctrl+Alt+K)
 Select code, press **`Ctrl+Alt+K`** (`Cmd+Alt+K` on macOS) or run
@@ -181,6 +185,9 @@ with any model.
 | `Parley: Suggest Terminal Command` | Suggest a shell command (manual confirm) |
 | `Parley: Edit Selection (Inline)` | Inline edit of the selection (`Ctrl+Alt+K` / `Cmd+Alt+K`) |
 | `Parley: Revert Last Edit` | Undo the most recent agent/inline edit |
+| `Parley: Revert All Edits` | Undo all checkpointed edits |
+| `Parley: Regenerate Last Response` | Re-run the last user message |
+| `Parley: Set Token Limit` | Set the per-conversation token budget |
 | `Parley: Generate Image` | Generate an image with `gpt-image-1` |
 | `Parley: Toggle Inline Completion` | Enable/disable ghost-text completions |
 | `Parley: Export Conversation` | Export the chat to Markdown or JSON |
@@ -203,6 +210,7 @@ with any model.
 | `parley.maxToolRounds` | `25` | Max tool-call rounds per turn |
 | `parley.maxAutoContinue` | `25` | Max auto-continue steps before pausing (`0` disables) |
 | `parley.tokenLimit` | `0` | Per-conversation token budget; `0` = unlimited |
+| `parley.autoCompactTokens` | `0` | Auto-summarize the conversation past this size; `0` = off |
 | `parley.inlineCompletion.enabled` | `true` | Show inline ghost-text completions |
 | `parley.inlineCompletion.model` | `openai/gpt-5-nano` | Model used for completions (prefer a fast one) |
 | `parley.inlineCompletion.debounceMs` | `350` | Idle delay before requesting a completion |
@@ -265,7 +273,7 @@ npm run package     # @vscode/vsce -> parley-vscode-<version>.vsix
 Install the result with:
 
 ```bash
-code --install-extension parley-vscode-0.9.8.vsix
+code --install-extension parley-vscode-0.10.0.vsix
 ```
 
 ## Architecture
