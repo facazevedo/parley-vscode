@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.9.8
+
+### Added
+- **Persistent session token total** in the header (tokens used in the current conversation), updated live and reset on New/Open.
+- **Token limit** per conversation — `parley.tokenLimit` and a `Parley: Set Token Limit` command. **Default `0` = unlimited.** When reached, Parley stops auto-continuing and asks you to raise it or start fresh.
+- Configurable caps: `parley.maxToolRounds` (default 25) and `parley.maxAutoContinue` (default 25; `0` disables auto-continue).
+
+## 0.9.7
+
+### Added
+- **Live elapsed timer** in the status line (e.g. `Working… (0:42) · 1,240 tokens`), ticking every second, so you always know it's alive without asking.
+- **Live token counter** — the status line shows a running token count while the agent works: a real-time estimate as text streams, corrected to the exact API count (and accumulated across rounds) as each round completes.
+- **Auto-continue** (agent modes): the agent now keeps working on its own until the task is complete instead of stopping for you to type "continue". It's instructed to run autonomously and signal completion with a `<DONE>` marker; the extension auto-continues up to a safety cap (and the **Stop** button always interrupts). Toggle with `parley.autoContinue` (default on).
+- **"Working…" status indicator** — a pulsing status line shows while the agent is thinking or a tool is running (e.g. "Running: npm test…"), so you can tell it's busy and not stuck.
+- **`edit_file` tool** — precise find-and-replace edits to existing files (reviewed/checkpointed like `write_file`), so the agent can patch large files without rewriting them.
+- **Ranged `read_file`** — `start_line`/`end_line` with line-numbered output and total-line count, so the agent can page through large files.
+
+### Changed
+- Raised the per-turn tool-call limit (6 → 25) and the auto-continue cap (12 → 25); when the cap is reached the agent now posts a visible "Paused — type continue" note instead of stopping silently.
+- Live activity is easier to read: blank-line spacing between narration blocks and accented action lines.
+- Clarified the **Chat** mode label: "Answer only — no agent, no file access".
+
 ## 0.9.2
 
 ### Changed

@@ -82,10 +82,18 @@ Shell commands require confirmation in every mode
 **except Full access**, which runs them automatically — use it only when you trust
 the task. Edits are always checkpointed (`Parley: Revert Last Edit`).
 
-- `read_file`, `list_directory`, `find_files` — gather context (read-only)
+**Auto-continue & status.** In agent modes the agent keeps working on its own until
+the task is done (no need to type "continue") — it runs up to a safety cap and you
+can **Stop** anytime; toggle with `parley.autoContinue`. While it's thinking or a
+tool is running, a pulsing **"Working…"** status line shows so you always know it's
+busy rather than stuck — with a **live token counter** (estimated as text streams,
+corrected to the exact API count per round).
+
+- `read_file` (with optional `start_line`/`end_line` for large files), `list_directory`, `find_files` — gather context (read-only)
 - `search_text` — grep file **contents** across the workspace (the practical stand-in for semantic codebase search)
-- `write_file` — create/edit a file; **opens a diff and requires your approval** before applying (and is checkpointed for revert)
-- `run_command` — run a shell command; **requires per-command confirmation**, then returns its output to the model
+- `edit_file` — precise find-and-replace edit of an existing file (best for large files); reviewed/checkpointed
+- `write_file` — create/overwrite a file; reviewed/checkpointed
+- `run_command` — run a shell command; **requires per-command confirmation** (except Full access), then returns its output
 - `fetch_url` — fetch a public `https://` page as text
 
 Sensitive files are refused, file paths are constrained to the workspace, and no
@@ -107,7 +115,8 @@ Applied edits are checkpointed; **`Parley: Revert Last Edit`** undoes the most r
 ### 💾 Sessions, history & usage
 - The conversation (and your model/effort/agent-mode choices) **persists across reloads** per workspace.
 - **Past conversations** are archived when you start a new one; reopen them with 🕘 or **`Parley: Open Past Conversation`**.
-- Each reply shows a subtle footer with the **model** and **token usage** when the API reports it.
+- Each reply shows a subtle footer with the **model** and **token usage**; the header shows a **running token total** for the conversation.
+- **Token limit** — set a per-conversation token budget with **`Parley: Set Token Limit`** (or `parley.tokenLimit`); **`0` = unlimited** (default). When reached, the agent stops and asks you to raise it or start fresh.
 
 ### 🖋️ Rich replies
 Replies render Markdown — headings, lists, **bold**, links (open externally), inline-code chips, and fenced code blocks with a hover **Copy** button. If a request overflows the model's context window, Parley detects it and suggests **Compact**.
@@ -190,6 +199,10 @@ with any model.
 | `parley.stream` | `true` | Stream replies token-by-token |
 | `parley.reasoningEffort` | `default` | `default` \| `minimal` \| `low` \| `medium` \| `high` → `reasoning_effort` |
 | `parley.defaultMode` | `chat` | Default mode: `chat` \| `ask` \| `edit` \| `plan` \| `auto` \| `full` (⚠ runs commands automatically) |
+| `parley.autoContinue` | `true` | Keep working until done (agent modes) without manual "continue" |
+| `parley.maxToolRounds` | `25` | Max tool-call rounds per turn |
+| `parley.maxAutoContinue` | `25` | Max auto-continue steps before pausing (`0` disables) |
+| `parley.tokenLimit` | `0` | Per-conversation token budget; `0` = unlimited |
 | `parley.inlineCompletion.enabled` | `true` | Show inline ghost-text completions |
 | `parley.inlineCompletion.model` | `openai/gpt-5-nano` | Model used for completions (prefer a fast one) |
 | `parley.inlineCompletion.debounceMs` | `350` | Idle delay before requesting a completion |
@@ -252,7 +265,7 @@ npm run package     # @vscode/vsce -> parley-vscode-<version>.vsix
 Install the result with:
 
 ```bash
-code --install-extension parley-vscode-0.9.2.vsix
+code --install-extension parley-vscode-0.9.8.vsix
 ```
 
 ## Architecture

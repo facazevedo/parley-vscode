@@ -89,6 +89,23 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('parley.revertLastEdit', async () => {
       const label = await checkpoints.revertLast();
       await vscode.window.showInformationMessage(label ? `Parley reverted: ${label}.` : 'Parley: nothing to revert.');
+    }),
+    vscode.commands.registerCommand('parley.setTokenLimit', async () => {
+      const current = getSettings().tokenLimit;
+      const input = await vscode.window.showInputBox({
+        title: 'Parley: Set Token Limit',
+        prompt: 'Max tokens per conversation before Parley pauses. Enter 0 for unlimited.',
+        value: String(current),
+        validateInput: (v) => (/^\d+$/.test(v.trim()) ? undefined : 'Enter a whole number (0 = unlimited).')
+      });
+      if (input === undefined) {
+        return;
+      }
+      const value = Math.max(0, Math.floor(Number(input.trim())));
+      await vscode.workspace.getConfiguration('parley').update('tokenLimit', value, vscode.ConfigurationTarget.Global);
+      await vscode.window.showInformationMessage(
+        value === 0 ? 'Parley token limit set to unlimited.' : `Parley token limit set to ${value.toLocaleString()} per conversation.`
+      );
     })
   );
 

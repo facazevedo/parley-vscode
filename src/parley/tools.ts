@@ -17,10 +17,15 @@ export const AGENT_TOOLS: readonly ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'read_file',
-      description: 'Read a UTF-8 text file in the workspace. Returns its contents (truncated if large).',
+      description:
+        'Read a UTF-8 text file. For large files pass start_line/end_line (1-based) to read a specific range. Returns line-numbered content plus the total line count so you can page through.',
       parameters: {
         type: 'object',
-        properties: { path: { type: 'string', description: 'Workspace-relative path, e.g. src/app.ts' } },
+        properties: {
+          path: { type: 'string', description: 'Workspace-relative path, e.g. src/app.ts' },
+          start_line: { type: 'number', description: 'First line to read (1-based). Optional.' },
+          end_line: { type: 'number', description: 'Last line to read (1-based). Optional.' }
+        },
         required: ['path']
       }
     }
@@ -68,6 +73,23 @@ export const AGENT_TOOLS: readonly ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'edit_file',
+      description:
+        'Make a precise edit to an EXISTING file by replacing an exact snippet — use this instead of write_file for large files. Provide old_text copied verbatim from the file (must be unique) and new_text. The change is reviewed/applied like write_file and is checkpointed.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Workspace-relative path.' },
+          old_text: { type: 'string', description: 'Exact existing snippet to replace (must appear exactly once).' },
+          new_text: { type: 'string', description: 'Replacement text.' }
+        },
+        required: ['path', 'old_text', 'new_text']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'run_command',
       description:
         'Request to run a shell command in the workspace root. The user must approve each command before it runs; returns combined stdout/stderr.',
@@ -108,12 +130,15 @@ export const AGENT_TOOLS: readonly ToolDefinition[] = [
   }
 ];
 
+const WRITE_TOOLS = new Set(['write_file', 'edit_file', 'run_command']);
+
 /** The subset of tools that never modify the workspace — used by Plan mode. */
 export const READ_ONLY_TOOLS: readonly ToolDefinition[] = AGENT_TOOLS.filter(
-  (tool) => tool.function.name !== 'write_file' && tool.function.name !== 'run_command'
+  (tool) => !WRITE_TOOLS.has(tool.function.name)
 );
 
 const MAX_FETCH_CHARS = 12000;
+const MAX_READ_LINES = 500;
 const MAX_SEARCH_FILES = 400;
 const MAX_SEARCH_RESULTS = 40;
 const MAX_LINE_LEN = 220;
@@ -134,7 +159,7 @@ export async function runAgentTool(call: ToolCall): Promise<string> {
 
   switch (call.name) {
     case 'read_file':
-      return readFile(root, String(args.path ?? ''));
+      return readFile(root, String(args.path ?? ''), toNum(args.start_line), toNum(args.end_line));
     case 'list_directory':
       return listDirectory(root, String(args.path ?? '.'));
     case 'find_files':
@@ -234,7 +259,12 @@ function resolveInWorkspace(root: vscode.Uri, relative: string): vscode.Uri | un
   return target;
 }
 
-async function readFile(root: vscode.Uri, relative: string): Promise<string> {
+function toNum(value: unknown): number | undefined {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+async function readFile(root: vscode.Uri, relative: string, startLine?: number, endLine?: number): Promise<string> {
   const uri = resolveInWorkspace(root, relative);
   if (!uri) {
     return 'Error: path is outside the workspace.';
@@ -242,16 +272,43 @@ async function readFile(root: vscode.Uri, relative: string): Promise<string> {
   if (isSensitiveFile(uri.fsPath)) {
     return 'Error: refusing to read a sensitive file (looks like credentials).';
   }
+
+  let text: string;
   try {
-    const bytes = await vscode.workspace.fs.readFile(uri);
-    const text = Buffer.from(bytes).toString('utf8');
-    if (text.length > MAX_FILE_CHARS) {
-      return `${text.slice(0, MAX_FILE_CHARS)}\n\n[truncated at ${MAX_FILE_CHARS} characters]`;
-    }
-    return text.length > 0 ? text : '[file is empty]';
+    text = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
   } catch (error) {
     return `Error: could not read "${relative}" (${error instanceof Error ? error.message : 'unknown'}).`;
   }
+  if (text.length === 0) {
+    return '[file is empty]';
+  }
+
+  const lines = text.split('\n');
+  const total = lines.length;
+  const start = startLine && startLine > 0 ? Math.floor(startLine) : 1;
+  if (start > total) {
+    return `Error: start_line ${start} is past end of file (${total} lines).`;
+  }
+  let end = endLine && endLine > 0 ? Math.min(Math.floor(endLine), total) : total;
+  if (end < start) {
+    end = start;
+  }
+  if (end - start + 1 > MAX_READ_LINES) {
+    end = start + MAX_READ_LINES - 1;
+  }
+
+  const width = String(end).length;
+  let body = lines
+    .slice(start - 1, end)
+    .map((line, i) => `${String(start + i).padStart(width)} | ${line}`)
+    .join('\n');
+  if (body.length > MAX_FILE_CHARS) {
+    body = `${body.slice(0, MAX_FILE_CHARS)}\n[truncated — request a narrower line range]`;
+  }
+
+  const header = `${relative} (lines ${start}-${end} of ${total}):\n`;
+  const footer = end < total ? `\n[${total - end} more lines — call read_file with start_line=${end + 1} to continue]` : '';
+  return header + body + footer;
 }
 
 async function listDirectory(root: vscode.Uri, relative: string): Promise<string> {

@@ -94,6 +94,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private selectedEffort: ReasoningEffort = '';
   private contextOptions: Required<ContextOptions> = { ...DEFAULT_CONTEXT_OPTIONS };
   private mode: ChatMode = 'chat';
+  private sessionTokens = 0;
   private attachments: PendingAttachment[] = [];
   private busy = false;
   private abortController?: AbortController;
@@ -121,6 +122,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     this.selectedAgentId = this.state.get<string>('parley.selectedAgentId', settings.defaultAgent);
     this.selectedEffort = normalizeEffort(this.state.get<string>('parley.selectedEffort', settings.reasoningEffort));
     this.mode = normalizeMode(this.state.get<string>('parley.mode', settings.defaultMode));
+    this.sessionTokens = this.state.get<number>('parley.sessionTokens', 0);
   }
 
   private save(): void {
@@ -128,6 +130,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     void this.state.update('parley.selectedAgentId', this.selectedAgentId);
     void this.state.update('parley.selectedEffort', this.selectedEffort);
     void this.state.update('parley.mode', this.mode);
+    void this.state.update('parley.sessionTokens', this.sessionTokens);
   }
 
   public resolveWebviewView(webviewView: vscode.WebviewView): void {
@@ -176,6 +179,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         this.archiveCurrent();
         this.history.length = 0;
         this.attachments = [];
+        this.sessionTokens = 0;
         await this.postState();
         return;
       case 'openHistory':
@@ -242,17 +246,19 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     }
 
     const settings = this.getSettings();
+    if (settings.tokenLimit > 0 && this.sessionTokens >= settings.tokenLimit) {
+      await vscode.window.showWarningMessage(
+        `Parley token limit reached for this conversation (${this.sessionTokens.toLocaleString()} / ${settings.tokenLimit.toLocaleString()}). Start a new conversation or raise "parley.tokenLimit".`
+      );
+      return;
+    }
     const collected = await collectCommandContext(contextOptions, settings);
     const textAttachments = this.attachments.filter((a) => a.kind === 'text').map((a) => a.text!);
     const mentions = await this.resolveMentions(prompt, settings);
     const context = [...collected, ...textAttachments, ...mentions];
     const images = this.attachments.filter((a) => a.kind === 'image').map((a) => a.image!);
     const toolsEnabled = this.mode !== 'chat';
-    const planNote =
-      this.mode === 'plan'
-        ? 'You are in PLAN mode. Do NOT edit files or run commands. Use the read-only tools to explore the codebase, then present a concise, numbered plan of the changes you would make.'
-        : undefined;
-    const systemExtra = [await this.readProjectRules(), planNote].filter(Boolean).join('\n\n') || undefined;
+    const systemExtra = await this.buildSystemExtra();
 
     // Per-message chat stays frictionless; only confirm when the attached context
     // is large. (The diff-review-before-apply step still gates any file changes.)
@@ -265,46 +271,93 @@ export class ChatPanel implements vscode.WebviewViewProvider {
 
     this.history.push({ role: 'user', content: prompt, createdAt: new Date().toISOString() });
     this.attachments = [];
-    await this.postState();
-
     this.busy = true;
     this.abortController = new AbortController();
+    await this.postState();
+
     const useStream = settings.stream;
     const provider = this.getProvider();
     const agentId = this.selectedAgentId || settings.defaultAgent;
+    const canAutoContinue = toolsEnabled && this.mode !== 'plan' && settings.autoContinue;
 
-    if (useStream) {
-      this.post({ type: 'streamStart' });
-    }
+    let turnTokens = 0;
+    this.post({ type: 'tokens', total: 0 });
 
     try {
-      const response = await provider.sendMessage(
-        {
-          prompt,
-          messages: this.history,
-          context,
-          agentId,
-          images: images.length > 0 ? images : undefined,
-          reasoningEffort: this.selectedEffort || undefined,
-          systemExtra
-        },
-        {
-          signal: this.abortController.signal,
-          onToken: useStream ? (delta) => this.post({ type: 'streamDelta', delta }) : undefined,
-          tools: toolsEnabled ? (this.mode === 'plan' ? READ_ONLY_TOOLS : AGENT_TOOLS) : undefined,
-          runTool: toolsEnabled ? (call) => this.runTool(call) : undefined,
-          onToolEvent: toolsEnabled
-            ? (event) => this.post({ type: 'toolEvent', name: event.name, args: event.args })
-            : undefined
+      let auto = 0;
+      let continuation: string | null = null; // null = first send (real prompt + context)
+      for (;;) {
+        if (useStream) {
+          this.post({ type: 'streamStart' });
         }
-      );
+        const isCont = continuation !== null;
+        const contText = continuation ?? '';
+        const messages = isCont
+          ? [...this.history, { role: 'user' as const, content: contText, createdAt: new Date().toISOString() }]
+          : this.history;
 
-      this.history.push({ ...response.message, model: agentId });
+        const response = await provider.sendMessage(
+          {
+            prompt: isCont ? contText : prompt,
+            messages,
+            context: isCont ? [] : context,
+            agentId,
+            images: isCont || images.length === 0 ? undefined : images,
+            reasoningEffort: this.selectedEffort || undefined,
+            systemExtra
+          },
+          {
+            signal: this.abortController.signal,
+            onToken: useStream ? (delta) => this.post({ type: 'streamDelta', delta }) : undefined,
+            tools: toolsEnabled ? (this.mode === 'plan' ? READ_ONLY_TOOLS : AGENT_TOOLS) : undefined,
+            runTool: toolsEnabled ? (call) => this.runTool(call) : undefined,
+            onToolEvent: toolsEnabled
+              ? (event) => this.post({ type: 'toolEvent', name: event.name, args: event.args })
+              : undefined,
+            onUsage: (usage) => {
+              turnTokens += usage.total;
+              this.sessionTokens += usage.total;
+              this.post({ type: 'tokens', total: turnTokens, session: this.sessionTokens });
+            },
+            maxToolRounds: settings.maxToolRounds
+          }
+        );
+
+        const done = /<DONE>/i.test(response.message.content);
+        const cleaned = response.message.content.replace(/<DONE>/gi, '').trimEnd();
+        this.history.push({ ...response.message, content: cleaned, model: agentId });
+        this.post({ type: 'streamEnd' });
+        await this.postState();
+        await handleResponse(this.commandDeps, response, { skipMessageDisplay: true });
+
+        if (!canAutoContinue || done || this.abortController.signal.aborted) {
+          break;
+        }
+        if (settings.tokenLimit > 0 && this.sessionTokens >= settings.tokenLimit) {
+          this.history.push({
+            role: 'assistant',
+            content: `⏸ Stopped — token limit reached (${this.sessionTokens.toLocaleString()} / ${settings.tokenLimit.toLocaleString()}). Raise "parley.tokenLimit" or start a new conversation.`,
+            createdAt: new Date().toISOString()
+          });
+          await this.postState();
+          break;
+        }
+        if (auto >= settings.maxAutoContinue) {
+          // Don't stop silently — tell the user why and how to resume.
+          this.history.push({
+            role: 'assistant',
+            content: `⏸ Paused after ${settings.maxAutoContinue} automatic steps to avoid runaway usage. Type "continue" to keep going.`,
+            createdAt: new Date().toISOString()
+          });
+          await this.postState();
+          break;
+        }
+        auto += 1;
+        continuation = 'Continue. If the task is already fully complete, reply with <DONE>.';
+      }
       this.busy = false;
       this.abortController = undefined;
-      this.post({ type: 'streamEnd' });
       await this.postState();
-      await handleResponse(this.commandDeps, response, { skipMessageDisplay: true });
     } catch (error) {
       this.busy = false;
       this.abortController = undefined;
@@ -316,6 +369,20 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       }
       await reportProviderError(this.commandDeps, error);
     }
+  }
+
+  /** Compose project rules + the mode-specific system instruction (plan / autonomous agent). */
+  private async buildSystemExtra(): Promise<string | undefined> {
+    const rules = await this.readProjectRules();
+    let modeNote: string | undefined;
+    if (this.mode === 'plan') {
+      modeNote =
+        'You are in PLAN mode. Do NOT edit files or run commands. Use the read-only tools to explore the codebase, then present a concise, numbered plan of the changes you would make.';
+    } else if (this.mode !== 'chat') {
+      modeNote =
+        'You are an autonomous coding agent in VS Code. Keep working — read files (use read_file start_line/end_line for large files), search, edit (use edit_file for precise changes to existing files, write_file for new ones), and run commands — until the user\'s request is FULLY complete. Do not stop to ask whether to continue or wait for confirmation. When the entire task is finished, end your final message with <DONE> on its own line.';
+    }
+    return [rules, modeNote].filter(Boolean).join('\n\n') || undefined;
   }
 
   private async pickAttachments(): Promise<void> {
@@ -459,6 +526,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     this.history.length = 0;
     this.history.push(...chosen.history);
     this.attachments = [];
+    this.sessionTokens = 0;
     await vscode.commands.executeCommand('workbench.view.extension.parley');
     await vscode.commands.executeCommand('parley.chatView.focus');
     await this.ready;
@@ -520,6 +588,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     if (call.name === 'write_file') {
       return this.toolWriteFile(call);
     }
+    if (call.name === 'edit_file') {
+      return this.toolEditFile(call);
+    }
     if (call.name === 'run_command') {
       return this.toolRunCommand(call);
     }
@@ -554,8 +625,54 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       original = '';
     }
     const proposedText = content.endsWith('\n') ? content : `${content}\n`;
+    return this.applyProposedEdit(uri, rel, original, proposedText);
+  }
 
-    // "edit"/"auto"/"full" apply without prompting; "ask" shows a diff to approve.
+  /** Surgical edit: replace a unique snippet, then go through the same review/apply flow. */
+  private async toolEditFile(call: ToolCall): Promise<string> {
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+    if (!root) {
+      return 'Error: no workspace folder is open.';
+    }
+    let args: { path?: string; old_text?: string; new_text?: string };
+    try {
+      args = JSON.parse(call.arguments || '{}');
+    } catch {
+      return 'Error: arguments were not valid JSON.';
+    }
+    const rel = String(args.path ?? '').replace(/^[/\\]+/, '');
+    const oldText = String(args.old_text ?? '');
+    const newText = String(args.new_text ?? '');
+    if (!rel) {
+      return 'Error: path is required.';
+    }
+    if (!oldText) {
+      return 'Error: old_text is required.';
+    }
+    if (isSensitiveFile(rel)) {
+      return 'Error: refusing to edit a sensitive file.';
+    }
+
+    const uri = vscode.Uri.joinPath(root, rel);
+    let original: string;
+    try {
+      original = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
+    } catch {
+      return `Error: could not read "${rel}" — does it exist? Use write_file to create new files.`;
+    }
+    const idx = original.indexOf(oldText);
+    if (idx === -1) {
+      return `Error: old_text was not found in ${rel}. Re-read the file and copy an exact snippet (including whitespace).`;
+    }
+    if (original.indexOf(oldText, idx + oldText.length) !== -1) {
+      return `Error: old_text appears more than once in ${rel}. Include more surrounding context so it is unique.`;
+    }
+    const proposedText = original.slice(0, idx) + newText + original.slice(idx + oldText.length);
+    return this.applyProposedEdit(uri, rel, original, proposedText);
+  }
+
+  /** Apply a proposed file change: auto in edit/auto/full modes, diff-approval otherwise. Always checkpointed. */
+  private async applyProposedEdit(uri: vscode.Uri, rel: string, original: string, proposedText: string): Promise<string> {
     if (this.mode === 'edit' || this.mode === 'auto' || this.mode === 'full') {
       await this.checkpoints.applyWithCheckpoint(uri, proposedText, `edit ${rel}`);
       return `Applied edit to ${rel} (auto).`;
@@ -707,6 +824,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       hasKey,
       busy: this.busy,
       mode: this.mode,
+      sessionTokens: this.sessionTokens,
       selectedAgentId: this.selectedAgentId,
       selectedEffort: this.selectedEffort,
       contextOptions: this.contextOptions,
@@ -740,6 +858,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   <div class="shell">
     <div class="toolbar">
       <span class="title">Parley</span>
+      <span id="sessionTok" class="sessiontok" title="Tokens used in this conversation"></span>
       <span class="grow"></span>
       <button id="newChat" title="New conversation" aria-label="New conversation">＋</button>
       <button id="historyBtn" title="Past conversations" aria-label="Past conversations">🕘</button>
@@ -749,6 +868,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     </div>
     <div id="banner" class="banner"></div>
     <div id="history" class="history"><div class="empty">Ask Parley about your code.</div></div>
+    <div id="status" class="status" style="display:none"></div>
     <form id="composer" class="composer">
       <details class="ctx-wrap">
         <summary>Context</summary>
@@ -765,7 +885,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         <div id="mentions" class="mentions" style="display:none"></div>
         <div id="modePanel" class="modepanel" style="display:none">
           <div class="mp-head">Modes</div>
-          <button type="button" class="mp-item" data-mode="chat"><span class="mp-name">Chat</span><span class="mp-desc">Answer only — no file access</span></button>
+          <button type="button" class="mp-item" data-mode="chat"><span class="mp-name">Chat</span><span class="mp-desc">Answer only — no agent, no file access</span></button>
           <button type="button" class="mp-item" data-mode="ask"><span class="mp-name">Ask before edits</span><span class="mp-desc">Agent proposes edits; you approve each one</span></button>
           <button type="button" class="mp-item" data-mode="edit"><span class="mp-name">Edit automatically</span><span class="mp-desc">Agent applies edits without asking (revertible)</span></button>
           <button type="button" class="mp-item" data-mode="plan"><span class="mp-name">Plan mode</span><span class="mp-desc">Agent explores read-only and presents a plan</span></button>

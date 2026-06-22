@@ -24,6 +24,10 @@ export interface ParleySettings {
   readonly stream: boolean;
   readonly reasoningEffort: ReasoningEffort;
   readonly defaultMode: ChatMode;
+  readonly autoContinue: boolean;
+  readonly maxToolRounds: number;
+  readonly maxAutoContinue: number;
+  readonly tokenLimit: number;
   readonly inlineCompletionEnabled: boolean;
   readonly inlineCompletionModel: string;
   readonly inlineCompletionDebounceMs: number;
@@ -47,6 +51,10 @@ export function getSettings(): ParleySettings {
     stream: config.get<boolean>('stream', true),
     reasoningEffort: normalizeEffort(config.get<string>('reasoningEffort', 'default')),
     defaultMode: normalizeMode(config.get<string>('defaultMode', 'chat')),
+    autoContinue: config.get<boolean>('autoContinue', true),
+    maxToolRounds: clampInt(config.get<number>('maxToolRounds', 25), 1, 200),
+    maxAutoContinue: clampInt(config.get<number>('maxAutoContinue', 25), 0, 200),
+    tokenLimit: Math.max(0, Math.floor(config.get<number>('tokenLimit', 0))),
     inlineCompletionEnabled: inline.get<boolean>('enabled', true),
     inlineCompletionModel: inline.get<string>('model', DEFAULT_COMPLETION_MODEL).trim() || DEFAULT_COMPLETION_MODEL,
     inlineCompletionDebounceMs: inline.get<number>('debounceMs', 350),
@@ -62,6 +70,10 @@ export function getSettings(): ParleySettings {
 /** Map the setting value to a ReasoningEffort; "default" (or anything unknown) means "don't send". */
 function normalizeEffort(value: string): ReasoningEffort {
   return value === 'minimal' || value === 'low' || value === 'medium' || value === 'high' ? value : '';
+}
+
+function clampInt(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, Math.floor(Number.isFinite(value) ? value : min)));
 }
 
 function normalizeMode(value: string): ChatMode {

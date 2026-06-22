@@ -38,7 +38,7 @@ const COMPLETION_SYSTEM =
   'Markdown fences, no repetition of the surrounding code.';
 
 const MAX_TOOL_RESULT_CHARS = 8000;
-const DEFAULT_MAX_TOOL_ROUNDS = 6;
+const DEFAULT_MAX_TOOL_ROUNDS = 25;
 
 interface OpenAiMessage {
   role: string;
@@ -187,10 +187,18 @@ export class ParleyClient implements ParleyProvider {
     });
 
     if (stream) {
-      return this.readStream(response, options?.onToken);
+      const streamed = await this.readStream(response, options?.onToken);
+      if (streamed.usage) {
+        options?.onUsage?.(streamed.usage);
+      }
+      return streamed;
     }
     const json = await response.json();
-    return { content: this.extractContent(json), usage: parseUsage(json) };
+    const usage = parseUsage(json);
+    if (usage) {
+      options?.onUsage?.(usage);
+    }
+    return { content: this.extractContent(json), usage };
   }
 
   /** Run the OpenAI tool-calling loop until the model answers or rounds run out. */
@@ -225,7 +233,7 @@ export class ParleyClient implements ParleyProvider {
       // Stream this round live: narration tokens go to onToken; tool calls are
       // reassembled from the streamed deltas. This is what makes the agent's
       // activity appear token-by-token (Claude-Code style).
-      const result = await this.streamRound(response, options.onToken);
+      const result = await this.streamRound(response, options.onToken, options.onUsage);
       if (result.usage) {
         lastUsage = result.usage;
       }
@@ -264,7 +272,8 @@ export class ParleyClient implements ParleyProvider {
   /** Stream one chat-completions round, surfacing text via onToken and reassembling tool calls from deltas. */
   private async streamRound(
     response: Response,
-    onToken?: (delta: string) => void
+    onToken?: (delta: string) => void,
+    onUsage?: (usage: TokenUsage) => void
   ): Promise<{ content: string; toolCalls: Array<{ id: string; name: string; arguments: string }>; usage?: TokenUsage }> {
     if (!response.body) {
       const json = (await response.json()) as { choices?: Array<{ message?: ChatCompletionMessage }> };
@@ -320,6 +329,7 @@ export class ParleyClient implements ParleyProvider {
           const maybeUsage = parseUsage(parsed);
           if (maybeUsage) {
             usage = maybeUsage;
+            onUsage?.(maybeUsage);
           }
           const delta = parsed.choices?.[0]?.delta;
           if (typeof delta?.content === 'string' && delta.content) {

@@ -5,6 +5,7 @@ import type {
   CompletionRequest,
   ImageRequest,
   ImageResult,
+  TokenUsage,
   ToolCall,
   ToolDefinition
 } from './types';
@@ -23,6 +24,8 @@ export interface SendMessageOptions {
   readonly tools?: readonly ToolDefinition[];
   readonly runTool?: (call: ToolCall) => Promise<string>;
   readonly onToolEvent?: (event: { readonly name: string; readonly args: string }) => void;
+  /** Called when token usage for a round becomes known (for live token counters). */
+  readonly onUsage?: (usage: TokenUsage) => void;
   readonly maxToolRounds?: number;
 }
 

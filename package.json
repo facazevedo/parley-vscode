@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.9.2",
+  "version": "0.9.8",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -81,6 +81,11 @@
       {
         "command": "parley.toggleInlineCompletion",
         "title": "Parley: Toggle Inline Completion",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.setTokenLimit",
+        "title": "Parley: Set Token Limit",
         "category": "Parley"
       },
       {
@@ -169,7 +174,7 @@
             "full"
           ],
           "enumDescriptions": [
-            "Answer only — no file tools",
+            "Answer only — no agent, no file access",
             "Agent tools; approve each edit in a diff",
             "Agent tools; apply edits automatically (revertible)",
             "Agent reads the repo read-only and proposes a plan",
@@ -177,6 +182,31 @@
             "CAUTION: auto-applies edits AND runs shell commands without asking"
           ],
           "markdownDescription": "Default chat **Mode**, also switchable from the Mode popover in the composer. Shell commands always require confirmation regardless of mode."
+        },
+        "parley.autoContinue": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "In agent modes, keep working automatically (up to a safety cap) until the task is complete, instead of stopping for you to say \"continue\". The agent signals completion with a `<DONE>` marker."
+        },
+        "parley.maxToolRounds": {
+          "type": "number",
+          "default": 25,
+          "minimum": 1,
+          "maximum": 200,
+          "markdownDescription": "Maximum tool-call rounds the agent may take within a single turn."
+        },
+        "parley.maxAutoContinue": {
+          "type": "number",
+          "default": 25,
+          "minimum": 0,
+          "maximum": 200,
+          "markdownDescription": "Maximum number of times Parley auto-continues a turn before pausing for you. `0` disables auto-continue."
+        },
+        "parley.tokenLimit": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "markdownDescription": "Token budget per conversation. When the conversation's total token usage reaches this, Parley stops and asks you to raise the limit or start a new conversation. **`0` means unlimited (default).** Set it from `Parley: Set Token Limit`."
         },
         "parley.inlineCompletion.enabled": {
           "type": "boolean",
