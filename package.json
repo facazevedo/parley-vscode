@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -286,16 +286,21 @@
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" \"media/*.{js,css}\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\" \"media/*.{js,css}\"",
-    "test": "npm run compile && node --test \"out/test/**/*.test.js\"",
+    "test": "npm run compile && node --test \"out/test/*.test.js\"",
+    "test:integration": "npm run compile && node ./out/test/integration/runTest.js",
     "package": "vsce package --allow-missing-repository --no-rewrite-relative-links"
   },
   "devDependencies": {
+    "@types/mocha": "^10.0.10",
     "@types/node": "^20.14.12",
     "@types/vscode": "^1.92.0",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
+    "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^2.32.0",
     "eslint": "^8.57.1",
+    "glob": "^10.5.0",
+    "mocha": "^10.8.2",
     "prettier": "^3.8.4",
     "typescript": "^5.5.4"
   }

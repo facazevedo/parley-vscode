@@ -108,6 +108,7 @@ Select code, press **`Ctrl+Alt+K`** (`Cmd+Alt+K` on macOS) or run
 **`Parley: Edit Selection (Inline)`**, describe the change, and review the diff
 before it's applied — a Cursor-style Cmd-K edit without leaving the editor.
 Applied edits are checkpointed; **`Parley: Revert Last Edit`** undoes the most recent one.
+Multi-change edits offer **Apply All / Choose… / Reject** — "Choose…" lets you accept or reject **individual hunks**.
 
 ### 🏷️ @-mentions & project rules
 - Type **`@`** in the composer to get a **file autocomplete** — pick a file (↑/↓, Enter) to attach it as context.
@@ -256,11 +257,13 @@ npm run compile      # tsc -> out/
 npm test             # compile + node --test
 npm run lint         # eslint
 npm run format       # prettier --write
+npm run test:integration  # launches VS Code (needs a display; CI uses xvfb)
 ```
 
 Press `F5` to launch an Extension Development Host. CI (GitHub Actions) compiles,
-tests, and packages on every push; pushing a `vX.Y.Z` tag publishes a GitHub
-Release with the `.vsix` attached.
+unit-tests, packages, and runs **VS Code integration tests** on every push; pushing
+a `vX.Y.Z` tag publishes a GitHub Release with the `.vsix` attached (and, if the
+`VSCE_PAT` / `OVSX_PAT` secrets are set, to the Marketplace / Open VSX).
 
 ## Packaging
 
@@ -273,7 +276,7 @@ npm run package     # @vscode/vsce -> parley-vscode-<version>.vsix
 Install the result with:
 
 ```bash
-code --install-extension parley-vscode-0.10.0.vsix
+code --install-extension parley-vscode-0.11.0.vsix
 ```
 
 ## Architecture

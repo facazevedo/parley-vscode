@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import type { CommandDependencies } from './common';
 import { reportProviderError } from './common';
 import type { CheckpointStore } from '../diff/checkpoints';
+import { reviewProposedEdit } from '../diff/reviewEdit';
 import { showProposedDiff } from '../diff/showDiff';
 
 /**
@@ -88,9 +89,9 @@ export function registerInlineEditCommand(
         { filePath: editor.document.uri.fsPath, originalText: original, proposedText, title: `Inline edit: ${fileName}` },
         deps.diffProvider
       );
-      const answer = await vscode.window.showInformationMessage(`Apply Parley edit to ${fileName}?`, 'Apply', 'Reject');
-      if (answer === 'Apply') {
-        await checkpoints.applyWithCheckpoint(editor.document.uri, proposedText, `inline edit ${fileName}`);
+      const finalText = await reviewProposedEdit(fileName, original, proposedText);
+      if (finalText !== undefined) {
+        await checkpoints.applyWithCheckpoint(editor.document.uri, finalText, `inline edit ${fileName}`);
       }
     })
   );

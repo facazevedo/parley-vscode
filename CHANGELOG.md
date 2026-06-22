@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.11.0
+
+### Added
+- **Per-hunk accept/reject.** Reviewing a multi-change edit (Ask mode or `Ctrl+Alt+K` inline edit) now offers **Apply All / Choose… / Reject** — "Choose…" is a multi-select of the individual hunks, applying only the ones you pick. Built on a new pure line-diff engine (`src/diff/lineDiff.ts`).
+
+### Engineering
+- Unit tests for the line-diff/hunk engine (now 17 unit tests).
+- **VS Code integration tests** (`@vscode/test-electron` + Mocha) that launch a real VS Code, activate the extension, and assert every command is registered — run in CI under `xvfb`.
+
 ## 0.10.0
 
 ### Added

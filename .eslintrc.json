@@ -9,7 +9,8 @@
   "extends": ["eslint:recommended", "plugin:@typescript-eslint/recommended"],
   "env": {
     "node": true,
-    "es2022": true
+    "es2022": true,
+    "mocha": true
   },
   "ignorePatterns": ["out", "node_modules", "media", "*.vsix"],
   "rules": {

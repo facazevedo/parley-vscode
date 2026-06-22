@@ -13,6 +13,7 @@ import { exec } from 'child_process';
 import { totalCharacters } from '../context/contextPreview';
 import { isSensitiveFile } from '../context/sensitiveFileFilter';
 import type { CheckpointStore } from '../diff/checkpoints';
+import { reviewProposedEdit } from '../diff/reviewEdit';
 import { showProposedDiff } from '../diff/showDiff';
 import type { Logger } from '../logging/logger';
 import type { ParleyProvider } from '../parley/ParleyProvider';
@@ -772,16 +773,11 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       { filePath: uri.fsPath, originalText: original, proposedText, title: `Agent edit: ${rel}` },
       this.commandDeps.diffProvider
     );
-    const answer = await vscode.window.showInformationMessage(
-      `Parley agent wants to ${original ? 'edit' : 'create'} ${rel}. Apply?`,
-      { modal: true },
-      'Apply',
-      'Reject'
-    );
-    if (answer !== 'Apply') {
+    const finalText = await reviewProposedEdit(rel, original, proposedText);
+    if (finalText === undefined) {
       return `User rejected the edit to ${rel}.`;
     }
-    await this.checkpoints.applyWithCheckpoint(uri, proposedText, `edit ${rel}`);
+    await this.checkpoints.applyWithCheckpoint(uri, finalText, `edit ${rel}`);
     return `Applied edit to ${rel}.`;
   }
 
