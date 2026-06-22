@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -165,14 +165,16 @@
             "ask",
             "edit",
             "plan",
-            "auto"
+            "auto",
+            "full"
           ],
           "enumDescriptions": [
             "Answer only — no file tools",
             "Agent tools; approve each edit in a diff",
             "Agent tools; apply edits automatically (revertible)",
             "Agent reads the repo read-only and proposes a plan",
-            "Agent decides and applies edits automatically"
+            "Agent decides and applies edits automatically",
+            "CAUTION: auto-applies edits AND runs shell commands without asking"
           ],
           "markdownDescription": "Default chat **Mode**, also switchable from the Mode popover in the composer. Shell commands always require confirmation regardless of mode."
         },

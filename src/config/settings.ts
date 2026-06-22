@@ -14,8 +14,9 @@ export const DEFAULT_COMPLETION_MODEL = 'openai/gpt-5-nano';
  * - `edit`  — agent tools; apply edits automatically (revertible)
  * - `plan`  — agent reads the repo read-only and proposes a plan; no changes
  * - `auto`  — agent decides and applies edits automatically
+ * - `full`  — CAUTION: auto-applies edits AND runs shell commands without asking
  */
-export type ChatMode = 'chat' | 'ask' | 'edit' | 'plan' | 'auto';
+export type ChatMode = 'chat' | 'ask' | 'edit' | 'plan' | 'auto' | 'full';
 
 export interface ParleySettings {
   readonly endpoint: string;
@@ -64,5 +65,5 @@ function normalizeEffort(value: string): ReasoningEffort {
 }
 
 function normalizeMode(value: string): ChatMode {
-  return value === 'ask' || value === 'edit' || value === 'plan' || value === 'auto' ? value : 'chat';
+  return value === 'ask' || value === 'edit' || value === 'plan' || value === 'auto' || value === 'full' ? value : 'chat';
 }

@@ -295,7 +295,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
           runTool: toolsEnabled ? (call) => this.runTool(call) : undefined,
           onToolEvent: toolsEnabled
             ? (event) => this.post({ type: 'toolEvent', name: event.name, args: event.args })
-            : undefined
+            : undefined,
+          onAgentNote: toolsEnabled ? (text) => this.post({ type: 'agentNote', text }) : undefined
         }
       );
 
@@ -555,8 +556,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     }
     const proposedText = content.endsWith('\n') ? content : `${content}\n`;
 
-    // In "edit"/"auto" modes apply without prompting; "ask" shows a diff to approve.
-    if (this.mode === 'edit' || this.mode === 'auto') {
+    // "edit"/"auto"/"full" apply without prompting; "ask" shows a diff to approve.
+    if (this.mode === 'edit' || this.mode === 'auto' || this.mode === 'full') {
       await this.checkpoints.applyWithCheckpoint(uri, proposedText, `edit ${rel}`);
       return `Applied edit to ${rel} (auto).`;
     }
@@ -590,14 +591,17 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       return 'Error: command is required.';
     }
     const folder = vscode.workspace.workspaceFolders?.[0];
-    const answer = await vscode.window.showWarningMessage(
-      `Parley agent wants to run a command in ${folder?.name ?? 'the workspace'}:\n\n${command}`,
-      { modal: true },
-      'Run',
-      'Skip'
-    );
-    if (answer !== 'Run') {
-      return 'User declined to run the command.';
+    // Full-access mode runs commands without prompting; every other mode confirms.
+    if (this.mode !== 'full') {
+      const answer = await vscode.window.showWarningMessage(
+        `Parley agent wants to run a command in ${folder?.name ?? 'the workspace'}:\n\n${command}`,
+        { modal: true },
+        'Run',
+        'Skip'
+      );
+      if (answer !== 'Run') {
+        return 'User declined to run the command.';
+      }
     }
     return runShellCommand(command, folder?.uri.fsPath);
   }
@@ -767,6 +771,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
           <button type="button" class="mp-item" data-mode="edit"><span class="mp-name">Edit automatically</span><span class="mp-desc">Agent applies edits without asking (revertible)</span></button>
           <button type="button" class="mp-item" data-mode="plan"><span class="mp-name">Plan mode</span><span class="mp-desc">Agent explores read-only and presents a plan</span></button>
           <button type="button" class="mp-item" data-mode="auto"><span class="mp-name">Auto mode</span><span class="mp-desc">Agent decides and applies edits automatically</span></button>
+          <button type="button" class="mp-item" data-mode="full"><span class="mp-name">Full access <span class="mp-caution">⚠ CAUTION</span></span><span class="mp-desc">Auto-applies edits AND runs shell commands without asking</span></button>
           <div class="mp-sep"></div>
           <div class="mp-head">Reasoning effort <span class="mp-note">— not honored by Parley yet</span></div>
           <div class="mp-effort">
@@ -776,7 +781,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
             <button type="button" data-effort="medium">Med</button>
             <button type="button" data-effort="high">High</button>
           </div>
-          <div class="mp-foot">Shell commands always ask before running.</div>
+          <div class="mp-foot">Shell commands ask before running — except in <strong>Full access</strong> mode.</div>
         </div>
         <textarea id="prompt" placeholder="Ask Parley…  (@file to attach · Enter to send · Shift+Enter for newline)"></textarea>
         <div class="actions">
@@ -801,7 +806,7 @@ function normalizeEffort(value: string | undefined): ReasoningEffort {
 }
 
 function normalizeMode(value: string | undefined): ChatMode {
-  return value === 'ask' || value === 'edit' || value === 'plan' || value === 'auto' ? value : 'chat';
+  return value === 'ask' || value === 'edit' || value === 'plan' || value === 'auto' || value === 'full' ? value : 'chat';
 }
 
 /** Run a shell command in cwd, returning combined stdout/stderr (truncated). User-approved per call. */

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.1
+
+### Added
+- **Full access mode** (⚠ CAUTION) — auto-applies edits *and* runs shell commands **without confirmation**. Clearly badged in the Mode popover and shown with a red caution style on the Mode button when active. All other modes still confirm shell commands.
+- **Live agent activity** — while the agent works it now shows what it's doing in real time: friendly action lines (`▸ Reading src/app.ts`, `▸ Running: npm test`, `▸ Editing …`) and the model's intermediate narration between steps, Claude-Code-style.
+
 ## 0.9.0
 
 ### Added

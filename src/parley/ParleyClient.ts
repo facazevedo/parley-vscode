@@ -228,6 +228,10 @@ export class ParleyClient implements ParleyProvider {
         return { content, usage: parseUsage(json) };
       }
 
+      const narration = typeof message?.content === 'string' ? message.content.trim() : '';
+      if (narration) {
+        options.onAgentNote?.(narration);
+      }
       convo.push({ role: 'assistant', content: message?.content ?? '', tool_calls: toolCalls });
       for (const call of toolCalls) {
         const args = call.function?.arguments ?? '{}';
