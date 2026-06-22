@@ -49,12 +49,12 @@ setting) sends the standard `reasoning_effort` parameter — `minimal`, `low`,
 `medium`, or `high` — with chat, agent-mode, and inline-completion requests.
 `Default` omits the parameter.
 
-> ⚠️ **Not verified to take effect.** In live testing the Parley proxy *accepts*
-> `reasoning_effort` but showed **no clear behavioral change** — `high` was not
-> slower or heavier than `minimal`, no `reasoning_tokens` were reported, and even an
-> invalid value was accepted. So it may currently be a **no-op** on Parley's side
-> (the GPT-5 reasoning models are the most likely to respond if/when it's honored).
-> The control sends the standard parameter and is ready for when the backend enforces it.
+> ⚠️ **Not honored by Parley (verified).** Testing across GPT-5, Claude, and Gemini
+> models shows the Parley gateway *accepts* `reasoning_effort` but does **not** apply
+> it — `high` is no slower or heavier than `minimal`, no `reasoning_tokens` are
+> reported, and even an invalid value is accepted. The dropdown is labeled accordingly
+> in-product; it sends the standard parameter so it works automatically if Parley
+> enables it later.
 
 ### ⌨️ Inline (ghost-text) completions
 As you type, Parley suggests a completion at the cursor (Cursor-style ghost text),
@@ -237,7 +237,7 @@ npm run package     # @vscode/vsce -> parley-vscode-<version>.vsix
 Install the result with:
 
 ```bash
-code --install-extension parley-vscode-0.8.0.vsix
+code --install-extension parley-vscode-0.8.1.vsix
 ```
 
 ## Architecture

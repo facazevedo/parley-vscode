@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.1
+
+### Changed
+- The reasoning-effort dropdown is now explicitly labeled "not honored by Parley yet" (tooltip + dropdown header), and the setting description says the same — verified across GPT-5, Claude, and Gemini that the gateway accepts but ignores `reasoning_effort`. The parameter is still sent for forward-compatibility.
+
 ## 0.8.0
 
 ### Added

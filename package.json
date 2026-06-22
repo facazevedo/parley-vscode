@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -155,7 +155,7 @@
             "medium",
             "high"
           ],
-          "markdownDescription": "Reasoning effort sent to the model as `reasoning_effort`. `default` omits the parameter. Override per-session from the chat toolbar. Note: support depends on the model — some Parley models may not change behavior."
+          "markdownDescription": "Reasoning effort sent to the model as `reasoning_effort`. `default` omits the parameter. **Note: the Parley gateway does not currently honor this parameter** (verified across GPT-5, Claude, and Gemini models — no change in behavior). It is sent for forward-compatibility in case Parley enables it."
         },
         "parley.agentMode": {
           "type": "boolean",

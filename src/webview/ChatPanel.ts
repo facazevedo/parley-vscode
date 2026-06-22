@@ -750,12 +750,14 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         <textarea id="prompt" placeholder="Ask Parley…  (@file to attach · Enter to send · Shift+Enter for newline)"></textarea>
         <div class="actions">
           <select id="agent" class="model" aria-label="Parley model"></select>
-          <select id="effort" class="effort" aria-label="Reasoning effort" title="Reasoning effort">
-            <option value="">Default</option>
-            <option value="minimal">Minimal</option>
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
+          <select id="effort" class="effort" aria-label="Reasoning effort" title="Reasoning effort — Parley does not honor this yet; it is sent for forward-compatibility.">
+            <optgroup label="Reasoning effort — not honored by Parley yet">
+              <option value="">Default</option>
+              <option value="minimal">Minimal</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </optgroup>
           </select>
           <button type="button" id="attach" title="Attach files or images" aria-label="Attach files or images">📎</button>
           <span class="grow"></span>
