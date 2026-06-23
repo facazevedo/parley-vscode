@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.35.0",
+  "version": "0.36.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -111,6 +111,11 @@
       {
         "command": "parley.reconnectMcp",
         "title": "Parley: Reconnect MCP Servers",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.rebuildCodebaseIndex",
+        "title": "Parley: Rebuild Codebase Index",
         "category": "Parley"
       },
       {
@@ -283,17 +288,36 @@
           "additionalProperties": {
             "type": "object",
             "properties": {
-              "command": { "type": "string" },
-              "args": { "type": "array", "items": { "type": "string" } },
-              "env": { "type": "object", "additionalProperties": { "type": "string" } }
+              "command": {
+                "type": "string"
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "env": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
             },
-            "required": ["command"]
+            "required": [
+              "command"
+            ]
           }
         },
         "parley.webSearch.provider": {
           "type": "string",
           "default": "duckduckgo",
-          "enum": ["off", "duckduckgo", "google", "tavily"],
+          "enum": [
+            "off",
+            "duckduckgo",
+            "google",
+            "tavily"
+          ],
           "enumDescriptions": [
             "Disable the web_search tool",
             "DuckDuckGo — no API key required (default)",
@@ -315,7 +339,17 @@
         "parley.codebaseSearch.enabled": {
           "type": "boolean",
           "default": true,
-          "markdownDescription": "Enable **`@codebase`** in the composer — lexically retrieves the most relevant workspace files for your question and adds them as context (keyless, private, no embeddings)."
+          "markdownDescription": "Enable **`@codebase`** in the composer — retrieves the most relevant workspace files for your question and adds them as context."
+        },
+        "parley.codebaseSearch.provider": {
+          "type": "string",
+          "default": "lexical",
+          "enum": ["lexical", "local"],
+          "enumDescriptions": [
+            "Keyword ranking (ripgrep-style) — keyless, private, instant (default)",
+            "Local semantic embeddings (MiniLM, on-device) — true meaning-based search; downloads a model (~25 MB) on first index. Run 'Parley: Rebuild Codebase Index' to build it."
+          ],
+          "markdownDescription": "How **`@codebase`** ranks files. **`lexical`** (default) is keyword-based and instant. **`local`** uses an on-device embedding model for true semantic search — keyless and private, but downloads a model on first use and you must run **`Parley: Rebuild Codebase Index`**. Falls back to lexical if the index isn't built or the model can't load."
         },
         "parley.codebaseSearch.maxFiles": {
           "type": "number",
@@ -453,5 +487,8 @@
     "mocha": "^10.8.2",
     "prettier": "^3.8.4",
     "typescript": "^5.5.4"
+  },
+  "dependencies": {
+    "@xenova/transformers": "^2.17.2"
   }
 }

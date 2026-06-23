@@ -7,6 +7,7 @@ const EXPECTED_COMMANDS = [
   'parley.setApiKey',
   'parley.openChatWindow',
   'parley.reconnectMcp',
+  'parley.rebuildCodebaseIndex',
   'parley.newConversation',
   'parley.openConversationsFolder',
   'parley.openDebugLog',

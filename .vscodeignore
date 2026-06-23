@@ -1,8 +1,9 @@
 .git/**
 .vscode/**
-node_modules/**
 src/**
 test/**
+docs/**
+debug/**
 out/test/**
 **/*.map
 tsconfig.json

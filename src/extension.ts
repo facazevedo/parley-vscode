@@ -107,6 +107,7 @@ export function activate(context: vscode.ExtensionContext): void {
         status.length ? `Parley MCP: ${status.join(', ')}.` : 'Parley: no MCP servers configured (set "parley.mcpServers").'
       );
     }),
+    vscode.commands.registerCommand('parley.rebuildCodebaseIndex', () => chatPanel.rebuildCodebaseIndex()),
     vscode.commands.registerCommand('parley.newConversation', () => chatPanel.newConversation()),
     vscode.commands.registerCommand('parley.openConversationsFolder', () => chatPanel.openConversationsFolder()),
     vscode.commands.registerCommand('parley.openDebugLog', async () => {

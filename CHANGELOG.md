@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.36.0
+
+### Added — optional local semantic `@codebase` index (off by default)
+- `@codebase` can now use a **true semantic index** powered by an **on-device MiniLM embedding model** (transformers.js / ONNX) — keyless and private, no data leaves your machine. Enable with `parley.codebaseSearch.provider: "local"` and run **`Parley: Rebuild Codebase Index`** (downloads the model ~25 MB once, then works offline). It ranks files by meaning, not just keywords.
+- **Default stays `lexical`** (instant, keyless, zero added weight). The local provider is fully opt-in, lazy-loaded, and **falls back to lexical** if the index isn't built or the model can't load — so it never breaks chat.
+- Note: enabling the bundle ships the embedding runtime in the VSIX (large, and platform-specific due to a native sub-dependency), which is why it's opt-in.
+
 ## 0.35.0
 
 ### Added — web search + `@codebase` retrieval (both keyless)

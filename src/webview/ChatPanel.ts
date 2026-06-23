@@ -30,6 +30,7 @@ import type { McpManager } from '../mcp/McpManager';
 import { isMcpTool } from '../mcp/naming';
 import { webSearch } from '../web/webSearch';
 import { lexicalRank, type RankDoc } from '../codebase/lexicalSearch';
+import { EmbeddingIndex } from '../codebase/embeddingIndex';
 import {
   extractAudioMp3,
   extractFrames,
@@ -147,6 +148,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private conversationId = ''; // stable id → filename for the auto-saved transcript
   private customCommandNames: string[] = []; // user-defined /commands from .parley|.claude/commands
   private commandChannel?: vscode.OutputChannel; // visible mirror of agent shell commands
+  private embeddingIndex?: EmbeddingIndex; // lazy local semantic index for @codebase
   private attachments: PendingAttachment[] = [];
   private busy = false;
   private abortController?: AbortController;
@@ -1607,18 +1609,55 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     settings: ParleySettings
   ): Promise<ContextAttachment[]> {
     const query = prompt.replace(/(?:^|\s)@\S+/g, ' ').trim() || prompt;
+    const docs = await this.gatherCodebaseDocs(root);
+    if (docs.length === 0) {
+      return [];
+    }
+    const textById = new Map(docs.map((d) => [d.path, d.text]));
+
+    // Prefer the opt-in local semantic index; fall back to lexical if it's not built or fails.
+    let order: string[] | undefined;
+    if (settings.codebaseSearchProvider === 'local') {
+      this.embeddingIndex ??= new EmbeddingIndex(this.globalStorageUri, this.logger);
+      order = await this.embeddingIndex.search(root.fsPath, query, settings.codebaseMaxFiles);
+    }
+    if (!order) {
+      order = lexicalRank(query, docs)
+        .slice(0, settings.codebaseMaxFiles)
+        .map((r) => r.id);
+    }
+
+    const perFileCap = Math.max(2000, Math.floor(settings.contextMaxCharacters / Math.max(1, order.length)));
+    return order
+      .filter((id) => textById.has(id))
+      .map((id) => {
+        const raw = textById.get(id) ?? '';
+        const content = raw.length > perFileCap ? raw.slice(0, perFileCap) : raw;
+        return {
+          id: `codebase-${id}`,
+          kind: 'user-file' as const,
+          label: `@codebase ${id}`,
+          filePath: vscode.Uri.joinPath(root, id).fsPath,
+          content,
+          characterCount: content.length,
+          truncated: raw.length > content.length
+        };
+      });
+  }
+
+  /** Read indexable workspace files (skip binaries, huge files, node_modules, sensitive). */
+  private async gatherCodebaseDocs(root: vscode.Uri): Promise<RankDoc[]> {
     let files: vscode.Uri[];
     try {
       files = await vscode.workspace.findFiles(
         '**/*',
         '{**/node_modules/**,**/.git/**,**/out/**,**/dist/**,**/.vscode-test/**}',
-        400
+        2000
       );
     } catch {
       return [];
     }
     const docs: RankDoc[] = [];
-    const textById = new Map<string, string>();
     for (const uri of files) {
       const rel = path.relative(root.fsPath, uri.fsPath).replace(/\\/g, '/');
       if (isSensitiveFile(rel)) {
@@ -1629,28 +1668,36 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         if (bytes.byteLength > 200000 || bytes.includes(0)) {
           continue; // skip very large or binary files
         }
-        const text = Buffer.from(bytes).toString('utf8');
-        docs.push({ id: rel, path: rel, text });
-        textById.set(rel, text);
+        docs.push({ id: rel, path: rel, text: Buffer.from(bytes).toString('utf8') });
       } catch {
         // unreadable — skip
       }
     }
-    const ranked = lexicalRank(query, docs).slice(0, settings.codebaseMaxFiles);
-    const perFileCap = Math.max(2000, Math.floor(settings.contextMaxCharacters / Math.max(1, ranked.length)));
-    return ranked.map(({ id }) => {
-      const raw = textById.get(id) ?? '';
-      const content = raw.length > perFileCap ? raw.slice(0, perFileCap) : raw;
-      return {
-        id: `codebase-${id}`,
-        kind: 'user-file',
-        label: `@codebase ${id}`,
-        filePath: vscode.Uri.joinPath(root, id).fsPath,
-        content,
-        characterCount: content.length,
-        truncated: raw.length > content.length
-      };
-    });
+    return docs;
+  }
+
+  /** Build the local semantic index for `@codebase` (the `Parley: Rebuild Codebase Index` command). */
+  public async rebuildCodebaseIndex(): Promise<void> {
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+    if (!root) {
+      await vscode.window.showWarningMessage('Parley: open a folder to index.');
+      return;
+    }
+    this.embeddingIndex ??= new EmbeddingIndex(this.globalStorageUri, this.logger);
+    try {
+      await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: 'Parley: building local codebase index…' },
+        async () => {
+          const docs = await this.gatherCodebaseDocs(root);
+          const n = await this.embeddingIndex!.build(root.fsPath, docs);
+          void vscode.window.showInformationMessage(`Parley indexed ${n} files for semantic @codebase search.`);
+        }
+      );
+    } catch (error) {
+      await vscode.window.showErrorMessage(
+        `Parley: could not build the local index (${error instanceof Error ? error.message : 'unknown'}). @codebase will use lexical search. See the Parley output log.`
+      );
+    }
   }
 
   /** Answer an @-mention autocomplete query with matching workspace file paths. */

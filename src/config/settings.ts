@@ -40,6 +40,7 @@ export interface ParleySettings {
   readonly webSearchApiKey: string;
   readonly webSearchGoogleCx: string;
   readonly codebaseSearchEnabled: boolean;
+  readonly codebaseSearchProvider: 'lexical' | 'local';
   readonly codebaseMaxFiles: number;
   readonly inlineCompletionEnabled: boolean;
   readonly inlineCompletionModel: string;
@@ -83,6 +84,7 @@ export function getSettings(): ParleySettings {
     webSearchApiKey: config.get<string>('webSearch.apiKey', '').trim(),
     webSearchGoogleCx: config.get<string>('webSearch.googleCx', '').trim(),
     codebaseSearchEnabled: config.get<boolean>('codebaseSearch.enabled', true),
+    codebaseSearchProvider: config.get<string>('codebaseSearch.provider', 'lexical') === 'local' ? 'local' : 'lexical',
     codebaseMaxFiles: clampInt(config.get<number>('codebaseSearch.maxFiles', 4), 1, 20),
     inlineCompletionEnabled: inline.get<boolean>('enabled', true),
     inlineCompletionModel: inline.get<string>('model', DEFAULT_COMPLETION_MODEL).trim() || DEFAULT_COMPLETION_MODEL,
