@@ -105,8 +105,9 @@ Sensitive files are refused, file paths are constrained to the workspace, and no
 edit or command happens without your explicit approval. **Stop** aborts in-flight
 work *and kills a running command*. After a turn, a **"Changed N files"** summary
 lists what was edited (undo with `Parley: Revert All Edits`). The agent loop also
-trims stale tool output and (optionally) auto-compacts to control cost. Composer
-**slash commands**: `/clear`, `/compact`, `/json` (next reply as a JSON object), `/help`.
+trims stale tool output and auto-compacts to control cost. Type **`/`** in the
+composer for a **slash-command menu**: `/clear`, `/compact`, `/cost`, `/model`,
+`/init`, `/json` (next reply as JSON), `/help`.
 
 ### ✏️ Inline edit (Ctrl+Alt+K)
 Select code, press **`Ctrl+Alt+K`** (`Cmd+Alt+K` on macOS) or run
@@ -125,7 +126,8 @@ Multi-change edits offer **Apply All / Choose… / Reject** — "Choose…" lets
 ### 💾 Sessions, history & usage
 - The conversation (and your model/thinking/agent-mode choices) **persists across reloads** per workspace.
 - **Past conversations** are archived when you start a new one; reopen them with 🕘 or **`Parley: Open Past Conversation`**.
-- Each reply shows a subtle footer with the **model** and **token usage**; the header shows a **running token total** and an **estimated cost** (`~$`) for the conversation, computed from Parley's published per-model rates.
+- Each reply shows a subtle footer with the **model** and **token usage**; the header shows a **running token total**, an **estimated cost** (`~$`), and a **circular context gauge** that fills (green → amber → red) as the conversation approaches the model's context window.
+- **Automatic compaction** is on by default — at 80% of the model's context window the conversation is summarized (keeping recent messages), so it never overflows. Configure with `parley.autoCompactPercent` (`0` disables) / `parley.autoCompactTokens`.
 - **`Parley: Show Usage`** reports your account's **real billed spend** for the current month (cost, request count, tokens) from Parley's usage endpoint. Needs your account id (`parley.accountId`, found in the Admin Portal under *My Account* — you're prompted on first use).
 - **Token limit** — set a per-conversation token budget with **`Parley: Set Token Limit`** (or `parley.tokenLimit`); **`0` = unlimited** (default). When reached, the agent stops and asks you to raise it or start fresh.
 
@@ -200,6 +202,8 @@ with any model.
 | `Parley: Set Token Limit` | Set the per-conversation token budget |
 | `Parley: Generate Image` | Generate an image with `gpt-image-1` |
 | `Parley: Show Usage` | Show real billed spend for the current month |
+| `Parley: Run Diagnostics` | Probe the live API and report what works |
+| `Parley: Init Project Rules` | Scaffold an AGENTS.md rules file |
 | `Parley: Toggle Inline Completion` | Enable/disable ghost-text completions |
 | `Parley: Export Conversation` | Export the chat to Markdown or JSON |
 | `Parley: Compact Conversation` | Summarize the chat and replace history to free context |

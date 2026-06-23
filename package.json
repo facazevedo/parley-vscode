@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -91,6 +91,16 @@
       {
         "command": "parley.showUsage",
         "title": "Parley: Show Usage",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.runDiagnostics",
+        "title": "Parley: Run Diagnostics",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.initProjectRules",
+        "title": "Parley: Init Project Rules",
         "category": "Parley"
       },
       {
@@ -240,6 +250,13 @@
           "default": 0,
           "minimum": 0,
           "markdownDescription": "When the conversation's size exceeds this many tokens, automatically compact (summarize) it before the next turn to control cost and avoid context-window errors. The size is measured with Parley's `/v1/messages/count_tokens` endpoint when available, falling back to a character-based estimate. **`0` disables (default).** (Compaction is lossy — it replaces history with a summary.) The agent loop also trims stale tool outputs automatically regardless of this setting."
+        },
+        "parley.autoCompactPercent": {
+          "type": "number",
+          "default": 80,
+          "minimum": 0,
+          "maximum": 100,
+          "markdownDescription": "Automatically compact the conversation when it reaches this percentage of the model's context window. **Defaults to `80`**, so long conversations are summarized before they overflow the context (the most recent messages are kept verbatim). Uses the model's known context size and exact token counting. Set to **`0` to disable**. Works alongside `parley.autoCompactTokens` — whichever triggers first."
         },
         "parley.inlineCompletion.enabled": {
           "type": "boolean",

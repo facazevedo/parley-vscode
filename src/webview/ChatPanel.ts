@@ -20,9 +20,10 @@ import type { ParleyProvider } from '../parley/ParleyProvider';
 import { extractMentionPaths } from '../parley/parsing';
 import { AGENT_TOOLS, READ_ONLY_TOOLS, runAgentTool } from '../parley/tools';
 import { normalizeThinkingLevel, resolveThinking, type ThinkingLevel } from '../parley/thinking';
-import { estimateCostUsd } from '../parley/pricing';
 import { audioFormatFromExt, audioFormatFromMime, modelSupportsAudio } from '../parley/audio';
 import { documentProviderFor } from '../parley/files';
+import { contextWindowFor, modelSupportsThinking } from '../parley/models';
+import { estimateCostUsd, formatUsd } from '../parley/pricing';
 import {
   extractAudioMp3,
   extractFrames,
@@ -248,7 +249,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         await this.exportConversation();
         return;
       case 'compact':
-        await this.compactConversation();
+        await this.promptCompact();
         return;
       case 'copyText':
         await vscode.env.clipboard.writeText(message.text ?? '');
@@ -319,7 +320,25 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         await this.postState();
         return true;
       case 'compact':
-        await this.compactConversation();
+        await this.promptCompact();
+        return true;
+      case 'cost': {
+        const est = this.sessionCost > 0 ? ` (~${formatUsd(this.sessionCost)} estimated)` : '';
+        this.history.push({
+          role: 'assistant',
+          content:
+            `💰 This conversation has used **${this.sessionTokens.toLocaleString()} tokens**${est}.\n\n` +
+            'For your real billed spend this month, run **`Parley: Show Usage`**.',
+          createdAt: new Date().toISOString()
+        });
+        await this.postState();
+        return true;
+      }
+      case 'model':
+        await this.pickModel();
+        return true;
+      case 'init':
+        await vscode.commands.executeCommand('parley.initProjectRules');
         return true;
       case 'json':
         this.jsonNext = true;
@@ -334,7 +353,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         this.history.push({
           role: 'assistant',
           content:
-            '**Slash commands**\n- `/clear` (or `/new`) — start a new conversation\n- `/compact` — summarize to free up context\n- `/json` — make the next reply a JSON object\n- `/help` — this list\n\nMost actions also have commands in the Command Palette (search "Parley").',
+            '**Slash commands**\n- `/clear` (or `/new`) — start a new conversation\n- `/compact` — summarize to free up context (choose keep-recent or all)\n- `/cost` — show this conversation\'s token/cost usage\n- `/model` — switch the model\n- `/init` — create a project rules file (AGENTS.md)\n- `/json` — make the next reply a JSON object\n- `/help` — this list\n\nMost actions also have commands in the Command Palette (search "Parley").',
           createdAt: new Date().toISOString()
         });
         await this.postState();
@@ -371,12 +390,16 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     }
 
     const settings = this.getSettings();
-    if (
-      settings.autoCompactTokens > 0 &&
-      this.history.length >= 4 &&
-      (await this.countHistoryTokens()) > settings.autoCompactTokens
-    ) {
-      await this.compactConversation();
+    const model = this.selectedAgentId || settings.defaultAgent;
+    const window = contextWindowFor(model);
+    const pctThreshold =
+      settings.autoCompactPercent > 0 && window ? Math.floor((window * settings.autoCompactPercent) / 100) : 0;
+    const thresholds = [settings.autoCompactTokens, pctThreshold].filter((t) => t > 0);
+    if (this.history.length >= 4 && thresholds.length > 0) {
+      const count = await this.countHistoryTokens();
+      if (thresholds.some((t) => count > t)) {
+        await this.compactConversation(4); // keep the most recent exchange verbatim
+      }
     }
     if (settings.tokenLimit > 0 && this.sessionTokens >= settings.tokenLimit) {
       await vscode.window.showWarningMessage(
@@ -447,6 +470,11 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     if (audios.length > 0 && !modelSupportsAudio(agentId)) {
       void vscode.window.showWarningMessage(
         `${agentId} does not accept audio. Audio input works only on OpenAI and Google models.`
+      );
+    }
+    if (this.selectedThinking !== 'off' && !modelSupportsThinking(agentId)) {
+      void vscode.window.showWarningMessage(
+        `${agentId} does not support extended thinking. Reasoning works on Claude, Gemini, and GPT-5 models.`
       );
     }
 
@@ -760,13 +788,55 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     await this.postState();
   }
 
+  /** Ask the model to switch (Claude-Code-style `/model`), via a QuickPick of available models. */
+  private async pickModel(): Promise<void> {
+    const items = this.agents.map((a) => ({ label: a.label, description: a.id, detail: a.description }));
+    if (items.length === 0) {
+      await vscode.window.showInformationMessage('Parley: no models loaded yet. Set your API key and refresh.');
+      return;
+    }
+    const pick = await vscode.window.showQuickPick(items, {
+      title: 'Parley: switch model',
+      placeHolder: this.selectedAgentId || 'Choose a model for this conversation'
+    });
+    if (!pick) {
+      return;
+    }
+    this.selectedAgentId = pick.description;
+    this.save();
+    this.history.push({
+      role: 'assistant',
+      content: `🔀 Switched model to \`${pick.description}\`.`,
+      createdAt: new Date().toISOString()
+    });
+    await this.postState();
+  }
+
+  /** Offer compaction options (Claude-Code-style): summarize everything, or keep the recent turns. */
+  public async promptCompact(): Promise<void> {
+    if (this.history.length < 2) {
+      await vscode.window.showInformationMessage('Parley: not enough conversation to compact yet.');
+      return;
+    }
+    const ALL = { label: 'Summarize everything', detail: 'Replace the whole conversation with one summary' };
+    const KEEP = { label: 'Summarize older, keep recent', detail: 'Summarize all but the last few messages (kept verbatim)' };
+    const pick = await vscode.window.showQuickPick([KEEP, ALL], {
+      title: 'Parley: compact conversation',
+      placeHolder: 'Compaction is lossy — it replaces history with a summary'
+    });
+    if (!pick) {
+      return;
+    }
+    await this.compactConversation(pick === KEEP ? 4 : 0);
+  }
+
   /**
    * Compact the conversation: ask the model to summarize it, then replace the
    * history with that summary so the chat can continue with far fewer tokens.
-   * This is a client-side feature built on the normal chat endpoint — it works
-   * with any model; Parley itself has no compaction endpoint.
+   * With `keepRecent > 0`, the most recent N messages are kept verbatim after the
+   * summary. Client-side only — works with any model; Parley has no such endpoint.
    */
-  public async compactConversation(): Promise<void> {
+  public async compactConversation(keepRecent = 0): Promise<void> {
     if (this.busy) {
       await vscode.window.showInformationMessage('Parley is still responding. Stop the current reply first.');
       return;
@@ -778,7 +848,14 @@ export class ChatPanel implements vscode.WebviewViewProvider {
 
     const settings = this.getSettings();
     const model = this.selectedAgentId || settings.defaultAgent;
-    const transcript = this.history
+    const splitAt = keepRecent > 0 ? Math.max(0, this.history.length - keepRecent) : this.history.length;
+    const toSummarize = this.history.slice(0, splitAt);
+    const toKeep = this.history.slice(splitAt);
+    if (toSummarize.length < 2) {
+      await vscode.window.showInformationMessage('Parley: not enough older conversation to compact.');
+      return;
+    }
+    const transcript = toSummarize
       .map((m) => `${m.role === 'user' ? 'User' : m.role === 'assistant' ? 'Assistant' : m.role}: ${m.content}`)
       .join('\n\n');
     const prompt =
@@ -803,13 +880,14 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         }
       );
 
-      this.history.length = 0;
-      this.history.push({
+      const summaryMsg: ChatMessage = {
         role: 'assistant',
         content: `📦 **Compacted summary of the conversation so far**\n\n${summary}`,
         createdAt: new Date().toISOString(),
         model
-      });
+      };
+      this.history.length = 0;
+      this.history.push(summaryMsg, ...toKeep);
     } catch (error) {
       await reportProviderError(this.commandDeps, error);
     } finally {
@@ -1149,6 +1227,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private async postState(): Promise<void> {
     this.save();
     const hasKey = Boolean(await this.commandDeps.auth.getToken());
+    const model = this.selectedAgentId || this.getSettings().defaultAgent;
+    const window = contextWindowFor(model);
+    const contextPct = window ? Math.min(100, Math.round((this.estimateHistoryTokens() / window) * 100)) : undefined;
     this.post({
       type: 'state',
       history: this.history,
@@ -1158,6 +1239,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       mode: this.mode,
       sessionTokens: this.sessionTokens,
       sessionCostUsd: this.sessionCost,
+      contextPct,
       selectedAgentId: this.selectedAgentId,
       selectedThinking: this.selectedThinking,
       contextOptions: this.contextOptions,
@@ -1192,6 +1274,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     <div class="toolbar">
       <span class="title">Parley</span>
       <span id="sessionTok" class="sessiontok" title="Tokens used in this conversation (and estimated cost)"></span>
+      <span id="ctx" class="ctx-meter" style="display:none"><span class="ctxring"></span><span class="ctxnum"></span></span>
       <span class="grow"></span>
       <button id="newChat" title="New conversation" aria-label="New conversation">＋</button>
       <button id="historyBtn" title="Past conversations" aria-label="Past conversations">🕘</button>
@@ -1216,6 +1299,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       <div id="attachments" class="attachments"></div>
       <div class="inputbox">
         <div id="mentions" class="mentions" style="display:none"></div>
+        <div id="slashMenu" class="mentions" style="display:none"></div>
         <div id="modePanel" class="modepanel" style="display:none">
           <div class="mp-head">Modes</div>
           <button type="button" class="mp-item" data-mode="chat"><span class="mp-name">Chat</span><span class="mp-desc">Answer only — no agent, no file access</span></button>

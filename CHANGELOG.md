@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.18.0
+
+### Added — context management (Claude Code / Codex parity)
+- **Automatic compaction is now ON by default.** When a conversation reaches **80%** of the model's context window it's summarized automatically before the next turn (keeping the most recent messages verbatim), so long sessions don't overflow the context. Tune with `parley.autoCompactPercent` (set `0` to disable) or the absolute `parley.autoCompactTokens`.
+- **Circular context gauge** in the header — a ring that fills as the conversation grows toward the model's context window (green → amber → red), with the percentage beside it.
+- **Slash-command menu**: type `/` in the composer to get an autocomplete list (↑/↓, Enter). New commands: **`/cost`** (token/cost usage), **`/model`** (switch model), **`/init`** (create AGENTS.md), alongside `/clear`, `/compact`, `/json`, `/help`.
+- **`/compact` options** — choose "summarize everything" or "summarize older, keep recent" (the ⊟ button and command prompt for this too).
+- **`Parley: Init Project Rules`** command to scaffold an `AGENTS.md` rules file.
+
+### Added — confidence & robustness
+- **`Parley: Run Diagnostics`** — exercises the live gateway (models, chat, `count_tokens`, and whether **`thinking` is actually honored** on your models) and opens a pass/fail report. Image generation is not exercised (it costs money).
+- **Extended-thinking capability gate** — warns when you select a thinking level for a model that doesn't support it (Llama, image models).
+- **Uploaded files are cleaned up** after each request (`DELETE /v1/files/{id}`), so the account's 20-file limit isn't exhausted.
+
+### Added — rendering
+- Chat Markdown now renders **GitHub-style tables** and **blockquotes**.
+
+### Engineering
+- New pure `src/parley/models.ts` (context windows + thinking support) with tests; 38 unit tests. Marketplace publishing remains wired in the release workflow (gated on `VSCE_PAT`/`OVSX_PAT`).
+
 ## 0.17.0
 
 ### Added

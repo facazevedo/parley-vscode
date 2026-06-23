@@ -18,6 +18,8 @@ const EXPECTED_COMMANDS = [
   'parley.toggleInlineCompletion',
   'parley.setTokenLimit',
   'parley.showUsage',
+  'parley.runDiagnostics',
+  'parley.initProjectRules',
   'parley.signOut'
 ];
 

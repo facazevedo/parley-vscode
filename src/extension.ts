@@ -5,7 +5,9 @@ import { registerExplainFileCommand } from './commands/explainFile';
 import { registerFixDiagnosticsCommand } from './commands/fixDiagnostics';
 import { registerGenerateImageCommand } from './commands/generateImage';
 import { registerGenerateTestsCommand } from './commands/generateTests';
+import { registerInitProjectRulesCommand } from './commands/initProjectRules';
 import { registerInlineEditCommand } from './commands/inlineEdit';
+import { registerRunDiagnosticsCommand } from './commands/runDiagnostics';
 import { registerRefactorSelectionCommand } from './commands/refactorSelection';
 import { registerSetApiKeyCommand } from './commands/setApiKey';
 import { registerShowUsageCommand } from './commands/showUsage';
@@ -128,6 +130,8 @@ export function activate(context: vscode.ExtensionContext): void {
   registerGenerateImageCommand(context, commandDeps);
   registerToggleInlineCompletionCommand(context);
   registerShowUsageCommand(context, commandDeps);
+  registerRunDiagnosticsCommand(context, commandDeps);
+  registerInitProjectRulesCommand(context);
   registerSignOutCommand(context, commandDeps);
 }
 

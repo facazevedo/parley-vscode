@@ -130,29 +130,39 @@ export class ParleyClient implements ParleyProvider {
 
   public async sendMessage(request: ChatRequest, options?: SendMessageOptions): Promise<ChatResponse> {
     const model = request.agentId?.trim() || this.defaultModel;
-    const documentParts = await this.prepareDocumentParts(model, request.documents ?? [], options?.signal);
+    const { parts: documentParts, uploadedIds } = await this.prepareDocumentParts(
+      model,
+      request.documents ?? [],
+      options?.signal
+    );
     const messages = this.buildMessages(request, documentParts);
     const thinking = request.thinking;
     const responseFormat = request.responseFormat;
 
     const useTools = Boolean(options?.tools && options.tools.length > 0 && options.runTool);
-    const result = useTools
-      ? await this.runToolLoop(messages, model, options as SendMessageOptions, thinking, responseFormat)
-      : await this.singleCompletion(messages, model, options, thinking, responseFormat);
+    try {
+      const result = useTools
+        ? await this.runToolLoop(messages, model, options as SendMessageOptions, thinking, responseFormat)
+        : await this.singleCompletion(messages, model, options, thinking, responseFormat);
 
-    const proposedChanges = await extractProposedChanges(result.content);
+      const proposedChanges = await extractProposedChanges(result.content);
 
-    return {
-      message: {
-        role: 'assistant',
-        content: result.content,
-        createdAt: new Date().toISOString(),
-        usage: result.usage,
-        thinking: result.thinking || undefined
-      },
-      proposedChanges: proposedChanges.length > 0 ? proposedChanges : undefined,
-      usage: result.usage
-    };
+      return {
+        message: {
+          role: 'assistant',
+          content: result.content,
+          createdAt: new Date().toISOString(),
+          usage: result.usage,
+          thinking: result.thinking || undefined
+        },
+        proposedChanges: proposedChanges.length > 0 ? proposedChanges : undefined,
+        usage: result.usage
+      };
+    } finally {
+      // The provider has consumed the uploaded files; delete them so the account's
+      // 20-file limit isn't exhausted (they'd otherwise linger for 48h).
+      await this.cleanupFiles(uploadedIds);
+    }
   }
 
   /** Apply per-request extras (extended thinking, structured output) to a chat payload. */
@@ -221,17 +231,19 @@ export class ParleyClient implements ParleyProvider {
     model: string,
     documents: readonly DocumentAttachment[],
     signal?: AbortSignal
-  ): Promise<unknown[]> {
+  ): Promise<{ parts: unknown[]; uploadedIds: string[] }> {
     if (documents.length === 0) {
-      return [];
+      return { parts: [], uploadedIds: [] };
     }
     const provider = documentProviderFor(model);
     const parts: unknown[] = [];
+    const uploadedIds: string[] = [];
     for (const doc of documents) {
       if (provider) {
         try {
           const fileId = await this.uploadFile(doc, provider, signal);
           parts.push({ type: 'file', file_id: fileId });
+          uploadedIds.push(fileId);
           continue;
         } catch (error) {
           this.logger.warn(`File upload failed for ${doc.filename}: ${error instanceof Error ? error.message : 'error'}`);
@@ -239,7 +251,18 @@ export class ParleyClient implements ParleyProvider {
       }
       parts.push({ type: 'document', source: { type: 'base64', media_type: doc.mimeType, data: doc.base64 } });
     }
-    return parts;
+    return { parts, uploadedIds };
+  }
+
+  /** Best-effort deletion of files uploaded for a request (they also auto-expire in 48h). */
+  private async cleanupFiles(fileIds: readonly string[]): Promise<void> {
+    for (const id of fileIds) {
+      try {
+        await this.request(`/files/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      } catch (error) {
+        this.logger.debug(`Could not delete uploaded file ${id}: ${error instanceof Error ? error.message : 'error'}`);
+      }
+    }
   }
 
   /** Upload a document to `/v1/files` for the given provider and return its Parley file id. */
