@@ -574,6 +574,14 @@ export class ChatPanel implements vscode.WebviewViewProvider {
                   this.post({ type: 'toolEvent', name: event.name, args: event.args });
                 }
               : undefined,
+            onToolResult: toolsEnabled
+              ? (name, result) => {
+                  // write/edit show a diff card already; others get a Claude-style ⎿ result line.
+                  if (name !== 'write_file' && name !== 'edit_file') {
+                    this.post({ type: 'toolResult', text: summarizeToolResult(name, result) });
+                  }
+                }
+              : undefined,
             onUsage: (usage) => {
               turnTokens += usage.total;
               this.sessionTokens += usage.total;
@@ -691,7 +699,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     } else if (this.mode !== 'chat') {
       modeNote =
         'You are an autonomous coding agent in VS Code. Keep working — read files (use read_file start_line/end_line for large files), search, edit (use edit_file for precise changes to existing files, write_file for new ones), and run commands — until the user\'s request is FULLY complete. Do not stop to ask whether to continue or wait for confirmation.\n\n' +
-        'IMPORTANT — always communicate in plain text as you work: before each tool call, write a short sentence saying what you are about to do and why; after finishing a logical chunk, summarize what changed. NEVER reply with only tool calls and no text, and never return an empty message. When the entire task is finished, give a brief summary of everything you did and end your final message with <DONE> on its own line.';
+        'You are NOT limited to a single interaction or a fixed number of steps — you will be re-invoked automatically to continue, so never apologize about "running out of time" or "this interaction"; just keep going. If a command is terminated for exceeding its timeout, that is recoverable: re-run it, split it into smaller steps, or proceed — do not give up.\n\n' +
+        'IMPORTANT — always communicate in plain text as you work: before each tool call, write a short sentence saying what you are about to do and why; after finishing a logical chunk, summarize what changed. NEVER reply with only tool calls and no text, and never return an empty message. When the entire task is genuinely finished, give a brief final summary (files created/changed, commands run, whether lint/tests/build passed, and any known limitations) and end your final message with <DONE> on its own line.';
     }
     return [rules, modeNote].filter(Boolean).join('\n\n') || undefined;
   }
@@ -1339,7 +1348,12 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         return 'User declined to run the command.';
       }
     }
-    return runShellCommand(command, folder?.uri.fsPath, this.abortController?.signal);
+    return runShellCommand(
+      command,
+      folder?.uri.fsPath,
+      this.getSettings().commandTimeoutSeconds * 1000,
+      this.abortController?.signal
+    );
   }
 
   /** Resolve `@path` mentions in the prompt into file context attachments. */
@@ -1600,15 +1614,56 @@ function replaceByTrimmedLines(original: string, oldText: string, newText: strin
 
 /** Run a shell command in cwd, returning combined stdout/stderr (truncated). User-approved per call.
  *  Passing the turn's AbortSignal lets Stop actually kill the child process. */
-function runShellCommand(command: string, cwd: string | undefined, signal?: AbortSignal): Promise<string> {
+/** Short, Claude-style one-line summary of a tool result for the `⎿` line. */
+function summarizeToolResult(name: string, result: string): string {
+  const lines = result.split('\n');
+  const firstLine = lines.find((l) => l.trim()) ?? '';
+  const clip = (s: string): string => (s.length > 100 ? `${s.slice(0, 100)}…` : s);
+  switch (name) {
+    case 'read_file':
+      return `Read ${lines.length} line${lines.length === 1 ? '' : 's'}`;
+    case 'list_directory': {
+      const n = lines.filter((l) => l.trim()).length;
+      return `${n} entr${n === 1 ? 'y' : 'ies'}`;
+    }
+    case 'find_files': {
+      const n = lines.filter((l) => l.trim()).length;
+      return `${n} file${n === 1 ? '' : 's'}`;
+    }
+    case 'search_text':
+      return /^no\b/i.test(firstLine) ? 'No matches' : `${lines.filter((l) => l.trim()).length} match line(s)`;
+    case 'run_command':
+      return clip(firstLine || '(no output)');
+    case 'fetch_url':
+      return `${result.length.toLocaleString()} chars`;
+    default:
+      return clip(firstLine);
+  }
+}
+
+function runShellCommand(
+  command: string,
+  cwd: string | undefined,
+  timeoutMs: number,
+  signal?: AbortSignal
+): Promise<string> {
   return new Promise((resolve) => {
-    exec(command, { cwd, timeout: 60000, maxBuffer: 1024 * 1024, windowsHide: true, signal }, (error, stdout, stderr) => {
+    exec(command, { cwd, timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024, windowsHide: true, signal }, (error, stdout, stderr) => {
       if (error && (error as { name?: string }).name === 'AbortError') {
         resolve('Command was stopped by the user.');
         return;
       }
       const out = `${stdout ?? ''}${stderr ? `\n[stderr]\n${stderr}` : ''}`.trim();
       const body = out.length > 8000 ? `${out.slice(0, 8000)}\n[truncated]` : out;
+      // exec kills on timeout with SIGTERM and sets error.killed — tell the model so it can retry/split.
+      if (error && (error as { killed?: boolean }).killed && (error as { signal?: string }).signal) {
+        const secs = Math.round(timeoutMs / 1000);
+        resolve(
+          `[Command exceeded the ${secs}s timeout and was terminated. If it legitimately needs longer (e.g. a big install/build), raise "parley.commandTimeoutSeconds" or split it into smaller steps.]` +
+            (body ? `\n\nPartial output:\n${body}` : '')
+        );
+        return;
+      }
       if (error && !out) {
         resolve(`Command failed: ${error.message}`);
       } else {

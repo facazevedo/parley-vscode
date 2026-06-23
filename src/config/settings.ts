@@ -32,6 +32,7 @@ export interface ParleySettings {
   readonly autoCompactPercent: number;
   readonly autoSaveConversations: boolean;
   readonly conversationsDir: string;
+  readonly commandTimeoutSeconds: number;
   readonly inlineCompletionEnabled: boolean;
   readonly inlineCompletionModel: string;
   readonly inlineCompletionDebounceMs: number;
@@ -68,6 +69,7 @@ export function getSettings(): ParleySettings {
     autoCompactPercent: clampInt(config.get<number>('autoCompactPercent', 80), 0, 100),
     autoSaveConversations: config.get<boolean>('autoSaveConversations', true),
     conversationsDir: config.get<string>('conversationsDir', '').trim(),
+    commandTimeoutSeconds: clampInt(config.get<number>('commandTimeoutSeconds', 300), 5, 3600),
     inlineCompletionEnabled: inline.get<boolean>('enabled', true),
     inlineCompletionModel: inline.get<string>('model', DEFAULT_COMPLETION_MODEL).trim() || DEFAULT_COMPLETION_MODEL,
     inlineCompletionDebounceMs: inline.get<number>('debounceMs', 350),

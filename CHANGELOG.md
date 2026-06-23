@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.26.0
+
+### Fixed — agent could stall during build/verify
+- `run_command`'s timeout was a hard **60s**, so real `npm install` / build / test commands were killed mid-run and the agent gave up ("couldn't complete the build-and-verify cycle"). It's now **300s by default and configurable** (`parley.commandTimeoutSeconds`), with a 16 MB output buffer and a clear "exceeded timeout — re-run or split / raise the setting" message instead of a silent failure.
+- The agent prompt now tells the model it is **not limited to one interaction** (it's re-invoked to continue), to treat a timed-out command as recoverable, and to always end with a final summary — so it stops apologizing about "running out of time" and bailing.
+
+### Changed — Claude-style activity output
+- Tool activity now reads like Claude Code: an **`⏺ action`** line followed by a muted **`⎿ result`** line (e.g. `⏺ Reading App.tsx` / `⎿ Read 120 lines`, `⏺ Running: npm test` / `⎿ <first output line>`). Edits still render the inline diff card.
+
 ## 0.25.0
 
 ### Added — inline diff cards for edits

@@ -80,7 +80,8 @@ button:disabled { opacity: 0.5; cursor: default; }
 .content .seg { white-space: pre-wrap; }
 .content .seg:empty { display: none; }
 .content .seg:not(:empty) { margin: 0 0 10px; }
-.toolline { font-family: var(--vscode-editor-font-family, monospace); font-size: 0.82em; color: var(--vscode-descriptionForeground); margin: 0 0 10px; padding: 2px 0 2px 9px; border-left: 2px solid var(--vscode-focusBorder); }
+.toolline { font-family: var(--vscode-editor-font-family, monospace); font-size: 0.82em; color: var(--vscode-foreground); opacity: 0.9; margin: 2px 0 1px; padding: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.toolresult { font-family: var(--vscode-editor-font-family, monospace); font-size: 0.8em; color: var(--vscode-descriptionForeground); margin: 0 0 8px; padding: 0 0 0 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
 /* Extended-thinking (reasoning) disclosure */
 .thinking { margin: 0 0 10px; border-left: 2px solid var(--vscode-descriptionForeground); padding-left: 9px; }
 .thinking > summary { cursor: pointer; list-style: none; user-select: none; font-size: 0.82em; color: var(--vscode-descriptionForeground); padding: 1px 0; }

@@ -28,6 +28,8 @@ export interface SendMessageOptions {
   readonly tools?: readonly ToolDefinition[];
   readonly runTool?: (call: ToolCall) => Promise<string>;
   readonly onToolEvent?: (event: { readonly name: string; readonly args: string }) => void;
+  /** Called after a tool runs, with its name and (raw) result — for a Claude-style `⎿` result line. */
+  readonly onToolResult?: (name: string, result: string) => void;
   /** Called when token usage for a round becomes known (for live token counters). */
   readonly onUsage?: (usage: TokenUsage) => void;
   readonly maxToolRounds?: number;

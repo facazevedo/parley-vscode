@@ -491,6 +491,7 @@ export class ParleyClient implements ParleyProvider {
           toolResult = `Error: ${error instanceof Error ? error.message : 'tool failed'}`;
         }
         dbg('tool', `result ${tc.name}`, { chars: toolResult.length });
+        options.onToolResult?.(tc.name, toolResult);
         convo.push({ role: 'tool', tool_call_id: tc.id, content: toolResult.slice(0, MAX_TOOL_RESULT_CHARS) });
       }
     }
