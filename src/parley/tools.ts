@@ -131,6 +131,19 @@ export const AGENT_TOOLS: readonly ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'web_search',
+      description:
+        'Search the web and return the top results (title, URL, snippet). Use for current information or external docs, then call fetch_url on the most relevant result for full details.',
+      parameters: {
+        type: 'object',
+        properties: { query: { type: 'string', description: 'The search query.' } },
+        required: ['query']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'update_plan',
       description:
         'Maintain a short checklist of the high-level steps for the current task (3-8 items). Call it when you begin a multi-step task and again whenever a step changes status, so the user can follow along. Exactly one step should be "in_progress" at a time.',

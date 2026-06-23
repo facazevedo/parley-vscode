@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { normalizeThinkingLevel, type ThinkingLevel } from '../parley/thinking';
 import type { McpServerConfig } from '../mcp/McpManager';
+import type { WebSearchProvider } from '../web/webSearch';
 
 export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
 
@@ -35,6 +36,11 @@ export interface ParleySettings {
   readonly conversationsDir: string;
   readonly commandTimeoutSeconds: number;
   readonly mcpServers: Record<string, McpServerConfig>;
+  readonly webSearchProvider: WebSearchProvider;
+  readonly webSearchApiKey: string;
+  readonly webSearchGoogleCx: string;
+  readonly codebaseSearchEnabled: boolean;
+  readonly codebaseMaxFiles: number;
   readonly inlineCompletionEnabled: boolean;
   readonly inlineCompletionModel: string;
   readonly inlineCompletionDebounceMs: number;
@@ -73,6 +79,11 @@ export function getSettings(): ParleySettings {
     conversationsDir: config.get<string>('conversationsDir', '').trim(),
     commandTimeoutSeconds: clampInt(config.get<number>('commandTimeoutSeconds', 300), 5, 3600),
     mcpServers: config.get<Record<string, McpServerConfig>>('mcpServers', {}) ?? {},
+    webSearchProvider: normalizeWebSearchProvider(config.get<string>('webSearch.provider', 'duckduckgo')),
+    webSearchApiKey: config.get<string>('webSearch.apiKey', '').trim(),
+    webSearchGoogleCx: config.get<string>('webSearch.googleCx', '').trim(),
+    codebaseSearchEnabled: config.get<boolean>('codebaseSearch.enabled', true),
+    codebaseMaxFiles: clampInt(config.get<number>('codebaseSearch.maxFiles', 4), 1, 20),
     inlineCompletionEnabled: inline.get<boolean>('enabled', true),
     inlineCompletionModel: inline.get<string>('model', DEFAULT_COMPLETION_MODEL).trim() || DEFAULT_COMPLETION_MODEL,
     inlineCompletionDebounceMs: inline.get<number>('debounceMs', 350),
@@ -87,6 +98,10 @@ export function getSettings(): ParleySettings {
     telemetryEnabled: telemetry.get<boolean>('enabled', false),
     logLevel: config.get<LogLevel>('logLevel', 'info')
   };
+}
+
+function normalizeWebSearchProvider(value: string): WebSearchProvider {
+  return value === 'off' || value === 'google' || value === 'tavily' ? value : 'duckduckgo';
 }
 
 function clampInt(value: number, min: number, max: number): number {

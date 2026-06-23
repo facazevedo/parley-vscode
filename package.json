@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.34.0",
+  "version": "0.35.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -289,6 +289,40 @@
             },
             "required": ["command"]
           }
+        },
+        "parley.webSearch.provider": {
+          "type": "string",
+          "default": "duckduckgo",
+          "enum": ["off", "duckduckgo", "google", "tavily"],
+          "enumDescriptions": [
+            "Disable the web_search tool",
+            "DuckDuckGo — no API key required (default)",
+            "Google Programmable Search — needs apiKey + googleCx",
+            "Tavily — needs apiKey"
+          ],
+          "markdownDescription": "Provider for the agent's `web_search` tool. **DuckDuckGo** works with no key. **Google** needs `parley.webSearch.apiKey` + `parley.webSearch.googleCx`; **Tavily** needs `parley.webSearch.apiKey`."
+        },
+        "parley.webSearch.apiKey": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "API key for the keyed web-search providers (Google Programmable Search or Tavily). Not needed for DuckDuckGo."
+        },
+        "parley.webSearch.googleCx": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Google Programmable Search Engine ID (`cx`), required when `parley.webSearch.provider` is `google`."
+        },
+        "parley.codebaseSearch.enabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Enable **`@codebase`** in the composer — lexically retrieves the most relevant workspace files for your question and adds them as context (keyless, private, no embeddings)."
+        },
+        "parley.codebaseSearch.maxFiles": {
+          "type": "number",
+          "default": 4,
+          "minimum": 1,
+          "maximum": 20,
+          "markdownDescription": "How many files `@codebase` includes (highest-ranked first)."
         },
         "parley.commandTimeoutSeconds": {
           "type": "number",

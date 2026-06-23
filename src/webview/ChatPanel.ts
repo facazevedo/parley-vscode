@@ -28,6 +28,8 @@ import { estimateCostUsd, formatUsd } from '../parley/pricing';
 import { dbg } from '../debug/debug';
 import type { McpManager } from '../mcp/McpManager';
 import { isMcpTool } from '../mcp/naming';
+import { webSearch } from '../web/webSearch';
+import { lexicalRank, type RankDoc } from '../codebase/lexicalSearch';
 import {
   extractAudioMp3,
   extractFrames,
@@ -1320,7 +1322,21 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     if (call.name === 'update_plan') {
       return this.toolUpdatePlan(call);
     }
+    if (call.name === 'web_search') {
+      return this.toolWebSearch(call);
+    }
     return runAgentTool(call);
+  }
+
+  private async toolWebSearch(call: ToolCall): Promise<string> {
+    let query = '';
+    try {
+      query = String(JSON.parse(call.arguments || '{}').query ?? '');
+    } catch {
+      return 'Error: arguments were not valid JSON.';
+    }
+    const s = this.getSettings();
+    return webSearch(query, { provider: s.webSearchProvider, apiKey: s.webSearchApiKey, googleCx: s.webSearchGoogleCx });
   }
 
   /** Render the agent's task checklist in the chat (Claude-Code / Codex style). */
@@ -1520,6 +1536,11 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     const out: ContextAttachment[] = [];
     const cap = settings.contextMaxCharacters;
 
+    // @codebase — lexically retrieve the most relevant files for the question.
+    if (/(?:^|\s)@codebase\b/i.test(prompt) && settings.codebaseSearchEnabled) {
+      out.push(...(await this.codebaseContext(prompt, root, settings)));
+    }
+
     // @git — include the uncommitted diff vs HEAD.
     if (/(?:^|\s)@git\b/i.test(prompt)) {
       const diff = await runShellCommand('git --no-pager diff HEAD', root.fsPath, 15000);
@@ -1537,7 +1558,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
 
     // @path — a file's contents, or a folder's listing.
     for (const rel of extractMentionPaths(prompt)) {
-      if (rel === 'git' || /^https?:/i.test(rel) || isSensitiveFile(rel)) {
+      if (rel === 'git' || rel === 'codebase' || /^https?:/i.test(rel) || isSensitiveFile(rel)) {
         continue;
       }
       try {
@@ -1574,6 +1595,62 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       }
     }
     return out;
+  }
+
+  /**
+   * `@codebase` retrieval: rank workspace files lexically against the prompt and
+   * include the most relevant ones as context. Keyless/private — no embeddings.
+   */
+  private async codebaseContext(
+    prompt: string,
+    root: vscode.Uri,
+    settings: ParleySettings
+  ): Promise<ContextAttachment[]> {
+    const query = prompt.replace(/(?:^|\s)@\S+/g, ' ').trim() || prompt;
+    let files: vscode.Uri[];
+    try {
+      files = await vscode.workspace.findFiles(
+        '**/*',
+        '{**/node_modules/**,**/.git/**,**/out/**,**/dist/**,**/.vscode-test/**}',
+        400
+      );
+    } catch {
+      return [];
+    }
+    const docs: RankDoc[] = [];
+    const textById = new Map<string, string>();
+    for (const uri of files) {
+      const rel = path.relative(root.fsPath, uri.fsPath).replace(/\\/g, '/');
+      if (isSensitiveFile(rel)) {
+        continue;
+      }
+      try {
+        const bytes = await vscode.workspace.fs.readFile(uri);
+        if (bytes.byteLength > 200000 || bytes.includes(0)) {
+          continue; // skip very large or binary files
+        }
+        const text = Buffer.from(bytes).toString('utf8');
+        docs.push({ id: rel, path: rel, text });
+        textById.set(rel, text);
+      } catch {
+        // unreadable — skip
+      }
+    }
+    const ranked = lexicalRank(query, docs).slice(0, settings.codebaseMaxFiles);
+    const perFileCap = Math.max(2000, Math.floor(settings.contextMaxCharacters / Math.max(1, ranked.length)));
+    return ranked.map(({ id }) => {
+      const raw = textById.get(id) ?? '';
+      const content = raw.length > perFileCap ? raw.slice(0, perFileCap) : raw;
+      return {
+        id: `codebase-${id}`,
+        kind: 'user-file',
+        label: `@codebase ${id}`,
+        filePath: vscode.Uri.joinPath(root, id).fsPath,
+        content,
+        characterCount: content.length,
+        truncated: raw.length > content.length
+      };
+    });
   }
 
   /** Answer an @-mention autocomplete query with matching workspace file paths. */

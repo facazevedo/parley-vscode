@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.35.0
+
+### Added — web search + `@codebase` retrieval (both keyless)
+- **`web_search` tool** for the agent. **DuckDuckGo** is the default and needs **no API key**; **Google** (Programmable Search — set `parley.webSearch.apiKey` + `parley.webSearch.googleCx`) and **Tavily** (`parley.webSearch.apiKey`) are opt-in keyed providers. Set `parley.webSearch.provider` to `off` to disable. The agent searches, then `fetch_url`s the best results.
+- **`@codebase`** mention — lexically retrieves the most relevant workspace files for your question (ripgrep-style term ranking + a filename-match boost) and adds them as context. Keyless, private, no embeddings. **On by default**, toggle with `parley.codebaseSearch.enabled`; tune count with `parley.codebaseSearch.maxFiles`.
+
+_(A true semantic index via a bundled local embedding model is the planned next step — optional, off by default.)_
+
 ## 0.34.0
 
 ### Added — visible command execution

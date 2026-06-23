@@ -100,6 +100,7 @@ corrected to the exact API count per round).
 - `write_file` — create/overwrite a file; reviewed/checkpointed
 - `run_command` — run a shell command; **requires per-command confirmation** (except Full access), then returns its output
 - `fetch_url` — fetch a public `https://` page as text
+- `web_search` — search the web (DuckDuckGo by default — no key; or Google/Tavily with a key via `parley.webSearch.*`)
 - plus any tools from your configured **MCP servers** (see below)
 
 **MCP servers.** Configure Model Context Protocol servers in `parley.mcpServers`
@@ -126,7 +127,7 @@ Applied edits are checkpointed; **`Parley: Revert Last Edit`** undoes the most r
 Multi-change edits offer **Apply All / Choose… / Reject** — "Choose…" lets you accept or reject **individual hunks**.
 
 ### 🏷️ @-mentions & project rules
-- Type **`@`** in the composer to get a **file autocomplete** — pick a file (↑/↓, Enter) to attach it as context. Also supported: **`@<folder>`** (folder listing), **`@git`** (uncommitted diff), and **`@https://…`** (fetch a page).
+- Type **`@`** in the composer to get a **file autocomplete** — pick a file (↑/↓, Enter) to attach it as context. Also supported: **`@<folder>`** (folder listing), **`@git`** (uncommitted diff), **`@https://…`** (fetch a page), and **`@codebase`** (lexically retrieves the most relevant files for your question — keyless, private; toggle with `parley.codebaseSearch.enabled`).
 - A **`.parleyrules`**, **`AGENTS.md`**, or **`.cursorrules`** file in the workspace root is auto-injected into the system prompt as project rules.
 
 > Semantic `@codebase` search isn't offered because the Parley API exposes no
