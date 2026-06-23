@@ -1060,8 +1060,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
 
     const choice = await vscode.window.showQuickPick(
       [
-        { label: 'Markdown (.md)', ext: 'md', json: false },
-        { label: 'JSON (.json)', ext: 'json', json: true }
+        { label: 'Markdown (.md)', ext: 'md', fmt: 'md' as const },
+        { label: 'Plain text (.txt)', ext: 'txt', fmt: 'txt' as const },
+        { label: 'JSON (.json)', ext: 'json', fmt: 'json' as const }
       ],
       { title: 'Export Parley conversation', placeHolder: 'Choose a format' }
     );
@@ -1072,23 +1073,71 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const fileName = `parley-conversation-${stamp}.${choice.ext}`;
     const folder = vscode.workspace.workspaceFolders?.[0]?.uri;
+    const filters: Record<string, string[]> =
+      choice.fmt === 'json' ? { JSON: ['json'] } : choice.fmt === 'txt' ? { Text: ['txt'] } : { Markdown: ['md'] };
     const uri = await vscode.window.showSaveDialog({
       defaultUri: folder ? vscode.Uri.joinPath(folder, fileName) : undefined,
       saveLabel: 'Export',
-      filters: choice.json ? { JSON: ['json'] } : { Markdown: ['md'] }
+      filters
     });
     if (!uri) {
       return;
     }
 
-    const content = choice.json ? JSON.stringify(this.history, null, 2) : this.toMarkdown();
+    const content =
+      choice.fmt === 'json'
+        ? JSON.stringify({ metadata: this.conversationMeta(), messages: this.history }, null, 2)
+        : choice.fmt === 'txt'
+          ? this.toPlainText()
+          : this.toMarkdown();
     await vscode.workspace.fs.writeFile(uri, Buffer.from(content, 'utf8'));
     await vscode.commands.executeCommand('vscode.open', uri);
     void vscode.window.showInformationMessage(`Parley conversation exported to ${vscode.workspace.asRelativePath(uri)}.`);
   }
 
+  /** Summary metadata about the conversation, included in every export. */
+  private conversationMeta(): {
+    exportedAt: string;
+    models: string[];
+    mode: ChatMode;
+    thinking: ThinkingLevel;
+    messages: number;
+    sessionTokens: number;
+    estimatedCostUsd: number;
+  } {
+    const models = [
+      ...new Set(this.history.filter((m) => m.role === 'assistant' && m.model).map((m) => m.model as string))
+    ];
+    return {
+      exportedAt: new Date().toISOString(),
+      models: models.length > 0 ? models : [this.selectedAgentId || this.getSettings().defaultAgent],
+      mode: this.mode,
+      thinking: this.selectedThinking,
+      messages: this.history.length,
+      sessionTokens: this.sessionTokens,
+      estimatedCostUsd: this.sessionCost
+    };
+  }
+
+  private metaLines(): { label: string; value: string }[] {
+    const m = this.conversationMeta();
+    return [
+      { label: 'Exported', value: new Date(m.exportedAt).toLocaleString() },
+      { label: 'Model(s)', value: m.models.join(', ') },
+      { label: 'Mode', value: m.mode },
+      { label: 'Extended thinking', value: m.thinking },
+      { label: 'Messages', value: String(m.messages) },
+      { label: 'Session tokens', value: m.sessionTokens.toLocaleString() },
+      { label: 'Estimated cost', value: `~${formatUsd(m.estimatedCostUsd)}` }
+    ];
+  }
+
   private toMarkdown(): string {
-    const lines: string[] = ['# Parley conversation', '', `_Exported ${new Date().toLocaleString()}_`, ''];
+    const lines: string[] = ['# Parley conversation', ''];
+    for (const { label, value } of this.metaLines()) {
+      lines.push(`- **${label}:** ${value}`);
+    }
+    lines.push('');
     for (const message of this.history) {
       if (message.role === 'user') {
         lines.push('## You', '', message.content, '');
@@ -1097,6 +1146,24 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       } else {
         lines.push(`## ${message.role}`, '', message.content, '');
       }
+    }
+    return lines.join('\n');
+  }
+
+  private toPlainText(): string {
+    const lines: string[] = ['Parley conversation'];
+    for (const { label, value } of this.metaLines()) {
+      lines.push(`${label}: ${value}`);
+    }
+    lines.push('', '='.repeat(60), '');
+    for (const message of this.history) {
+      const who =
+        message.role === 'user'
+          ? 'You'
+          : message.role === 'assistant'
+            ? `Parley${message.model ? ` (${message.model})` : ''}`
+            : message.role;
+      lines.push(`### ${who}`, '', message.content, '', '-'.repeat(40), '');
     }
     return lines.join('\n');
   }

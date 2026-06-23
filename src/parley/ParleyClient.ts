@@ -529,6 +529,7 @@ export class ParleyClient implements ParleyProvider {
     let thinking = '';
     let thinkingSignature: string | undefined;
     let usage: TokenUsage | undefined;
+    let finishReason: string | undefined;
     let done = false;
 
     try {
@@ -558,13 +559,25 @@ export class ParleyClient implements ParleyProvider {
                 thinking_signature?: string;
                 tool_calls?: Array<Record<string, unknown>>;
               };
+              finish_reason?: string | null;
             }>;
             usage?: unknown;
+            error?: { message?: string } | string;
           };
           try {
             parsed = JSON.parse(data);
           } catch {
             continue;
+          }
+          // Parley reports mid-stream failures as an SSE error event before [DONE].
+          // Surface it instead of silently finishing with empty content.
+          if (parsed.error) {
+            const detail = typeof parsed.error === 'string' ? parsed.error : parsed.error.message ?? 'unknown error';
+            throw new ParleyApiError(0, `Parley stream error: ${detail}`);
+          }
+          const finish = parsed.choices?.[0]?.finish_reason;
+          if (finish) {
+            finishReason = finish;
           }
           const maybeUsage = parseUsage(parsed);
           if (maybeUsage) {
@@ -614,6 +627,12 @@ export class ParleyClient implements ParleyProvider {
       .sort((a, b) => a[0] - b[0])
       .map(([, value]) => value)
       .filter((value) => value.name.length > 0);
+    if (!content && toolCalls.length === 0) {
+      // Empty model turn — record why so the cause (content_filter, length, etc.) is visible.
+      this.logger.warn(
+        `Empty model response (finish_reason=${finishReason ?? 'none'}, completion_tokens=${usage?.completion ?? 0}).`
+      );
+    }
     return { content, toolCalls, usage, thinking: thinking || undefined, thinkingSignature };
   }
 
@@ -706,6 +725,9 @@ export class ParleyClient implements ParleyProvider {
             return { content: full, usage, thinking: thinking || undefined, thinkingSignature };
           }
           const parsed = this.parseChunk(data);
+          if (parsed.error) {
+            throw new ParleyApiError(0, `Parley stream error: ${parsed.error}`);
+          }
           if (parsed.usage) {
             usage = parsed.usage;
           }
@@ -738,12 +760,17 @@ export class ParleyClient implements ParleyProvider {
     thinking?: string;
     thinkingSignature?: string;
     usage?: TokenUsage;
+    error?: string;
   } {
     try {
       const parsed = JSON.parse(data) as {
         choices?: Array<{ delta?: { content?: string; thinking?: string; thinking_signature?: string } }>;
         usage?: unknown;
+        error?: { message?: string } | string;
       };
+      if (parsed.error) {
+        return { delta: '', error: typeof parsed.error === 'string' ? parsed.error : parsed.error.message ?? 'unknown error' };
+      }
       const delta = parsed.choices?.[0]?.delta;
       return {
         delta: typeof delta?.content === 'string' ? delta.content : '',

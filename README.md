@@ -127,6 +127,7 @@ Multi-change edits offer **Apply All / Choose… / Reject** — "Choose…" lets
 - The conversation (and your model/thinking/agent-mode choices) **persists across reloads** per workspace.
 - **Start a new conversation** with the ＋ button, `/clear`, or **`Parley: New Conversation`** — the previous one is archived first.
 - **Conversations auto-save to disk** as Markdown after every turn. Find them with **`Parley: Open Conversations Folder`**; change the location with `parley.conversationsDir` or turn it off with `parley.autoSaveConversations`.
+- **Export** the conversation (⤓ or **`Parley: Export Conversation`**) as **Markdown, plain text, or JSON** — each includes a metadata header (model(s), mode, thinking level, message count, session tokens, estimated cost).
 - **Past conversations** are also archived in-memory; reopen them with 🕘 or **`Parley: Open Past Conversation`**.
 - Each reply shows a subtle footer with the **model** and **token usage**; the header shows a **running token total**, an **estimated cost** (`~$`), and a **circular context gauge** that fills (green → amber → red) as the conversation approaches the model's context window.
 - **Automatic compaction** is on by default — at 80% of the model's context window the conversation is summarized (keeping recent messages), so it never overflows. Configure with `parley.autoCompactPercent` (`0` disables) / `parley.autoCompactTokens`.

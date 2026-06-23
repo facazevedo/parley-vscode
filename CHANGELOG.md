@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.21.0
+
+### Fixed — silent failures (the GPT-5.5 "empty response" case)
+- **Streamed errors are no longer swallowed.** Parley reports mid-stream provider failures as an SSE `error` event before `[DONE]`; the client ignored it and finished with empty content (which then showed as "empty response and took no actions"). Both streaming paths now surface it as a real error (`Parley stream error: …`), so you see the actual cause.
+- **Empty model turns are logged with `finish_reason` and completion-token count** to the Parley output channel, to distinguish "model genuinely returned nothing" from a content filter / length cut-off / parse issue.
+
+### Changed — richer conversation export
+- The **export** button (and `Parley: Export Conversation`) now writes a **metadata header** — model(s) used, mode, extended-thinking level, message count, session tokens, and estimated cost.
+- New **Plain text (.txt)** export format, alongside Markdown and JSON. JSON export now includes the metadata object too. Auto-saved transcripts get the same header.
+
 ## 0.20.0
 
 ### Added — conversations on disk
