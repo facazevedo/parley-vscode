@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.24.0
+
+### Added
+- **Copy button on your prompts.** Each message you send now shows a copy (two-squares) icon on hover in its top-right corner — click it to copy that prompt's text back to the clipboard (handy for re-running or tweaking a prompt).
+
 ## 0.23.0
 
 ### Fixed — extended thinking is now provider-aware (root cause of the GPT-5.5 failure)

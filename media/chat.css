@@ -24,6 +24,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 .history { flex: 1; overflow: auto; padding: 16px 12px 8px; display: flex; flex-direction: column; gap: 16px; }
 .message { overflow-wrap: anywhere; max-width: 100%; }
 .message.user {
+  position: relative;
   align-self: flex-end;
   max-width: 88%;
   background: var(--vscode-input-background);
@@ -31,6 +32,28 @@ button:disabled { opacity: 0.5; cursor: default; }
   border-radius: 14px 14px 4px 14px;
   padding: 8px 12px;
 }
+.msgcopy {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 3px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-foreground);
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+  opacity: 0;
+  font-size: 0.8em;
+  line-height: 1;
+}
+.message.user:hover .msgcopy { opacity: 0.55; }
+.msgcopy:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.25)); }
+.msgcopy.copied { opacity: 1; color: var(--vscode-charts-green, #3fb950); }
 .message.assistant { align-self: stretch; }
 .content { line-height: 1.55; white-space: pre-wrap; }
 .content pre { position: relative; background: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.15)); padding: 10px 12px; border-radius: 8px; overflow-x: auto; white-space: pre; margin: 8px 0; }
