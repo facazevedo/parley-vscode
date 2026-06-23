@@ -43,18 +43,23 @@ A dedicated Parley view with:
 - `Enter` sends, `Shift+Enter` inserts a newline.
 - Conversation history is sent with each turn for multi-turn context.
 
-### 🧠 Reasoning effort
-An **Effort** dropdown in the chat toolbar (and the `parley.reasoningEffort`
-setting) sends the standard `reasoning_effort` parameter — `minimal`, `low`,
-`medium`, or `high` — with chat, agent-mode, and inline-completion requests.
-`Default` omits the parameter.
+### 🧠 Extended thinking
+Pick a **thinking** level from the **Mode** popover in the composer (or the
+`parley.thinking` setting) to have the model reason step-by-step before it
+answers, via Parley's `thinking` parameter:
 
-> ⚠️ **Not honored by Parley (verified).** Testing across GPT-5, Claude, and Gemini
-> models shows the Parley gateway *accepts* `reasoning_effort` but does **not** apply
-> it — `high` is no slower or heavier than `minimal`, no `reasoning_tokens` are
-> reported, and even an invalid value is accepted. The dropdown is labeled accordingly
-> in-product; it sends the standard parameter so it works automatically if Parley
-> enables it later.
+- **Off** — no extended thinking (default).
+- **Adaptive** — the model decides how much to reason. This is the only mode
+  Bedrock supports for **Claude Opus 4.7**, so Parley for VS Code automatically
+  uses it when you target that model.
+- **Low / Med / High** — a fixed reasoning budget (4,096 / 8,192 / 16,000 tokens).
+  The request's `max_tokens` is raised above the budget so there's room for the
+  actual answer.
+
+The reasoning streams into a collapsible **💭 Thinking** panel above each reply,
+then collapses to **💭 Thought** when the answer begins. Supported on Claude,
+OpenAI reasoning models, and Gemini. Extended thinking increases output-token
+usage (and cost), so it's off by default.
 
 ### ⌨️ Inline (ghost-text) completions
 As you type, Parley suggests a completion at the cursor (Cursor-style ghost text),
@@ -118,7 +123,7 @@ Multi-change edits offer **Apply All / Choose… / Reject** — "Choose…" lets
 > embeddings endpoint; use `@file` mentions or agent mode's `search_text` / `find_files`.
 
 ### 💾 Sessions, history & usage
-- The conversation (and your model/effort/agent-mode choices) **persists across reloads** per workspace.
+- The conversation (and your model/thinking/agent-mode choices) **persists across reloads** per workspace.
 - **Past conversations** are archived when you start a new one; reopen them with 🕘 or **`Parley: Open Past Conversation`**.
 - Each reply shows a subtle footer with the **model** and **token usage**; the header shows a **running token total** for the conversation.
 - **Token limit** — set a per-conversation token budget with **`Parley: Set Token Limit`** (or `parley.tokenLimit`); **`0` = unlimited** (default). When reached, the agent stops and asks you to raise it or start fresh.
@@ -205,7 +210,7 @@ with any model.
 | `parley.endpoint` | `https://parley.api.mit.edu/v1` | OpenAI-compatible API base URL |
 | `parley.defaultAgent` | `bedrock/claude-sonnet-4-6` | Default model id |
 | `parley.stream` | `true` | Stream replies token-by-token |
-| `parley.reasoningEffort` | `default` | `default` \| `minimal` \| `low` \| `medium` \| `high` → `reasoning_effort` |
+| `parley.thinking` | `off` | Extended thinking: `off` \| `adaptive` \| `low` \| `medium` \| `high` → `thinking` parameter |
 | `parley.defaultMode` | `chat` | Default mode: `chat` \| `ask` \| `edit` \| `plan` \| `auto` \| `full` (⚠ runs commands automatically) |
 | `parley.autoContinue` | `true` | Keep working until done (agent modes) without manual "continue" |
 | `parley.maxToolRounds` | `25` | Max tool-call rounds per turn |

@@ -1,3 +1,5 @@
+import type { ThinkingConfig } from './thinking';
+
 export type MessageRole = 'user' | 'assistant' | 'system';
 
 export interface TokenUsage {
@@ -14,6 +16,8 @@ export interface ChatMessage {
   readonly model?: string;
   /** Token usage reported for an assistant message, if available. */
   readonly usage?: TokenUsage;
+  /** Extended-thinking reasoning text, when the model produced any. */
+  readonly thinking?: string;
 }
 
 export interface ContextAttachment {
@@ -34,16 +38,14 @@ export interface ImageAttachment {
   readonly dataUri: string;
 }
 
-/** Reasoning effort level. Empty string means "don't send the parameter". */
-export type ReasoningEffort = '' | 'minimal' | 'low' | 'medium' | 'high';
-
 export interface ChatRequest {
   readonly prompt: string;
   readonly agentId?: string;
   readonly messages: readonly ChatMessage[];
   readonly context: readonly ContextAttachment[];
   readonly images?: readonly ImageAttachment[];
-  readonly reasoningEffort?: ReasoningEffort;
+  /** Extended-thinking configuration; omit to disable reasoning. */
+  readonly thinking?: ThinkingConfig;
   /** Extra system-prompt text (e.g. project rules from .parleyrules / AGENTS.md). */
   readonly systemExtra?: string;
 }
@@ -72,7 +74,6 @@ export interface CompletionRequest {
   readonly suffix: string;
   readonly languageId: string;
   readonly model: string;
-  readonly reasoningEffort?: ReasoningEffort;
 }
 
 /** Image generation request for `gpt-image-1`. */

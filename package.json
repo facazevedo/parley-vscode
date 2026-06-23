@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -160,17 +160,24 @@
           "default": true,
           "markdownDescription": "Stream Parley replies token-by-token in the chat view."
         },
-        "parley.reasoningEffort": {
+        "parley.thinking": {
           "type": "string",
-          "default": "default",
+          "default": "off",
           "enum": [
-            "default",
-            "minimal",
+            "off",
+            "adaptive",
             "low",
             "medium",
             "high"
           ],
-          "markdownDescription": "Reasoning effort sent to the model as `reasoning_effort`. `default` omits the parameter. **Note: the Parley gateway does not currently honor this parameter** (verified across GPT-5, Claude, and Gemini models — no change in behavior). It is sent for forward-compatibility in case Parley enables it."
+          "enumDescriptions": [
+            "No extended thinking (default)",
+            "Adaptive — the model decides how much to reason (required for Claude Opus 4.7 on Bedrock)",
+            "Enabled with a 4,096-token reasoning budget",
+            "Enabled with an 8,192-token reasoning budget",
+            "Enabled with a 16,000-token reasoning budget"
+          ],
+          "markdownDescription": "Extended thinking: makes the model reason step-by-step before answering, sent as the Parley `thinking` parameter. Supported on Claude, OpenAI reasoning models, and Gemini. Enabled levels also raise `max_tokens` to leave room for the answer. Thinking increases output-token usage (and cost). Also switchable from the **Mode** popover in the composer."
         },
         "parley.defaultMode": {
           "type": "string",

@@ -2,6 +2,7 @@ import type { Logger } from '../logging/logger';
 import { renderPromptWithContext } from '../context/renderPromptWithContext';
 import { extractProposedChanges } from '../diff/extractChanges';
 import { cleanCompletion, isContextLengthError, parseUsage } from './parsing';
+import { buildThinkingRequest, type ThinkingConfig } from './thinking';
 import { ParleyAuthStore } from './auth';
 import type { ParleyProvider, SendMessageOptions } from './ParleyProvider';
 import {
@@ -45,6 +46,9 @@ interface OpenAiMessage {
   content?: string | unknown[] | null;
   tool_calls?: ReadonlyArray<{ id: string; type: string; function: { name: string; arguments: string } }>;
   tool_call_id?: string;
+  /** Preserved across tool rounds so providers (Bedrock Claude) accept thinking + tool use. */
+  thinking?: string;
+  thinking_signature?: string;
 }
 
 interface OpenAiModelList {
@@ -54,11 +58,15 @@ interface OpenAiModelList {
 interface ChatCompletionMessage {
   readonly content?: string | null;
   readonly tool_calls?: ReadonlyArray<{ id: string; type: string; function: { name: string; arguments: string } }>;
+  readonly thinking?: string;
+  readonly thinking_signature?: string;
 }
 
 interface CompletionResult {
   readonly content: string;
   readonly usage?: TokenUsage;
+  readonly thinking?: string;
+  readonly thinkingSignature?: string;
 }
 
 const TOOL_OMITTED = '[earlier tool output omitted to save context]';
@@ -120,20 +128,35 @@ export class ParleyClient implements ParleyProvider {
   public async sendMessage(request: ChatRequest, options?: SendMessageOptions): Promise<ChatResponse> {
     const model = request.agentId?.trim() || this.defaultModel;
     const messages = this.buildMessages(request);
-    const effort = request.reasoningEffort || undefined;
+    const thinking = request.thinking;
 
     const useTools = Boolean(options?.tools && options.tools.length > 0 && options.runTool);
     const result = useTools
-      ? await this.runToolLoop(messages, model, options as SendMessageOptions, effort)
-      : await this.singleCompletion(messages, model, options, effort);
+      ? await this.runToolLoop(messages, model, options as SendMessageOptions, thinking)
+      : await this.singleCompletion(messages, model, options, thinking);
 
     const proposedChanges = await extractProposedChanges(result.content);
 
     return {
-      message: { role: 'assistant', content: result.content, createdAt: new Date().toISOString(), usage: result.usage },
+      message: {
+        role: 'assistant',
+        content: result.content,
+        createdAt: new Date().toISOString(),
+        usage: result.usage,
+        thinking: result.thinking || undefined
+      },
       proposedChanges: proposedChanges.length > 0 ? proposedChanges : undefined,
       usage: result.usage
     };
+  }
+
+  /** Add `thinking` + a matching `max_tokens` headroom to a request payload when enabled. */
+  private applyThinking(payload: Record<string, unknown>, model: string, thinking?: ThinkingConfig): void {
+    const t = buildThinkingRequest(model, thinking);
+    if (t) {
+      payload.thinking = t.thinking;
+      payload.max_tokens = t.max_tokens;
+    }
   }
 
   public async complete(request: CompletionRequest, signal?: AbortSignal): Promise<string> {
@@ -150,9 +173,6 @@ export class ParleyClient implements ParleyProvider {
       ],
       stream: false
     };
-    if (request.reasoningEffort) {
-      payload.reasoning_effort = request.reasoningEffort;
-    }
 
     const response = await this.request('/chat/completions', {
       method: 'POST',
@@ -188,13 +208,11 @@ export class ParleyClient implements ParleyProvider {
     messages: OpenAiMessage[],
     model: string,
     options?: SendMessageOptions,
-    effort?: string
+    thinking?: ThinkingConfig
   ): Promise<CompletionResult> {
     const stream = Boolean(options?.onToken);
     const payload: Record<string, unknown> = { model, messages, stream };
-    if (effort) {
-      payload.reasoning_effort = effort;
-    }
+    this.applyThinking(payload, model, thinking);
     if (stream) {
       payload.stream_options = { include_usage: true };
     }
@@ -206,7 +224,7 @@ export class ParleyClient implements ParleyProvider {
     });
 
     if (stream) {
-      const streamed = await this.readStream(response, options?.onToken);
+      const streamed = await this.readStream(response, options?.onToken, options?.onThinking);
       if (streamed.usage) {
         options?.onUsage?.(streamed.usage);
       }
@@ -217,7 +235,16 @@ export class ParleyClient implements ParleyProvider {
     if (usage) {
       options?.onUsage?.(usage);
     }
-    return { content: this.extractContent(json), usage };
+    const message = (json as { choices?: Array<{ message?: ChatCompletionMessage }> }).choices?.[0]?.message;
+    if (message?.thinking) {
+      options?.onThinking?.(message.thinking);
+    }
+    return {
+      content: this.extractContent(json),
+      usage,
+      thinking: message?.thinking,
+      thinkingSignature: message?.thinking_signature
+    };
   }
 
   /** Run the OpenAI tool-calling loop until the model answers or rounds run out. */
@@ -225,7 +252,7 @@ export class ParleyClient implements ParleyProvider {
     messages: OpenAiMessage[],
     model: string,
     options: SendMessageOptions,
-    effort?: string
+    thinking?: ThinkingConfig
   ): Promise<CompletionResult> {
     const convo = [...messages];
     const maxRounds = options.maxToolRounds ?? DEFAULT_MAX_TOOL_ROUNDS;
@@ -240,9 +267,7 @@ export class ParleyClient implements ParleyProvider {
         stream: true,
         stream_options: { include_usage: true }
       };
-      if (effort) {
-        roundPayload.reasoning_effort = effort;
-      }
+      this.applyThinking(roundPayload, model, thinking);
       const response = await this.request('/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -253,18 +278,25 @@ export class ParleyClient implements ParleyProvider {
       // Stream this round live: narration tokens go to onToken; tool calls are
       // reassembled from the streamed deltas. This is what makes the agent's
       // activity appear token-by-token (Claude-Code style).
-      const result = await this.streamRound(response, options.onToken, options.onUsage);
+      const result = await this.streamRound(response, options.onToken, options.onUsage, options.onThinking);
       if (result.usage) {
         lastUsage = result.usage;
       }
 
       if (result.toolCalls.length === 0) {
-        return { content: result.content, usage: lastUsage };
+        return {
+          content: result.content,
+          usage: lastUsage,
+          thinking: result.thinking,
+          thinkingSignature: result.thinkingSignature
+        };
       }
 
       convo.push({
         role: 'assistant',
         content: result.content,
+        ...(result.thinking ? { thinking: result.thinking } : {}),
+        ...(result.thinkingSignature ? { thinking_signature: result.thinkingSignature } : {}),
         tool_calls: result.toolCalls.map((tc) => ({
           id: tc.id,
           type: 'function',
@@ -285,20 +317,35 @@ export class ParleyClient implements ParleyProvider {
 
     // Out of tool rounds: ask once more without tools so the model commits to an answer.
     this.logger.debug(`Tool loop hit ${maxRounds} rounds; requesting a final answer.`);
-    const final = await this.singleCompletion(convo, model, { onToken: options.onToken, signal: options.signal }, effort);
-    return { content: final.content, usage: final.usage ?? lastUsage };
+    const final = await this.singleCompletion(
+      convo,
+      model,
+      { onToken: options.onToken, onThinking: options.onThinking, signal: options.signal },
+      thinking
+    );
+    return { content: final.content, usage: final.usage ?? lastUsage, thinking: final.thinking };
   }
 
   /** Stream one chat-completions round, surfacing text via onToken and reassembling tool calls from deltas. */
   private async streamRound(
     response: Response,
     onToken?: (delta: string) => void,
-    onUsage?: (usage: TokenUsage) => void
-  ): Promise<{ content: string; toolCalls: Array<{ id: string; name: string; arguments: string }>; usage?: TokenUsage }> {
+    onUsage?: (usage: TokenUsage) => void,
+    onThinking?: (delta: string) => void
+  ): Promise<{
+    content: string;
+    toolCalls: Array<{ id: string; name: string; arguments: string }>;
+    usage?: TokenUsage;
+    thinking?: string;
+    thinkingSignature?: string;
+  }> {
     if (!response.body) {
       const json = (await response.json()) as { choices?: Array<{ message?: ChatCompletionMessage }> };
       const message = json.choices?.[0]?.message;
       const text = typeof message?.content === 'string' ? message.content : '';
+      if (message?.thinking) {
+        onThinking?.(message.thinking);
+      }
       if (text) {
         onToken?.(text);
       }
@@ -307,7 +354,13 @@ export class ParleyClient implements ParleyProvider {
         name: t.function?.name ?? '',
         arguments: t.function?.arguments ?? ''
       }));
-      return { content: text, toolCalls, usage: parseUsage(json) };
+      return {
+        content: text,
+        toolCalls,
+        usage: parseUsage(json),
+        thinking: message?.thinking,
+        thinkingSignature: message?.thinking_signature
+      };
     }
 
     const reader = response.body.getReader();
@@ -315,6 +368,8 @@ export class ParleyClient implements ParleyProvider {
     const toolMap = new Map<number, { id: string; name: string; arguments: string }>();
     let buffer = '';
     let content = '';
+    let thinking = '';
+    let thinkingSignature: string | undefined;
     let usage: TokenUsage | undefined;
     let done = false;
 
@@ -338,7 +393,14 @@ export class ParleyClient implements ParleyProvider {
             break;
           }
           let parsed: {
-            choices?: Array<{ delta?: { content?: string; tool_calls?: Array<Record<string, unknown>> } }>;
+            choices?: Array<{
+              delta?: {
+                content?: string;
+                thinking?: string;
+                thinking_signature?: string;
+                tool_calls?: Array<Record<string, unknown>>;
+              };
+            }>;
             usage?: unknown;
           };
           try {
@@ -352,6 +414,13 @@ export class ParleyClient implements ParleyProvider {
             onUsage?.(maybeUsage);
           }
           const delta = parsed.choices?.[0]?.delta;
+          if (typeof delta?.thinking === 'string' && delta.thinking) {
+            thinking += delta.thinking;
+            onThinking?.(delta.thinking);
+          }
+          if (typeof delta?.thinking_signature === 'string' && delta.thinking_signature) {
+            thinkingSignature = delta.thinking_signature;
+          }
           if (typeof delta?.content === 'string' && delta.content) {
             content += delta.content;
             onToken?.(delta.content);
@@ -387,7 +456,7 @@ export class ParleyClient implements ParleyProvider {
       .sort((a, b) => a[0] - b[0])
       .map(([, value]) => value)
       .filter((value) => value.name.length > 0);
-    return { content, toolCalls, usage };
+    return { content, toolCalls, usage, thinking: thinking || undefined, thinkingSignature };
   }
 
   private buildMessages(request: ChatRequest): OpenAiMessage[] {
@@ -434,16 +503,28 @@ export class ParleyClient implements ParleyProvider {
     return typeof content === 'string' ? content : '';
   }
 
-  private async readStream(response: Response, onToken?: (delta: string) => void): Promise<CompletionResult> {
+  private async readStream(
+    response: Response,
+    onToken?: (delta: string) => void,
+    onThinking?: (delta: string) => void
+  ): Promise<CompletionResult> {
     if (!response.body) {
       const json = await response.json();
-      return { content: this.extractContent(json), usage: parseUsage(json) };
+      const message = (json as { choices?: Array<{ message?: ChatCompletionMessage }> }).choices?.[0]?.message;
+      return {
+        content: this.extractContent(json),
+        usage: parseUsage(json),
+        thinking: message?.thinking,
+        thinkingSignature: message?.thinking_signature
+      };
     }
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
     let full = '';
+    let thinking = '';
+    let thinkingSignature: string | undefined;
     let usage: TokenUsage | undefined;
 
     try {
@@ -463,11 +544,18 @@ export class ParleyClient implements ParleyProvider {
           }
           const data = line.slice(5).trim();
           if (data === '[DONE]') {
-            return { content: full, usage };
+            return { content: full, usage, thinking: thinking || undefined, thinkingSignature };
           }
           const parsed = this.parseChunk(data);
           if (parsed.usage) {
             usage = parsed.usage;
+          }
+          if (parsed.thinking) {
+            thinking += parsed.thinking;
+            onThinking?.(parsed.thinking);
+          }
+          if (parsed.thinkingSignature) {
+            thinkingSignature = parsed.thinkingSignature;
           }
           if (parsed.delta) {
             full += parsed.delta;
@@ -483,14 +571,27 @@ export class ParleyClient implements ParleyProvider {
       }
     }
 
-    return { content: full, usage };
+    return { content: full, usage, thinking: thinking || undefined, thinkingSignature };
   }
 
-  private parseChunk(data: string): { delta: string; usage?: TokenUsage } {
+  private parseChunk(data: string): {
+    delta: string;
+    thinking?: string;
+    thinkingSignature?: string;
+    usage?: TokenUsage;
+  } {
     try {
-      const parsed = JSON.parse(data) as { choices?: Array<{ delta?: { content?: string } }>; usage?: unknown };
-      const delta = parsed.choices?.[0]?.delta?.content;
-      return { delta: typeof delta === 'string' ? delta : '', usage: parseUsage(parsed) };
+      const parsed = JSON.parse(data) as {
+        choices?: Array<{ delta?: { content?: string; thinking?: string; thinking_signature?: string } }>;
+        usage?: unknown;
+      };
+      const delta = parsed.choices?.[0]?.delta;
+      return {
+        delta: typeof delta?.content === 'string' ? delta.content : '',
+        thinking: typeof delta?.thinking === 'string' ? delta.thinking : undefined,
+        thinkingSignature: typeof delta?.thinking_signature === 'string' ? delta.thinking_signature : undefined,
+        usage: parseUsage(parsed)
+      };
     } catch {
       this.logger.debug('Skipped an unparseable streaming chunk.');
       return { delta: '' };

@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.12.0
+
+### Added
+- **Extended thinking (reasoning).** Replaces the old no-op "reasoning effort" control with real support for Parley's `thinking` parameter. Choose **Off / Adaptive / Low / Med / High** from the composer's **Mode** popover (or `parley.thinking`). Enabled levels send a fixed reasoning budget (4,096 / 8,192 / 16,000 tokens) and automatically raise `max_tokens` to leave room for the answer; **Adaptive** lets the model decide. The reasoning streams live into a collapsible **💭 Thinking** panel above each reply and persists with the conversation. Supported on Claude, OpenAI reasoning models, and Gemini.
+- Bedrock **Claude Opus 4.7** only supports adaptive thinking, so an "enabled" budget request to that model is transparently coerced to adaptive.
+- Thinking blocks (and their signatures) are now preserved across tool-call rounds so providers that require them (Bedrock Claude) accept follow-up requests.
+
+### Removed
+- The `parley.reasoningEffort` setting and the `reasoning_effort` request parameter, which the Parley gateway does not honor. Use `parley.thinking` instead.
+
+### Fixed
+- **CI** now runs on Node 22 so `node --test`'s glob pattern expands (it was failing on Node 20, which lacks glob support in the test runner).
+
+### Engineering
+- New pure, unit-tested `src/parley/thinking.ts` (level → wire config + provider quirks); 24 unit tests.
+
 ## 0.11.0
 
 ### Added

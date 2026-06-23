@@ -59,8 +59,7 @@ export function registerInlineEditCommand(
                 prompt,
                 messages: [{ role: 'user', content: prompt, createdAt: new Date().toISOString() }],
                 context: [],
-                agentId: settings.defaultAgent,
-                reasoningEffort: settings.reasoningEffort || undefined
+                agentId: settings.defaultAgent
               },
               { signal: controller.signal }
             );

@@ -19,14 +19,8 @@ import type { Logger } from '../logging/logger';
 import type { ParleyProvider } from '../parley/ParleyProvider';
 import { extractMentionPaths } from '../parley/parsing';
 import { AGENT_TOOLS, READ_ONLY_TOOLS, runAgentTool } from '../parley/tools';
-import type {
-  AgentInfo,
-  ChatMessage,
-  ContextAttachment,
-  ImageAttachment,
-  ReasoningEffort,
-  ToolCall
-} from '../parley/types';
+import { normalizeThinkingLevel, resolveThinking, type ThinkingLevel } from '../parley/thinking';
+import type { AgentInfo, ChatMessage, ContextAttachment, ImageAttachment, ToolCall } from '../parley/types';
 
 const PROJECT_RULES_FILES = ['.parleyrules', 'AGENTS.md', '.cursorrules'];
 
@@ -39,7 +33,7 @@ interface ChatPanelMessage {
     | 'contextOptionsChanged'
     | 'agentChanged'
     | 'modeChanged'
-    | 'effortChanged'
+    | 'thinkingChanged'
     | 'attachFiles'
     | 'removeAttachment'
     | 'export'
@@ -51,7 +45,7 @@ interface ChatPanelMessage {
     | 'setApiKey';
   readonly prompt?: string;
   readonly agentId?: string;
-  readonly effort?: string;
+  readonly thinking?: string;
   readonly mode?: string;
   readonly value?: boolean;
   readonly id?: string;
@@ -92,7 +86,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private readonly history: ChatMessage[] = [];
   private agents: readonly AgentInfo[] = [];
   private selectedAgentId = '';
-  private selectedEffort: ReasoningEffort = '';
+  private selectedThinking: ThinkingLevel = 'off';
   private contextOptions: Required<ContextOptions> = { ...DEFAULT_CONTEXT_OPTIONS };
   private mode: ChatMode = 'chat';
   private sessionTokens = 0;
@@ -121,7 +115,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       this.history.push(...savedHistory);
     }
     this.selectedAgentId = this.state.get<string>('parley.selectedAgentId', settings.defaultAgent);
-    this.selectedEffort = normalizeEffort(this.state.get<string>('parley.selectedEffort', settings.reasoningEffort));
+    this.selectedThinking = normalizeThinkingLevel(this.state.get<string>('parley.selectedThinking', settings.thinking));
     this.mode = normalizeMode(this.state.get<string>('parley.mode', settings.defaultMode));
     this.sessionTokens = this.state.get<number>('parley.sessionTokens', 0);
   }
@@ -129,7 +123,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private save(): void {
     void this.state.update('parley.history', this.history);
     void this.state.update('parley.selectedAgentId', this.selectedAgentId);
-    void this.state.update('parley.selectedEffort', this.selectedEffort);
+    void this.state.update('parley.selectedThinking', this.selectedThinking);
     void this.state.update('parley.mode', this.mode);
     void this.state.update('parley.sessionTokens', this.sessionTokens);
   }
@@ -195,9 +189,10 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         this.save();
         await this.postState();
         return;
-      case 'effortChanged':
-        this.selectedEffort = normalizeEffort(message.effort);
+      case 'thinkingChanged':
+        this.selectedThinking = normalizeThinkingLevel(message.thinking);
         this.save();
+        await this.postState();
         return;
       case 'attachFiles':
         await this.pickAttachments();
@@ -376,12 +371,13 @@ export class ChatPanel implements vscode.WebviewViewProvider {
             context: isCont ? [] : context,
             agentId,
             images: isCont || images.length === 0 ? undefined : images,
-            reasoningEffort: this.selectedEffort || undefined,
+            thinking: resolveThinking(this.selectedThinking),
             systemExtra
           },
           {
             signal: this.abortController.signal,
             onToken: useStream ? (delta) => this.post({ type: 'streamDelta', delta }) : undefined,
+            onThinking: useStream ? (delta) => this.post({ type: 'thinkingDelta', delta }) : undefined,
             tools: toolsEnabled ? (this.mode === 'plan' ? READ_ONLY_TOOLS : AGENT_TOOLS) : undefined,
             runTool: toolsEnabled ? (call) => this.runTool(call) : undefined,
             onToolEvent: toolsEnabled
@@ -551,8 +547,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
             prompt,
             messages: [{ role: 'user', content: prompt, createdAt: new Date().toISOString() }],
             context: [],
-            agentId: model,
-            reasoningEffort: this.selectedEffort || undefined
+            agentId: model
           });
           return response.message.content;
         }
@@ -912,7 +907,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       mode: this.mode,
       sessionTokens: this.sessionTokens,
       selectedAgentId: this.selectedAgentId,
-      selectedEffort: this.selectedEffort,
+      selectedThinking: this.selectedThinking,
       contextOptions: this.contextOptions,
       attachments: this.attachments.map((a) => ({ id: a.id, label: a.label, kind: a.kind }))
     });
@@ -978,20 +973,20 @@ export class ChatPanel implements vscode.WebviewViewProvider {
           <button type="button" class="mp-item" data-mode="auto"><span class="mp-name">Auto mode</span><span class="mp-desc">Agent decides and applies edits automatically</span></button>
           <button type="button" class="mp-item" data-mode="full"><span class="mp-name">Full access <span class="mp-caution">⚠ CAUTION</span></span><span class="mp-desc">Auto-applies edits AND runs shell commands without asking</span></button>
           <div class="mp-sep"></div>
-          <div class="mp-head">Reasoning effort <span class="mp-note">— not honored by Parley yet</span></div>
-          <div class="mp-effort">
-            <button type="button" data-effort="">Default</button>
-            <button type="button" data-effort="minimal">Min</button>
-            <button type="button" data-effort="low">Low</button>
-            <button type="button" data-effort="medium">Med</button>
-            <button type="button" data-effort="high">High</button>
+          <div class="mp-head">Extended thinking <span class="mp-note">— Claude, GPT-5, Gemini</span></div>
+          <div class="mp-thinking">
+            <button type="button" data-thinking="off">Off</button>
+            <button type="button" data-thinking="adaptive">Adaptive</button>
+            <button type="button" data-thinking="low">Low</button>
+            <button type="button" data-thinking="medium">Med</button>
+            <button type="button" data-thinking="high">High</button>
           </div>
-          <div class="mp-foot">Shell commands ask before running — except in <strong>Full access</strong> mode.</div>
+          <div class="mp-foot">Thinking shows the model's reasoning before it answers (uses more output tokens). Shell commands ask before running — except in <strong>Full access</strong> mode.</div>
         </div>
         <textarea id="prompt" placeholder="Ask Parley…  (@file to attach · Enter to send · Shift+Enter for newline)"></textarea>
         <div class="actions">
           <select id="agent" class="model" aria-label="Parley model"></select>
-          <button type="button" id="modeBtn" class="modebtn" title="Mode &amp; effort" aria-label="Mode">Chat ▾</button>
+          <button type="button" id="modeBtn" class="modebtn" title="Mode &amp; thinking" aria-label="Mode">Chat ▾</button>
           <button type="button" id="attach" title="Attach files or images" aria-label="Attach files or images">📎</button>
           <span class="grow"></span>
           <button type="button" id="stop" style="display:none">Stop</button>
@@ -1004,10 +999,6 @@ export class ChatPanel implements vscode.WebviewViewProvider {
 </body>
 </html>`;
   }
-}
-
-function normalizeEffort(value: string | undefined): ReasoningEffort {
-  return value === 'minimal' || value === 'low' || value === 'medium' || value === 'high' ? value : '';
 }
 
 function normalizeMode(value: string | undefined): ChatMode {

@@ -51,6 +51,11 @@ button:disabled { opacity: 0.5; cursor: default; }
 .content .seg:empty { display: none; }
 .content .seg:not(:empty) { margin: 0 0 10px; }
 .toolline { font-family: var(--vscode-editor-font-family, monospace); font-size: 0.82em; color: var(--vscode-descriptionForeground); margin: 0 0 10px; padding: 2px 0 2px 9px; border-left: 2px solid var(--vscode-focusBorder); }
+/* Extended-thinking (reasoning) disclosure */
+.thinking { margin: 0 0 10px; border-left: 2px solid var(--vscode-descriptionForeground); padding-left: 9px; }
+.thinking > summary { cursor: pointer; list-style: none; user-select: none; font-size: 0.82em; color: var(--vscode-descriptionForeground); padding: 1px 0; }
+.thinking > summary::-webkit-details-marker { display: none; }
+.thinking .think-body { white-space: pre-wrap; font-size: 0.84em; color: var(--vscode-descriptionForeground); opacity: 0.92; margin-top: 4px; }
 .cursor::after { content: '▍'; opacity: .6; animation: blink 1s steps(2) infinite; margin-left: 1px; }
 @keyframes blink { 50% { opacity: 0; } }
 .empty { color: var(--vscode-descriptionForeground); text-align: center; margin-top: 24px; }
@@ -74,7 +79,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 .chipx { background: transparent; color: inherit; border: 0; padding: 0 3px; border-radius: 8px; line-height: 1; cursor: pointer; }
 .chipx:hover { background: rgba(127, 127, 127, 0.3); }
 
-/* Unified input box: textarea + model/effort/send share one rounded container */
+/* Unified input box: textarea + model/mode/send share one rounded container */
 .inputbox { position: relative; border: 1px solid var(--vscode-input-border); border-radius: 10px; background: var(--vscode-input-background); padding: 6px; display: grid; gap: 6px; }
 .mentions { position: absolute; left: 6px; right: 6px; bottom: calc(100% - 2px); max-height: 180px; overflow: auto; z-index: 5; background: var(--vscode-dropdown-background); border: 1px solid var(--vscode-dropdown-border); border-radius: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); }
 .mention-item { padding: 4px 9px; cursor: pointer; font-family: var(--vscode-editor-font-family, monospace); font-size: 0.85em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -93,16 +98,15 @@ button:disabled { opacity: 0.5; cursor: default; }
 .mp-name { display: block; font-size: 0.92em; }
 .mp-desc { display: block; font-size: 0.78em; opacity: 0.75; }
 .mp-sep { height: 1px; background: var(--vscode-menu-separatorBackground, var(--vscode-sideBar-border)); margin: 5px 4px; }
-.mp-effort { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 6px 4px; }
-.mp-effort button { font-size: 0.8em; padding: 2px 8px; border: 1px solid var(--vscode-dropdown-border); border-radius: 12px; background: transparent; color: inherit; cursor: pointer; }
-.mp-effort button.active { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border-color: var(--vscode-button-background); }
+.mp-thinking { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 6px 4px; }
+.mp-thinking button { font-size: 0.8em; padding: 2px 8px; border: 1px solid var(--vscode-dropdown-border); border-radius: 12px; background: transparent; color: inherit; cursor: pointer; }
+.mp-thinking button.active { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border-color: var(--vscode-button-background); }
 .mp-foot { font-size: 0.74em; color: var(--vscode-descriptionForeground); padding: 4px 8px 2px; }
 .inputbox:focus-within { border-color: var(--vscode-focusBorder); }
 .inputbox textarea { min-height: 54px; resize: vertical; width: 100%; box-sizing: border-box; border: 0; background: transparent; color: var(--vscode-input-foreground); padding: 4px; outline: none; }
 .actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .actions select { color: var(--vscode-dropdown-foreground); background: var(--vscode-dropdown-background); border: 1px solid var(--vscode-dropdown-border); border-radius: 6px; padding: 3px 5px; font-size: 0.85em; min-width: 0; }
 .actions .model { flex: 1 1 110px; }
-.actions .effort { flex: 0 1 auto; }
 .actions #attach { background: transparent; color: var(--vscode-foreground); opacity: 0.8; border: 0; border-radius: 6px; padding: 3px 6px; cursor: pointer; }
 .actions #attach:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.2)); }
 .actions #stop, .actions #sendBtn { border: 0; border-radius: 6px; padding: 5px 12px; cursor: pointer; }

@@ -62,8 +62,7 @@ export class ParleyInlineCompletionProvider implements vscode.InlineCompletionIt
           prefix,
           suffix,
           languageId: document.languageId,
-          model: settings.inlineCompletionModel,
-          reasoningEffort: settings.reasoningEffort
+          model: settings.inlineCompletionModel
         },
         controller.signal
       );

@@ -20,6 +20,8 @@ import type {
  */
 export interface SendMessageOptions {
   readonly onToken?: (delta: string) => void;
+  /** Called for each extended-thinking (reasoning) delta when thinking is enabled. */
+  readonly onThinking?: (delta: string) => void;
   readonly signal?: AbortSignal;
   readonly tools?: readonly ToolDefinition[];
   readonly runTool?: (call: ToolCall) => Promise<string>;

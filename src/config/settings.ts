@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { ReasoningEffort } from '../parley/types';
+import { normalizeThinkingLevel, type ThinkingLevel } from '../parley/thinking';
 
 export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
 
@@ -22,7 +22,7 @@ export interface ParleySettings {
   readonly endpoint: string;
   readonly defaultAgent: string;
   readonly stream: boolean;
-  readonly reasoningEffort: ReasoningEffort;
+  readonly thinking: ThinkingLevel;
   readonly defaultMode: ChatMode;
   readonly autoContinue: boolean;
   readonly maxToolRounds: number;
@@ -50,7 +50,7 @@ export function getSettings(): ParleySettings {
     endpoint: config.get<string>('endpoint', DEFAULT_ENDPOINT).trim() || DEFAULT_ENDPOINT,
     defaultAgent: config.get<string>('defaultAgent', DEFAULT_MODEL).trim() || DEFAULT_MODEL,
     stream: config.get<boolean>('stream', true),
-    reasoningEffort: normalizeEffort(config.get<string>('reasoningEffort', 'default')),
+    thinking: normalizeThinkingLevel(config.get<string>('thinking', 'off')),
     defaultMode: normalizeMode(config.get<string>('defaultMode', 'chat')),
     autoContinue: config.get<boolean>('autoContinue', true),
     maxToolRounds: clampInt(config.get<number>('maxToolRounds', 25), 1, 200),
@@ -67,11 +67,6 @@ export function getSettings(): ParleySettings {
     telemetryEnabled: telemetry.get<boolean>('enabled', false),
     logLevel: config.get<LogLevel>('logLevel', 'info')
   };
-}
-
-/** Map the setting value to a ReasoningEffort; "default" (or anything unknown) means "don't send". */
-function normalizeEffort(value: string): ReasoningEffort {
-  return value === 'minimal' || value === 'low' || value === 'medium' || value === 'high' ? value : '';
 }
 
 function clampInt(value: number, min: number, max: number): number {
