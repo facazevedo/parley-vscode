@@ -132,6 +132,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private sessionTokens = 0;
   private sessionCost = 0;
   private jsonNext = false; // one-shot: request the next reply as a JSON object (/json)
+  private conversationId = ''; // stable id → filename for the auto-saved transcript
   private attachments: PendingAttachment[] = [];
   private busy = false;
   private abortController?: AbortController;
@@ -148,7 +149,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     private readonly logger: Logger,
     private readonly commandDeps: CommandDependencies,
     private readonly state: vscode.Memento,
-    private readonly checkpoints: CheckpointStore
+    private readonly checkpoints: CheckpointStore,
+    private readonly globalStorageUri: vscode.Uri
   ) {
     const settings = this.getSettings();
     // Restore the previous session if present, else fall back to settings defaults.
@@ -161,6 +163,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     this.mode = normalizeMode(this.state.get<string>('parley.mode', settings.defaultMode));
     this.sessionTokens = this.state.get<number>('parley.sessionTokens', 0);
     this.sessionCost = this.state.get<number>('parley.sessionCost', 0);
+    this.conversationId = this.state.get<string>('parley.conversationId', '') || this.newConversationId();
   }
 
   private save(): void {
@@ -170,6 +173,63 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     void this.state.update('parley.mode', this.mode);
     void this.state.update('parley.sessionTokens', this.sessionTokens);
     void this.state.update('parley.sessionCost', this.sessionCost);
+    void this.state.update('parley.conversationId', this.conversationId);
+  }
+
+  private newConversationId(): string {
+    return 'parley-' + new Date().toISOString().replace(/[:.]/g, '-').replace('Z', '');
+  }
+
+  /** Folder where conversations are auto-saved: `parley.conversationsDir`, else extension global storage. */
+  private conversationsDir(): vscode.Uri {
+    const custom = this.getSettings().conversationsDir;
+    return custom ? vscode.Uri.file(custom) : vscode.Uri.joinPath(this.globalStorageUri, 'conversations');
+  }
+
+  /** Write the current conversation to its Markdown file (overwrite). Best-effort. */
+  private async autosaveConversation(): Promise<void> {
+    if (!this.getSettings().autoSaveConversations || this.history.length === 0) {
+      return;
+    }
+    try {
+      const dir = this.conversationsDir();
+      await vscode.workspace.fs.createDirectory(dir);
+      const file = vscode.Uri.joinPath(dir, `${this.conversationId}.md`);
+      await vscode.workspace.fs.writeFile(file, Buffer.from(this.toMarkdown(), 'utf8'));
+    } catch (error) {
+      this.logger.warn(`Could not auto-save conversation: ${error instanceof Error ? error.message : 'unknown'}`);
+    }
+  }
+
+  /** Save & archive the current conversation, then reset to a fresh one. */
+  private async startNewConversation(): Promise<void> {
+    await this.autosaveConversation();
+    this.archiveCurrent();
+    this.history.length = 0;
+    this.attachments = [];
+    this.sessionTokens = 0;
+    this.sessionCost = 0;
+    this.conversationId = this.newConversationId();
+    await this.postState();
+  }
+
+  /** Public entry point for the "New Conversation" command. */
+  public async newConversation(): Promise<void> {
+    this.abortController?.abort();
+    await this.startNewConversation();
+    await vscode.commands.executeCommand('workbench.view.extension.parley');
+    await vscode.commands.executeCommand('parley.chatView.focus');
+  }
+
+  /** Reveal the auto-save folder in the OS file manager. */
+  public async openConversationsFolder(): Promise<void> {
+    const dir = this.conversationsDir();
+    try {
+      await vscode.workspace.fs.createDirectory(dir);
+    } catch {
+      // Directory may already exist.
+    }
+    await vscode.commands.executeCommand('revealFileInOS', dir);
   }
 
   public resolveWebviewView(webviewView: vscode.WebviewView): void {
@@ -215,12 +275,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         return;
       case 'newChat':
         this.abortController?.abort();
-        this.archiveCurrent();
-        this.history.length = 0;
-        this.attachments = [];
-        this.sessionTokens = 0;
-        this.sessionCost = 0;
-        await this.postState();
+        await this.startNewConversation();
         return;
       case 'openHistory':
         await this.openPastConversation();
@@ -312,12 +367,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     switch (cmd) {
       case 'clear':
       case 'new':
-        this.archiveCurrent();
-        this.history.length = 0;
-        this.attachments = [];
-        this.sessionTokens = 0;
-        this.sessionCost = 0;
-        await this.postState();
+        await this.startNewConversation();
         return true;
       case 'compact':
         await this.promptCompact();
@@ -606,6 +656,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       this.busy = false;
       this.abortController = undefined;
       await this.postState();
+      await this.autosaveConversation();
     } catch (error) {
       this.busy = false;
       this.abortController = undefined;
@@ -951,6 +1002,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     } finally {
       this.busy = false;
       await this.postState();
+      await this.autosaveConversation();
     }
   }
 
@@ -985,12 +1037,14 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       return;
     }
     const chosen = sessions[pick.index];
+    await this.autosaveConversation();
     this.archiveCurrent();
     this.history.length = 0;
     this.history.push(...chosen.history);
     this.attachments = [];
     this.sessionTokens = 0;
     this.sessionCost = 0;
+    this.conversationId = this.newConversationId();
     await vscode.commands.executeCommand('workbench.view.extension.parley');
     await vscode.commands.executeCommand('parley.chatView.focus');
     await this.ready;

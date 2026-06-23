@@ -6,6 +6,8 @@ const EXTENSION_ID = 'mit-parley-community.parley-vscode';
 const EXPECTED_COMMANDS = [
   'parley.setApiKey',
   'parley.openChatWindow',
+  'parley.newConversation',
+  'parley.openConversationsFolder',
   'parley.askSelection',
   'parley.exportConversation',
   'parley.compactConversation',

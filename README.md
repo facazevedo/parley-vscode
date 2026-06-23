@@ -125,7 +125,9 @@ Multi-change edits offer **Apply All / Choose… / Reject** — "Choose…" lets
 
 ### 💾 Sessions, history & usage
 - The conversation (and your model/thinking/agent-mode choices) **persists across reloads** per workspace.
-- **Past conversations** are archived when you start a new one; reopen them with 🕘 or **`Parley: Open Past Conversation`**.
+- **Start a new conversation** with the ＋ button, `/clear`, or **`Parley: New Conversation`** — the previous one is archived first.
+- **Conversations auto-save to disk** as Markdown after every turn. Find them with **`Parley: Open Conversations Folder`**; change the location with `parley.conversationsDir` or turn it off with `parley.autoSaveConversations`.
+- **Past conversations** are also archived in-memory; reopen them with 🕘 or **`Parley: Open Past Conversation`**.
 - Each reply shows a subtle footer with the **model** and **token usage**; the header shows a **running token total**, an **estimated cost** (`~$`), and a **circular context gauge** that fills (green → amber → red) as the conversation approaches the model's context window.
 - **Automatic compaction** is on by default — at 80% of the model's context window the conversation is summarized (keeping recent messages), so it never overflows. Configure with `parley.autoCompactPercent` (`0` disables) / `parley.autoCompactTokens`.
 - **`Parley: Show Usage`** reports your account's **real billed spend** for the current month (cost, request count, tokens) from Parley's usage endpoint. Needs your account id (`parley.accountId`, found in the Admin Portal under *My Account* — you're prompted on first use).
@@ -202,6 +204,8 @@ with any model.
 | `Parley: Set Token Limit` | Set the per-conversation token budget |
 | `Parley: Generate Image` | Generate an image with `gpt-image-1` |
 | `Parley: Show Usage` | Show real billed spend for the current month |
+| `Parley: New Conversation` | Save the current chat and start a fresh one |
+| `Parley: Open Conversations Folder` | Reveal the auto-saved transcripts |
 | `Parley: Run Diagnostics` | Probe the live API and report what works |
 | `Parley: Init Project Rules` | Scaffold an AGENTS.md rules file |
 | `Parley: Toggle Inline Completion` | Enable/disable ghost-text completions |

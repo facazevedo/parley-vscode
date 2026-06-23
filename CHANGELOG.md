@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.20.0
+
+### Added — conversations on disk
+- **Conversations auto-save to a folder.** Every conversation is written as a Markdown file after each turn (and on compaction / starting a new one), so your history is preserved outside VS Code. Location defaults to the extension's global-storage `conversations/` folder; override with `parley.conversationsDir`, or disable with `parley.autoSaveConversations`.
+- **`Parley: New Conversation`** command (in addition to the ＋ button and `/clear`) — archives & saves the current chat, then starts a fresh one.
+- **`Parley: Open Conversations Folder`** command — reveals the auto-save folder in your OS file manager.
+
+### Engineering
+- Each conversation has a stable id → filename, so re-saves overwrite the same file as it grows.
+
 ## 0.19.0
 
 ### Fixed — agent behavior (closer to Claude Code)

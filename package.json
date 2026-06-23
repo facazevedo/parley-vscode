@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.19.0",
+  "version": "0.20.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -101,6 +101,16 @@
       {
         "command": "parley.initProjectRules",
         "title": "Parley: Init Project Rules",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.newConversation",
+        "title": "Parley: New Conversation",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.openConversationsFolder",
+        "title": "Parley: Open Conversations Folder",
         "category": "Parley"
       },
       {
@@ -250,6 +260,16 @@
           "default": 0,
           "minimum": 0,
           "markdownDescription": "When the conversation's size exceeds this many tokens, automatically compact (summarize) it before the next turn to control cost and avoid context-window errors. The size is measured with Parley's `/v1/messages/count_tokens` endpoint when available, falling back to a character-based estimate. **`0` disables (default).** (Compaction is lossy — it replaces history with a summary.) The agent loop also trims stale tool outputs automatically regardless of this setting."
+        },
+        "parley.autoSaveConversations": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Automatically save each conversation as a Markdown file after every turn, so your history is preserved on disk. See `parley.conversationsDir` for the location, or run **`Parley: Open Conversations Folder`**."
+        },
+        "parley.conversationsDir": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Folder where conversations are auto-saved. Leave empty to use the extension's global storage folder (open it with **`Parley: Open Conversations Folder`**). Set an absolute path to keep transcripts somewhere you choose."
         },
         "parley.autoCompactPercent": {
           "type": "number",

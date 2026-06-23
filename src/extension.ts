@@ -66,7 +66,8 @@ export function activate(context: vscode.ExtensionContext): void {
     logger,
     commandDeps,
     context.workspaceState,
-    checkpoints
+    checkpoints,
+    context.globalStorageUri
   );
   // Route prompt-style commands into the chat panel so replies stream in-conversation.
   commandDeps.runPrompt = (prompt, options) => chatPanel.submitExternalPrompt(prompt, options);
@@ -86,6 +87,8 @@ export function activate(context: vscode.ExtensionContext): void {
         'Parley is open. To dock it like Codex, drag the Parley view header into the Secondary Side Bar, or use View: Toggle Secondary Side Bar Visibility first.'
       );
     }),
+    vscode.commands.registerCommand('parley.newConversation', () => chatPanel.newConversation()),
+    vscode.commands.registerCommand('parley.openConversationsFolder', () => chatPanel.openConversationsFolder()),
     vscode.commands.registerCommand('parley.exportConversation', () => chatPanel.exportConversation()),
     vscode.commands.registerCommand('parley.compactConversation', () => chatPanel.compactConversation()),
     vscode.commands.registerCommand('parley.regenerate', () => chatPanel.regenerateLast()),
