@@ -126,6 +126,7 @@ Multi-change edits offer **Apply All / Choose… / Reject** — "Choose…" lets
 - The conversation (and your model/thinking/agent-mode choices) **persists across reloads** per workspace.
 - **Past conversations** are archived when you start a new one; reopen them with 🕘 or **`Parley: Open Past Conversation`**.
 - Each reply shows a subtle footer with the **model** and **token usage**; the header shows a **running token total** and an **estimated cost** (`~$`) for the conversation, computed from Parley's published per-model rates.
+- **`Parley: Show Usage`** reports your account's **real billed spend** for the current month (cost, request count, tokens) from Parley's usage endpoint. Needs your account id (`parley.accountId`, found in the Admin Portal under *My Account* — you're prompted on first use).
 - **Token limit** — set a per-conversation token budget with **`Parley: Set Token Limit`** (or `parley.tokenLimit`); **`0` = unlimited** (default). When reached, the agent stops and asks you to raise it or start fresh.
 
 ### 🖋️ Rich replies
@@ -133,7 +134,7 @@ Replies render Markdown — headings, lists, **bold**, links (open externally), 
 
 ### 📎 File & image attachments
 The **📎** button attaches files to your next message:
-- **Text files** are added as context.
+- **Text files** (txt/csv/markdown/html/json/xml/…) are added as context. If a file is larger than `parley.context.maxCharacters`, it's **uploaded via `/v1/files`** on OpenAI/Google so its full contents reach the model (rather than being truncated); on Bedrock/Anthropic it stays inline.
 - **Images** (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.bmp`) are sent as multimodal `image_url` input to vision-capable models (Claude, Gemini, GPT-5).
 - **PDFs** (`.pdf`) are routed per provider: OpenAI/Google models **upload** them to Parley's `/v1/files` endpoint and reference them by id; Bedrock/Anthropic models receive them **inline** as a base64 document block.
 - **Audio** (`.wav`, `.mp3`) is sent as a multimodal `input_audio` block — supported on OpenAI and Google models (Parley warns otherwise).
@@ -197,6 +198,7 @@ with any model.
 | `Parley: Regenerate Last Response` | Re-run the last user message |
 | `Parley: Set Token Limit` | Set the per-conversation token budget |
 | `Parley: Generate Image` | Generate an image with `gpt-image-1` |
+| `Parley: Show Usage` | Show real billed spend for the current month |
 | `Parley: Toggle Inline Completion` | Enable/disable ghost-text completions |
 | `Parley: Export Conversation` | Export the chat to Markdown or JSON |
 | `Parley: Compact Conversation` | Summarize the chat and replace history to free context |

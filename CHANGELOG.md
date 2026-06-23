@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.16.0
+
+### Added
+- **Large text files upload instead of truncate.** When an attached text/CSV/Markdown/HTML/JSON/XML file exceeds the context character cap, it's now **uploaded via `/v1/files`** (OpenAI/Google) and referenced by id so its full contents reach the model — instead of being truncated. Small files stay inline, and on Bedrock/Anthropic (no upload endpoint) files remain inline/truncated as before.
+- **`Parley: Show Usage`** — fetches your account's real billed spend for the current month (`GET /v1/accounts/{accountId}/usage`): cost in USD, request count, and input/output tokens. Reads `parley.accountId` (prompted and saved on first use; find it in the Parley Admin Portal under *My Account*). This is the authoritative figure that complements the in-chat estimate.
+
+### Engineering
+- New `parley.accountId` setting; `ParleyProvider.getUsage`. 34 unit tests.
+
 ## 0.15.0
 
 ### Added

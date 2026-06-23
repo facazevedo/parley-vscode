@@ -22,6 +22,7 @@ import { AGENT_TOOLS, READ_ONLY_TOOLS, runAgentTool } from '../parley/tools';
 import { normalizeThinkingLevel, resolveThinking, type ThinkingLevel } from '../parley/thinking';
 import { estimateCostUsd } from '../parley/pricing';
 import { audioFormatFromExt, audioFormatFromMime, modelSupportsAudio } from '../parley/audio';
+import { documentProviderFor } from '../parley/files';
 import type {
   AgentInfo,
   AudioAttachment,
@@ -70,6 +71,16 @@ interface ChatPanelMessage {
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp']);
 const DOCUMENT_MIME: Record<string, string> = { '.pdf': 'application/pdf' };
+// Upload MIME types for text-family files (per Parley's /v1/files supported types).
+const TEXT_UPLOAD_MIME: Record<string, string> = {
+  '.csv': 'text/csv',
+  '.md': 'text/markdown',
+  '.markdown': 'text/markdown',
+  '.html': 'text/html',
+  '.htm': 'text/html',
+  '.json': 'application/json',
+  '.xml': 'application/xml'
+};
 
 const DEFAULT_CONTEXT_OPTIONS: Required<ContextOptions> = {
   includeSelection: true,
@@ -87,6 +98,10 @@ interface PendingAttachment {
   readonly text?: ContextAttachment;
   readonly document?: DocumentAttachment;
   readonly audio?: AudioAttachment;
+  /** Full text of an attached text file (untruncated) — used to upload large files via /v1/files. */
+  readonly rawText?: string;
+  /** Upload MIME type for an attached text file (e.g. `application/json`). */
+  readonly mimeType?: string;
 }
 
 interface SavedSession {
@@ -362,11 +377,34 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       return;
     }
     const collected = await collectCommandContext(contextOptions, settings);
-    const textAttachments = this.attachments.filter((a) => a.kind === 'text').map((a) => a.text!);
     const mentions = await this.resolveMentions(prompt, settings);
-    const context = [...collected, ...textAttachments, ...mentions];
+    // Large attached text files are uploaded via /v1/files on OpenAI/Google (so they
+    // aren't truncated); small files — and any file on Bedrock/Anthropic, which have no
+    // upload endpoint — stay inline as (possibly truncated) prompt context.
+    const targetModel = this.selectedAgentId || settings.defaultAgent;
+    const uploadProvider = documentProviderFor(targetModel);
+    const inlineText: ContextAttachment[] = [];
+    const uploadedTextDocs: DocumentAttachment[] = [];
+    for (const a of this.attachments) {
+      if (a.kind !== 'text' || !a.text) {
+        continue;
+      }
+      if (a.text.truncated && uploadProvider && a.rawText) {
+        uploadedTextDocs.push({
+          filename: a.label,
+          mimeType: a.mimeType ?? 'text/plain',
+          base64: Buffer.from(a.rawText, 'utf8').toString('base64')
+        });
+      } else {
+        inlineText.push(a.text);
+      }
+    }
+    const context = [...collected, ...inlineText, ...mentions];
     const images = this.attachments.filter((a) => a.kind === 'image').map((a) => a.image!);
-    const documents = this.attachments.filter((a) => a.kind === 'document').map((a) => a.document!);
+    const documents = [
+      ...this.attachments.filter((a) => a.kind === 'document').map((a) => a.document!),
+      ...uploadedTextDocs
+    ];
     const audios = this.attachments.filter((a) => a.kind === 'audio').map((a) => a.audio!);
     const toolsEnabled = this.mode !== 'chat';
     const systemExtra = await this.buildSystemExtra();
@@ -577,6 +615,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
             id,
             label,
             kind: 'text',
+            rawText: raw,
+            mimeType: TEXT_UPLOAD_MIME[ext] ?? 'text/plain',
             text: {
               id,
               kind: 'user-file',

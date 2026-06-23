@@ -142,6 +142,17 @@ export interface AgentInfo {
   readonly description?: string;
 }
 
+/** Account usage summary from `GET /v1/accounts/{accountId}/usage`. */
+export interface UsageSummary {
+  readonly costUsd: number;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly totalTokens: number;
+  readonly interactionsCount: number;
+  readonly periodStart?: string;
+  readonly periodEnd?: string;
+}
+
 /** Raised when no API key is stored, so the UI can offer the sign-in flow. */
 export class ParleyAuthRequiredError extends Error {
   public constructor(message = 'No Parley API key is configured. Run "Parley: Set API Key" to add one.') {

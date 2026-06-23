@@ -8,7 +8,8 @@ import type {
   ImageResult,
   TokenUsage,
   ToolCall,
-  ToolDefinition
+  ToolDefinition,
+  UsageSummary
 } from './types';
 
 /**
@@ -40,5 +41,7 @@ export interface ParleyProvider {
   generateImage(request: ImageRequest, signal?: AbortSignal): Promise<ImageResult>;
   /** Exact prompt-token count via the gateway; `undefined` if the endpoint is unavailable. */
   countTokens(model: string, messages: readonly ChatMessage[], system?: string): Promise<number | undefined>;
+  /** Billed usage summary for an account (current month). */
+  getUsage(accountId: string): Promise<UsageSummary>;
   signOut(): Promise<void>;
 }

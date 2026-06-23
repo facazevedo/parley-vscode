@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -89,6 +89,11 @@
         "category": "Parley"
       },
       {
+        "command": "parley.showUsage",
+        "title": "Parley: Show Usage",
+        "category": "Parley"
+      },
+      {
         "command": "parley.exportConversation",
         "title": "Parley: Export Conversation",
         "category": "Parley"
@@ -149,6 +154,11 @@
           "type": "string",
           "default": "https://parley.api.mit.edu/v1",
           "markdownDescription": "Base URL of the OpenAI-compatible MIT Parley API."
+        },
+        "parley.accountId": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Your Parley account id (e.g. `acc_…`), used by **`Parley: Show Usage`** to fetch real billed spend. Find it in the Parley Admin Portal under **My Account**. You'll be prompted for it on first use."
         },
         "parley.defaultAgent": {
           "type": "string",

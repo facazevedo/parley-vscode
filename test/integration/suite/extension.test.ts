@@ -17,6 +17,7 @@ const EXPECTED_COMMANDS = [
   'parley.generateImage',
   'parley.toggleInlineCompletion',
   'parley.setTokenLimit',
+  'parley.showUsage',
   'parley.signOut'
 ];
 

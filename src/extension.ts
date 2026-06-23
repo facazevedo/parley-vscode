@@ -8,6 +8,7 @@ import { registerGenerateTestsCommand } from './commands/generateTests';
 import { registerInlineEditCommand } from './commands/inlineEdit';
 import { registerRefactorSelectionCommand } from './commands/refactorSelection';
 import { registerSetApiKeyCommand } from './commands/setApiKey';
+import { registerShowUsageCommand } from './commands/showUsage';
 import { registerSignOutCommand } from './commands/signOut';
 import { registerSuggestTerminalCommand } from './commands/suggestTerminalCommand';
 import { registerToggleInlineCompletionCommand } from './commands/toggleInlineCompletion';
@@ -126,6 +127,7 @@ export function activate(context: vscode.ExtensionContext): void {
   registerSuggestTerminalCommand(context, commandDeps);
   registerGenerateImageCommand(context, commandDeps);
   registerToggleInlineCompletionCommand(context);
+  registerShowUsageCommand(context, commandDeps);
   registerSignOutCommand(context, commandDeps);
 }
 

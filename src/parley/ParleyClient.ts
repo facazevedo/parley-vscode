@@ -17,7 +17,8 @@ import {
   type DocumentAttachment,
   type ImageRequest,
   type ImageResult,
-  type TokenUsage
+  type TokenUsage,
+  type UsageSummary
 } from './types';
 
 const SYSTEM_PROMPT = [
@@ -302,6 +303,33 @@ export class ParleyClient implements ParleyProvider {
       throw new ParleyApiError(0, 'Parley returned no image data.');
     }
     return { base64, mimeType: `image/${json.output_format ?? 'png'}` };
+  }
+
+  public async getUsage(accountId: string): Promise<UsageSummary> {
+    const response = await this.request(`/accounts/${encodeURIComponent(accountId)}/usage`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const json = (await response.json()) as Record<string, number | string | undefined>;
+    const num = (...keys: string[]): number => {
+      for (const k of keys) {
+        if (typeof json[k] === 'number') {
+          return json[k] as number;
+        }
+      }
+      return 0;
+    };
+    const inputTokens = num('totalInputTokens', 'totalPromptTokens');
+    const outputTokens = num('totalOutputTokens', 'totalCompletionTokens');
+    return {
+      costUsd: num('costUsd'),
+      inputTokens,
+      outputTokens,
+      totalTokens: num('totalTokens') || inputTokens + outputTokens,
+      interactionsCount: num('interactionsCount'),
+      periodStart: typeof json.periodStart === 'string' ? json.periodStart : undefined,
+      periodEnd: typeof json.periodEnd === 'string' ? json.periodEnd : undefined
+    };
   }
 
   public async signOut(): Promise<void> {
