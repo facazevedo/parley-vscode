@@ -486,6 +486,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       let auto = 0;
       let continuation: string | null = null; // null = first send (real prompt + context)
       for (;;) {
+        const stepActions: string[] = []; // tool activity for this step (persisted if the model doesn't narrate)
         if (useStream) {
           this.post({ type: 'streamStart' });
         }
@@ -515,7 +516,10 @@ export class ChatPanel implements vscode.WebviewViewProvider {
             tools: toolsEnabled ? (this.mode === 'plan' ? READ_ONLY_TOOLS : AGENT_TOOLS) : undefined,
             runTool: toolsEnabled ? (call) => this.runTool(call) : undefined,
             onToolEvent: toolsEnabled
-              ? (event) => this.post({ type: 'toolEvent', name: event.name, args: event.args })
+              ? (event) => {
+                  stepActions.push(this.describeToolEvent(event.name, event.args));
+                  this.post({ type: 'toolEvent', name: event.name, args: event.args });
+                }
               : undefined,
             onUsage: (usage) => {
               turnTokens += usage.total;
@@ -535,8 +539,31 @@ export class ChatPanel implements vscode.WebviewViewProvider {
           }
         );
 
-        const done = /<DONE>/i.test(response.message.content);
-        const cleaned = response.message.content.replace(/<DONE>/gi, '').trimEnd();
+        const rawContent = response.message.content;
+        const done = /<DONE>/i.test(rawContent);
+        let cleaned = rawContent.replace(/<DONE>/gi, '').trimEnd();
+        const madeProgress = cleaned.trim().length > 0 || stepActions.length > 0;
+
+        if (!madeProgress) {
+          // Empty response with no tool actions: don't render a blank bubble or keep looping.
+          this.history.push({
+            role: 'assistant',
+            content: canAutoContinue
+              ? '⏸ Stopped: the model returned an empty response and took no actions. Try rephrasing, switching models, or another mode.'
+              : '_(The model returned an empty response.)_',
+            createdAt: new Date().toISOString(),
+            model: agentId
+          });
+          this.post({ type: 'streamEnd' });
+          await this.postState();
+          break;
+        }
+
+        // If the model worked through tools but didn't narrate, persist a summary of what it did
+        // so the conversation and exports aren't blank (Claude-Code-style activity log).
+        if (!cleaned.trim()) {
+          cleaned = stepActions.map((a) => `⏺ ${a}`).join('\n');
+        }
         this.history.push({ ...response.message, content: cleaned, model: agentId });
         this.post({ type: 'streamEnd' });
         await this.postState();
@@ -601,9 +628,40 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         'You are in PLAN mode. Do NOT edit files or run commands. Use the read-only tools to explore the codebase, then present a concise, numbered plan of the changes you would make.';
     } else if (this.mode !== 'chat') {
       modeNote =
-        'You are an autonomous coding agent in VS Code. Keep working — read files (use read_file start_line/end_line for large files), search, edit (use edit_file for precise changes to existing files, write_file for new ones), and run commands — until the user\'s request is FULLY complete. Do not stop to ask whether to continue or wait for confirmation. When the entire task is finished, end your final message with <DONE> on its own line.';
+        'You are an autonomous coding agent in VS Code. Keep working — read files (use read_file start_line/end_line for large files), search, edit (use edit_file for precise changes to existing files, write_file for new ones), and run commands — until the user\'s request is FULLY complete. Do not stop to ask whether to continue or wait for confirmation.\n\n' +
+        'IMPORTANT — always communicate in plain text as you work: before each tool call, write a short sentence saying what you are about to do and why; after finishing a logical chunk, summarize what changed. NEVER reply with only tool calls and no text, and never return an empty message. When the entire task is finished, give a brief summary of everything you did and end your final message with <DONE> on its own line.';
     }
     return [rules, modeNote].filter(Boolean).join('\n\n') || undefined;
+  }
+
+  /** Short human label for a tool call, used to persist an activity log when the model doesn't narrate. */
+  private describeToolEvent(name: string, argsJson: string): string {
+    let a: { path?: string; glob?: string; query?: string; command?: string; url?: string } = {};
+    try {
+      a = JSON.parse(argsJson || '{}');
+    } catch {
+      a = {};
+    }
+    switch (name) {
+      case 'read_file':
+        return `Read ${a.path ?? ''}`.trim();
+      case 'list_directory':
+        return `List ${a.path ?? '.'}`;
+      case 'find_files':
+        return `Find ${a.glob ?? ''}`.trim();
+      case 'search_text':
+        return `Search "${a.query ?? ''}"`;
+      case 'write_file':
+        return `Write ${a.path ?? ''}`.trim();
+      case 'edit_file':
+        return `Edit ${a.path ?? ''}`.trim();
+      case 'run_command':
+        return `Run: ${a.command ?? ''}`.trim();
+      case 'fetch_url':
+        return `Fetch ${a.url ?? ''}`.trim();
+      default:
+        return name;
+    }
   }
 
   private async pickAttachments(): Promise<void> {

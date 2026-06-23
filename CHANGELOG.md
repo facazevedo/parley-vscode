@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.19.0
+
+### Fixed — agent behavior (closer to Claude Code)
+- **No more empty assistant turns.** When the model works through tools but doesn't narrate (common with GPT-5.x), Parley now persists a Claude-Code-style activity log into the message (`⏺ Read App.tsx`, `⏺ Write src/lib/…`, `⏺ Run: npm test`) instead of leaving a blank bubble — so the conversation and exports show what actually happened.
+- **No-progress breaker for auto-continue.** A step that returns no text *and* takes no tool actions now stops immediately with a clear message, instead of looping up to the 25-step cap producing empty turns (the failure seen when building a large project with GPT-5.5).
+- **Stronger narration instruction** in agent modes: the model is told to explain each action in plain text, never reply with only tool calls or an empty message, and summarize at the end before `<DONE>`.
+
 ## 0.18.0
 
 ### Added — context management (Claude Code / Codex parity)
