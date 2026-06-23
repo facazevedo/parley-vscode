@@ -50,6 +50,14 @@ export interface DocumentAttachment {
   readonly base64: string;
 }
 
+/** An audio clip attached to a chat turn, sent as an `input_audio` block (OpenAI/Google only). */
+export interface AudioAttachment {
+  readonly label: string;
+  readonly format: 'wav' | 'mp3';
+  /** Base64-encoded audio bytes (no data-URI prefix). */
+  readonly base64: string;
+}
+
 export interface ChatRequest {
   readonly prompt: string;
   readonly agentId?: string;
@@ -58,6 +66,8 @@ export interface ChatRequest {
   readonly images?: readonly ImageAttachment[];
   /** Documents (e.g. PDFs) to attach to the latest user turn. */
   readonly documents?: readonly DocumentAttachment[];
+  /** Audio clips to attach to the latest user turn (OpenAI/Google only). */
+  readonly audios?: readonly AudioAttachment[];
   /** Extended-thinking configuration; omit to disable reasoning. */
   readonly thinking?: ThinkingConfig;
   /** OpenAI-style `response_format` (e.g. `{ type: 'json_object' }`) to constrain output. */
@@ -97,6 +107,8 @@ export interface ImageRequest {
   readonly prompt: string;
   readonly size: string;
   readonly model: string;
+  /** Output quality: `low` | `medium` | `high` | `auto`. */
+  readonly quality?: string;
 }
 
 export interface ImageResult {

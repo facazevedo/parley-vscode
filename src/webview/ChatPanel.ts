@@ -21,8 +21,10 @@ import { extractMentionPaths } from '../parley/parsing';
 import { AGENT_TOOLS, READ_ONLY_TOOLS, runAgentTool } from '../parley/tools';
 import { normalizeThinkingLevel, resolveThinking, type ThinkingLevel } from '../parley/thinking';
 import { estimateCostUsd } from '../parley/pricing';
+import { audioFormatFromExt, audioFormatFromMime, modelSupportsAudio } from '../parley/audio';
 import type {
   AgentInfo,
+  AudioAttachment,
   ChatMessage,
   ContextAttachment,
   DocumentAttachment,
@@ -80,10 +82,11 @@ const DEFAULT_CONTEXT_OPTIONS: Required<ContextOptions> = {
 interface PendingAttachment {
   readonly id: string;
   readonly label: string;
-  readonly kind: 'image' | 'text' | 'document';
+  readonly kind: 'image' | 'text' | 'document' | 'audio';
   readonly image?: ImageAttachment;
   readonly text?: ContextAttachment;
   readonly document?: DocumentAttachment;
+  readonly audio?: AudioAttachment;
 }
 
 interface SavedSession {
@@ -364,6 +367,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     const context = [...collected, ...textAttachments, ...mentions];
     const images = this.attachments.filter((a) => a.kind === 'image').map((a) => a.image!);
     const documents = this.attachments.filter((a) => a.kind === 'document').map((a) => a.document!);
+    const audios = this.attachments.filter((a) => a.kind === 'audio').map((a) => a.audio!);
     const toolsEnabled = this.mode !== 'chat';
     const systemExtra = await this.buildSystemExtra();
     const responseFormat = this.jsonNext ? { type: 'json_object' } : undefined;
@@ -394,6 +398,11 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         `${agentId} may not accept images. For image input, pick a Claude, Gemini, or GPT-5 model.`
       );
     }
+    if (audios.length > 0 && !modelSupportsAudio(agentId)) {
+      void vscode.window.showWarningMessage(
+        `${agentId} does not accept audio. Audio input works only on OpenAI and Google models.`
+      );
+    }
 
     let turnTokens = 0;
     const cpStart = this.checkpoints.size;
@@ -420,6 +429,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
             agentId,
             images: isCont || images.length === 0 ? undefined : images,
             documents: isCont || documents.length === 0 ? undefined : documents,
+            audios: isCont || audios.length === 0 ? undefined : audios,
             thinking: resolveThinking(this.selectedThinking),
             responseFormat,
             systemExtra
@@ -552,6 +562,14 @@ export class ChatPanel implements vscode.WebviewViewProvider {
             kind: 'document',
             document: { filename: label, mimeType: DOCUMENT_MIME[ext], base64 }
           });
+        } else if (audioFormatFromExt(ext)) {
+          const base64 = Buffer.from(bytes).toString('base64');
+          this.attachments.push({
+            id,
+            label,
+            kind: 'audio',
+            audio: { label, format: audioFormatFromExt(ext)!, base64 }
+          });
         } else {
           const raw = Buffer.from(bytes).toString('utf8');
           const content = raw.length > maxChars ? raw.slice(0, maxChars) : raw;
@@ -589,13 +607,18 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       return;
     }
     const id = `att-${Date.now()}-${this.attachments.length}`;
-    if (/^data:image\/[a-z0-9.+-]+;base64,/i.test(dataUri)) {
+    const mime = dataUri.slice(5, dataUri.indexOf(';') > 0 ? dataUri.indexOf(';') : 5).toLowerCase();
+    const base64 = dataUri.slice(dataUri.indexOf(',') + 1);
+    const audioFormat = audioFormatFromMime(mime);
+    if (/^image\//.test(mime)) {
       const label = name && name.trim() ? name.trim() : `pasted-image-${this.attachments.length + 1}.png`;
       this.attachments.push({ id, label, kind: 'image', image: { label, dataUri } });
-    } else if (/^data:application\/pdf;base64,/i.test(dataUri)) {
+    } else if (mime === 'application/pdf') {
       const label = name && name.trim() ? name.trim() : `pasted-${this.attachments.length + 1}.pdf`;
-      const base64 = dataUri.slice(dataUri.indexOf(',') + 1);
       this.attachments.push({ id, label, kind: 'document', document: { filename: label, mimeType: 'application/pdf', base64 } });
+    } else if (audioFormat) {
+      const label = name && name.trim() ? name.trim() : `pasted-${this.attachments.length + 1}.${audioFormat}`;
+      this.attachments.push({ id, label, kind: 'audio', audio: { label, format: audioFormat, base64 } });
     } else {
       return;
     }
@@ -1077,7 +1100,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
           </div>
           <div class="mp-foot">Thinking shows the model's reasoning before it answers (uses more output tokens). Shell commands ask before running — except in <strong>Full access</strong> mode.</div>
         </div>
-        <textarea id="prompt" placeholder="Ask Parley…  (@file to attach · paste or drop an image · Enter to send · Shift+Enter for newline)"></textarea>
+        <textarea id="prompt" placeholder="Ask Parley…  (@file to attach · paste or drop an image/PDF/audio · Enter to send · Shift+Enter for newline)"></textarea>
         <div class="actions">
           <select id="agent" class="model" aria-label="Parley model"></select>
           <button type="button" id="modeBtn" class="modebtn" title="Mode &amp; thinking" aria-label="Mode">Chat ▾</button>

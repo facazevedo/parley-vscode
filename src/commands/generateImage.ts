@@ -4,6 +4,7 @@ import { reportProviderError } from './common';
 
 const IMAGE_MODEL = 'openai/gpt-image-1';
 const SIZES = ['1024x1024', '1536x1024', '1024x1536', 'auto'];
+const QUALITIES = ['auto', 'low', 'medium', 'high'];
 
 export function registerGenerateImageCommand(context: vscode.ExtensionContext, deps: CommandDependencies): void {
   context.subscriptions.push(
@@ -25,6 +26,14 @@ export function registerGenerateImageCommand(context: vscode.ExtensionContext, d
         return;
       }
 
+      const quality = await vscode.window.showQuickPick(QUALITIES, {
+        title: 'Image quality',
+        placeHolder: 'Higher quality costs more (auto lets the model decide)'
+      });
+      if (!quality) {
+        return;
+      }
+
       const uri = await chooseSaveUri(prompt);
       if (!uri) {
         return;
@@ -38,7 +47,7 @@ export function registerGenerateImageCommand(context: vscode.ExtensionContext, d
             token.onCancellationRequested(() => controller.abort());
 
             const result = await deps.getProvider().generateImage(
-              { prompt: prompt.trim(), size, model: IMAGE_MODEL },
+              { prompt: prompt.trim(), size, quality, model: IMAGE_MODEL },
               controller.signal
             );
             await vscode.workspace.fs.writeFile(uri, Buffer.from(result.base64, 'base64'));

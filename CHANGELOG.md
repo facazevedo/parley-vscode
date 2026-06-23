@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.15.0
+
+### Added
+- **Audio input.** Attach a `.wav` or `.mp3` (via 📎, paste, or drag-and-drop) and it's sent as a multimodal `input_audio` block. Audio works only on OpenAI and Google models, so Parley warns if you attach audio to a Bedrock/Anthropic model. Completes multimodal support (image + PDF + audio). New pure, tested `src/parley/audio.ts`.
+- **Image-generation quality.** `Parley: Generate Image` now asks for a quality (`auto` / `low` / `medium` / `high`) and passes it to `gpt-image-1`.
+- **Friendlier errors** for HTTP **402** (insufficient credits/budget) and **502** (upstream provider error), per the Error Handling docs.
+
+### Engineering
+- 3 new unit tests for audio classification/gating (now 34 unit tests).
+
 ## 0.14.0
 
 ### Added

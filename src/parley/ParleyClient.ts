@@ -286,7 +286,13 @@ export class ParleyClient implements ParleyProvider {
     const response = await this.request('/images/generations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: request.model, prompt: request.prompt, n: 1, size: request.size }),
+      body: JSON.stringify({
+        model: request.model,
+        prompt: request.prompt,
+        n: 1,
+        size: request.size,
+        ...(request.quality ? { quality: request.quality } : {})
+      }),
       signal
     });
 
@@ -579,6 +585,10 @@ export class ParleyClient implements ParleyProvider {
         const text = renderPromptWithContext(message.content, request.context);
         const extras: unknown[] = [
           ...(request.images ?? []).map((image) => ({ type: 'image_url', image_url: { url: image.dataUri } })),
+          ...(request.audios ?? []).map((audio) => ({
+            type: 'input_audio',
+            input_audio: { data: audio.base64, format: audio.format }
+          })),
           ...documentParts
         ];
         if (extras.length > 0) {
@@ -742,8 +752,14 @@ export class ParleyClient implements ParleyProvider {
     if (response.status === 401 || response.status === 403) {
       return 'Parley rejected the API key (HTTP ' + response.status + '). Run "Parley: Set API Key" to update it.';
     }
+    if (response.status === 402) {
+      return 'Parley reports insufficient credits or budget (HTTP 402). Contact your MIT IS&T administrator to add credits.';
+    }
     if (response.status === 429) {
       return 'Parley rate limit reached (HTTP 429). Please wait a moment and retry.';
+    }
+    if (response.status === 502) {
+      return `The upstream model provider returned an error (HTTP 502)${detail ? `: ${detail.slice(0, 200)}` : ''}. This is usually transient — retry in a moment.`;
     }
     if (isContextLengthError(response.status, detail)) {
       return 'This conversation is too long for the model\'s context window. Run "Parley: Compact Conversation" (⊟) or start a new chat, then retry.';

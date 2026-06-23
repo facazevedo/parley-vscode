@@ -136,8 +136,9 @@ The **📎** button attaches files to your next message:
 - **Text files** are added as context.
 - **Images** (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.bmp`) are sent as multimodal `image_url` input to vision-capable models (Claude, Gemini, GPT-5).
 - **PDFs** (`.pdf`) are routed per provider: OpenAI/Google models **upload** them to Parley's `/v1/files` endpoint and reference them by id; Bedrock/Anthropic models receive them **inline** as a base64 document block.
+- **Audio** (`.wav`, `.mp3`) is sent as a multimodal `input_audio` block — supported on OpenAI and Google models (Parley warns otherwise).
 
-You can also **paste a screenshot** (Ctrl/Cmd+V) or **drag-and-drop an image or PDF** straight onto the composer — no dialog needed. Attachments show as removable chips and are cleared after sending.
+You can also **paste a screenshot** (Ctrl/Cmd+V) or **drag-and-drop an image, PDF, or audio file** straight onto the composer — no dialog needed. Attachments show as removable chips and are cleared after sending.
 
 ### 🎨 Image generation
 **`Parley: Generate Image`** prompts for a description and size, calls
