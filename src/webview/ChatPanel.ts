@@ -24,6 +24,7 @@ import { audioFormatFromExt, audioFormatFromMime, modelSupportsAudio } from '../
 import { documentProviderFor } from '../parley/files';
 import { contextWindowFor, modelSupportsThinking } from '../parley/models';
 import { estimateCostUsd, formatUsd } from '../parley/pricing';
+import { dbg } from '../debug/debug';
 import {
   extractAudioMp3,
   extractFrames,
@@ -531,6 +532,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     let turnTokens = 0;
     const cpStart = this.checkpoints.size;
     this.post({ type: 'tokens', total: 0 });
+    dbg('turn', 'start', { agentId, mode: this.mode, toolsEnabled, canAutoContinue, stream: useStream, thinking: this.selectedThinking });
 
     try {
       let auto = 0;
@@ -593,6 +595,14 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         const done = /<DONE>/i.test(rawContent);
         let cleaned = rawContent.replace(/<DONE>/gi, '').trimEnd();
         const madeProgress = cleaned.trim().length > 0 || stepActions.length > 0;
+        dbg('turn', 'send complete', {
+          auto,
+          contentChars: cleaned.length,
+          toolActions: stepActions.length,
+          madeProgress,
+          done,
+          aborted: this.abortController.signal.aborted
+        });
 
         if (!madeProgress) {
           // Empty response with no tool actions: don't render a blank bubble or keep looping.

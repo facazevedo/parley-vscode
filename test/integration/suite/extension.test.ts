@@ -8,6 +8,7 @@ const EXPECTED_COMMANDS = [
   'parley.openChatWindow',
   'parley.newConversation',
   'parley.openConversationsFolder',
+  'parley.openDebugLog',
   'parley.askSelection',
   'parley.exportConversation',
   'parley.compactConversation',

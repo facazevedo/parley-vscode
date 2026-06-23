@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.22.0
+
+### Added — debug tracing
+- A globally-gated debug logger (single `DEBUG` switch in `src/debug/debug.ts`, **currently on**). When enabled, verbose traces of request shapes, response metadata (`x-parley-provider`/`x-parley-model`/`x-parley-request-id`, `finish_reason`, usage), tool rounds, and turn control-flow are written to the **"Parley Debug"** output channel and to `debug/parley-debug.log` in the open workspace.
+- **`Parley: Open Debug Log`** command opens that file. Secrets (API key / `Authorization`) are never logged. See `debug/README.md`.
+
 ## 0.21.0
 
 ### Fixed — silent failures (the GPT-5.5 "empty response" case)

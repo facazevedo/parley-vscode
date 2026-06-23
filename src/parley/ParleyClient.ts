@@ -4,6 +4,7 @@ import { extractProposedChanges } from '../diff/extractChanges';
 import { cleanCompletion, isContextLengthError, parseUsage } from './parsing';
 import { buildThinkingRequest, type ThinkingConfig } from './thinking';
 import { documentProviderFor } from './files';
+import { dbg } from '../debug/debug';
 import { ParleyAuthStore } from './auth';
 import type { ParleyProvider, SendMessageOptions } from './ParleyProvider';
 import {
@@ -130,6 +131,18 @@ export class ParleyClient implements ParleyProvider {
 
   public async sendMessage(request: ChatRequest, options?: SendMessageOptions): Promise<ChatResponse> {
     const model = request.agentId?.trim() || this.defaultModel;
+    dbg('client', 'sendMessage', {
+      model,
+      messages: request.messages.length,
+      contextItems: request.context.length,
+      images: request.images?.length ?? 0,
+      documents: request.documents?.length ?? 0,
+      audios: request.audios?.length ?? 0,
+      thinking: request.thinking?.type ?? 'off',
+      responseFormat: request.responseFormat ? Object.keys(request.responseFormat) : undefined,
+      tools: Boolean(options?.tools && options.runTool),
+      stream: Boolean(options?.onToken)
+    });
     const { parts: documentParts, uploadedIds } = await this.prepareDocumentParts(
       model,
       request.documents ?? [],
@@ -416,6 +429,7 @@ export class ParleyClient implements ParleyProvider {
 
     let lastUsage: TokenUsage | undefined;
     for (let round = 0; round < maxRounds; round += 1) {
+      dbg('toolloop', `round ${round + 1}/${maxRounds}`, { convoMessages: convo.length });
       trimOldToolMessages(convo, 8); // keep the convo from ballooning across many tool rounds
       const roundPayload: Record<string, unknown> = {
         model,
@@ -462,12 +476,14 @@ export class ParleyClient implements ParleyProvider {
       });
       for (const tc of result.toolCalls) {
         options.onToolEvent?.({ name: tc.name, args: tc.arguments });
+        dbg('tool', `call ${tc.name}`, tc.arguments?.slice(0, 300));
         let toolResult: string;
         try {
           toolResult = await options.runTool!({ id: tc.id, name: tc.name, arguments: tc.arguments });
         } catch (error) {
           toolResult = `Error: ${error instanceof Error ? error.message : 'tool failed'}`;
         }
+        dbg('tool', `result ${tc.name}`, { chars: toolResult.length });
         convo.push({ role: 'tool', tool_call_id: tc.id, content: toolResult.slice(0, MAX_TOOL_RESULT_CHARS) });
       }
     }
@@ -627,6 +643,13 @@ export class ParleyClient implements ParleyProvider {
       .sort((a, b) => a[0] - b[0])
       .map(([, value]) => value)
       .filter((value) => value.name.length > 0);
+    dbg('stream', 'round complete', {
+      contentChars: content.length,
+      thinkingChars: thinking.length,
+      toolCalls: toolCalls.map((t) => t.name),
+      finishReason: finishReason ?? null,
+      usage
+    });
     if (!content && toolCalls.length === 0) {
       // Empty model turn — record why so the cause (content_filter, length, etc.) is visible.
       this.logger.warn(
@@ -791,6 +814,7 @@ export class ParleyClient implements ParleyProvider {
     }
 
     const url = `${this.baseUrl}${pathSuffix}`;
+    dbg('request', `${init.method ?? 'GET'} ${pathSuffix}`);
     let response: Response;
     try {
       response = await fetch(url, {
@@ -803,8 +827,17 @@ export class ParleyClient implements ParleyProvider {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'network error';
+      dbg('request', `network error for ${pathSuffix}`, message);
       throw new ParleyApiError(0, `Could not reach Parley at ${this.baseUrl} (${message}). Check your network or VPN.`);
     }
+
+    // Response metadata is invaluable for diagnosing which provider/model actually handled a request.
+    dbg('request', `← ${response.status} ${pathSuffix}`, {
+      provider: response.headers.get('x-parley-provider') ?? undefined,
+      model: response.headers.get('x-parley-model') ?? undefined,
+      requestId: response.headers.get('x-parley-request-id') ?? undefined,
+      cost: response.headers.get('x-parley-v1-cost') ?? undefined
+    });
 
     if (!response.ok) {
       throw new ParleyApiError(response.status, await this.describeError(response));

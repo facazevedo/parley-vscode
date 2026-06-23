@@ -16,6 +16,7 @@ import { registerSuggestTerminalCommand } from './commands/suggestTerminalComman
 import { registerToggleInlineCompletionCommand } from './commands/toggleInlineCompletion';
 import { ParleyInlineCompletionProvider } from './completion/inlineCompletionProvider';
 import { getSettings } from './config/settings';
+import { dbg, debugLogPath, initDebug } from './debug/debug';
 import { CheckpointStore } from './diff/checkpoints';
 import { ProposedContentProvider } from './diff/showDiff';
 import { Logger } from './logging/logger';
@@ -25,6 +26,7 @@ import type { ParleyProvider } from './parley/ParleyProvider';
 import { ChatPanel } from './webview/ChatPanel';
 
 export function activate(context: vscode.ExtensionContext): void {
+  initDebug(context);
   const logger = new Logger();
   const auth = new ParleyAuthStore(context.secrets);
   const diffProvider = new ProposedContentProvider();
@@ -33,6 +35,7 @@ export function activate(context: vscode.ExtensionContext): void {
   let provider: ParleyProvider = createParleyProvider(settings, auth, logger);
   logger.setLevel(settings.logLevel);
   logger.info(`Activated Parley extension with provider: ${provider.id}`);
+  dbg('activate', 'extension activated', { endpoint: settings.endpoint, defaultAgent: settings.defaultAgent, mode: settings.defaultMode });
   context.subscriptions.push(logger);
 
   const refreshConfiguration = (): void => {
@@ -89,6 +92,19 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('parley.newConversation', () => chatPanel.newConversation()),
     vscode.commands.registerCommand('parley.openConversationsFolder', () => chatPanel.openConversationsFolder()),
+    vscode.commands.registerCommand('parley.openDebugLog', async () => {
+      const file = debugLogPath();
+      if (!file) {
+        await vscode.window.showInformationMessage('Parley debug logging is off (set DEBUG in src/debug/debug.ts).');
+        return;
+      }
+      try {
+        const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+        await vscode.window.showTextDocument(doc, { preview: false });
+      } catch {
+        await vscode.window.showInformationMessage(`Parley debug log not created yet: ${file}`);
+      }
+    }),
     vscode.commands.registerCommand('parley.exportConversation', () => chatPanel.exportConversation()),
     vscode.commands.registerCommand('parley.compactConversation', () => chatPanel.compactConversation()),
     vscode.commands.registerCommand('parley.regenerate', () => chatPanel.regenerateLast()),
