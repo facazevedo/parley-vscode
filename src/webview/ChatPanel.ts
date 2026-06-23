@@ -32,6 +32,13 @@ import { webSearch } from '../web/webSearch';
 import { lexicalRank, type RankDoc } from '../codebase/lexicalSearch';
 import { EmbeddingIndex } from '../codebase/embeddingIndex';
 import {
+  transcriptToMarkdown,
+  transcriptToPlainText,
+  type TranscriptEntry,
+  type TranscriptMeta
+} from '../transcript/transcript';
+import * as transcriptStore from '../transcript/store';
+import {
   extractAudioMp3,
   extractFrames,
   hasFfmpeg,
@@ -131,6 +138,8 @@ interface SavedSession {
   readonly title: string;
   readonly savedAt: string;
   readonly history: ChatMessage[];
+  readonly transcript?: TranscriptEntry[];
+  readonly id?: string;
 }
 
 export class ChatPanel implements vscode.WebviewViewProvider {
@@ -138,6 +147,11 @@ export class ChatPanel implements vscode.WebviewViewProvider {
 
   private view?: vscode.WebviewView;
   private readonly history: ChatMessage[] = [];
+  // Full ordered record of everything shown (messages, tool activity, diffs, plans, notes).
+  // The canonical copy is the per-conversation .jsonl on disk; this mirrors it for rendering.
+  private transcript: TranscriptEntry[] = [];
+  private conversationStartedAt = new Date().toISOString();
+  private lastToolAction = ''; // pairs a tool's ⏺ action with its ⎿ result for the transcript
   private agents: readonly AgentInfo[] = [];
   private selectedAgentId = '';
   private selectedThinking: ThinkingLevel = 'off';
@@ -180,6 +194,13 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     if (Array.isArray(savedHistory)) {
       this.history.push(...savedHistory);
     }
+    const savedTranscript = this.state.get<TranscriptEntry[]>('parley.transcript');
+    if (Array.isArray(savedTranscript)) {
+      this.transcript = savedTranscript;
+    } else if (Array.isArray(savedHistory)) {
+      this.transcript = historyToTranscript(savedHistory); // migrate older sessions
+    }
+    this.conversationStartedAt = this.state.get<string>('parley.conversationStartedAt', this.conversationStartedAt);
     this.selectedAgentId = this.state.get<string>('parley.selectedAgentId', settings.defaultAgent);
     this.selectedThinking = normalizeThinkingLevel(this.state.get<string>('parley.selectedThinking', settings.thinking));
     this.selectedSpeed = this.state.get<string>('parley.selectedSpeed', 'standard') === 'fast' ? 'fast' : 'standard';
@@ -191,6 +212,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
 
   private save(): void {
     void this.state.update('parley.history', this.history);
+    void this.state.update('parley.transcript', this.transcript);
+    void this.state.update('parley.conversationStartedAt', this.conversationStartedAt);
     void this.state.update('parley.selectedAgentId', this.selectedAgentId);
     void this.state.update('parley.selectedThinking', this.selectedThinking);
     void this.state.update('parley.selectedSpeed', this.selectedSpeed);
@@ -204,22 +227,92 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     return 'parley-' + new Date().toISOString().replace(/[:.]/g, '-').replace('Z', '');
   }
 
-  /** Folder where conversations are auto-saved: `parley.conversationsDir`, else extension global storage. */
-  private conversationsDir(): vscode.Uri {
+  /**
+   * Base `.parley` folder: `parley.conversationsDir` if set, else `<workspace>/.parley`,
+   * else the extension's global storage. Holds `conversations/`, `index.json`, `state.json`.
+   */
+  private parleyBase(): string {
     const custom = this.getSettings().conversationsDir;
-    return custom ? vscode.Uri.file(custom) : vscode.Uri.joinPath(this.globalStorageUri, 'conversations');
+    if (custom) {
+      return custom;
+    }
+    const ws = vscode.workspace.workspaceFolders?.[0]?.uri;
+    return ws ? path.join(ws.fsPath, '.parley') : path.join(this.globalStorageUri.fsPath, 'parley');
   }
 
-  /** Write the current conversation to its Markdown file (overwrite). Best-effort. */
-  private async autosaveConversation(): Promise<void> {
-    if (!this.getSettings().autoSaveConversations || this.history.length === 0) {
+  /** Reveal folder for the auto-save location (compat with the old name). */
+  private conversationsDir(): vscode.Uri {
+    return vscode.Uri.file(transcriptStore.conversationsDir(this.parleyBase()));
+  }
+
+  private currentTitle(): string {
+    const firstUser = this.transcript.find((e) => e.kind === 'user') as { text?: string } | undefined;
+    return (firstUser?.text ?? 'Conversation').replace(/\s+/g, ' ').trim().slice(0, 60) || 'Conversation';
+  }
+
+  private transcriptMeta(): TranscriptMeta {
+    const models = [...new Set(this.transcript.flatMap((e) => (e.kind === 'assistant' && e.model ? [e.model] : [])))];
+    return {
+      id: this.conversationId,
+      title: this.currentTitle(),
+      createdAt: this.conversationStartedAt,
+      exportedAt: new Date().toISOString(),
+      models: models.length > 0 ? models : [this.selectedAgentId || this.getSettings().defaultAgent],
+      mode: this.mode,
+      thinking: this.selectedThinking,
+      speed: this.selectedSpeed,
+      messages: this.transcript.filter((e) => e.kind === 'user' || e.kind === 'assistant').length,
+      sessionTokens: this.sessionTokens,
+      estimatedCostUsd: this.sessionCost
+    };
+  }
+
+  /** Append one transcript event in memory and (best-effort) to its on-disk JSONL log. */
+  private appendTranscript(entry: TranscriptEntry): TranscriptEntry {
+    this.transcript.push(entry);
+    if (this.getSettings().autoSaveConversations) {
+      void transcriptStore
+        .appendEvent(this.parleyBase(), this.conversationId, entry)
+        .catch((error) => this.logger.debug(`transcript append failed: ${error instanceof Error ? error.message : 'error'}`));
+    }
+    return entry;
+  }
+
+  /** Rewrite the canonical JSONL (used after an in-place status change, e.g. Apply/Dismiss). */
+  private syncTranscriptFile(): void {
+    if (!this.getSettings().autoSaveConversations) {
       return;
     }
+    void transcriptStore
+      .writeEvents(this.parleyBase(), this.conversationId, this.transcript)
+      .catch((error) => this.logger.debug(`transcript sync failed: ${error instanceof Error ? error.message : 'error'}`));
+  }
+
+  /** Write the human-readable .md, update the index, and persist Parley params. Best-effort. */
+  private async autosaveConversation(): Promise<void> {
+    if (!this.getSettings().autoSaveConversations || this.transcript.length === 0) {
+      return;
+    }
+    const base = this.parleyBase();
+    const meta = this.transcriptMeta();
     try {
-      const dir = this.conversationsDir();
-      await vscode.workspace.fs.createDirectory(dir);
-      const file = vscode.Uri.joinPath(dir, `${this.conversationId}.md`);
-      await vscode.workspace.fs.writeFile(file, Buffer.from(this.toMarkdown(), 'utf8'));
+      await transcriptStore.ensureGitignore(base);
+      await transcriptStore.writeMarkdown(base, this.conversationId, transcriptToMarkdown(meta, this.transcript));
+      await transcriptStore.upsertIndex(base, {
+        id: this.conversationId,
+        title: meta.title,
+        savedAt: meta.exportedAt ?? meta.createdAt,
+        model: meta.models[0] ?? '',
+        events: this.transcript.length
+      });
+      await transcriptStore.writeState(base, {
+        lastConversationId: this.conversationId,
+        selectedAgentId: this.selectedAgentId,
+        mode: this.mode,
+        thinking: this.selectedThinking,
+        speed: this.selectedSpeed,
+        updatedAt: meta.exportedAt
+      });
     } catch (error) {
       this.logger.warn(`Could not auto-save conversation: ${error instanceof Error ? error.message : 'unknown'}`);
     }
@@ -230,10 +323,12 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     await this.autosaveConversation();
     this.archiveCurrent();
     this.history.length = 0;
+    this.transcript = [];
     this.attachments = [];
     this.sessionTokens = 0;
     this.sessionCost = 0;
     this.conversationId = this.newConversationId();
+    this.conversationStartedAt = new Date().toISOString();
     await this.postState();
   }
 
@@ -359,6 +454,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       case 'dismissChange':
         this.pendingChanges.delete(message.id ?? '');
         this.post({ type: 'changeResolved', id: message.id ?? '', status: 'dismissed' });
+        this.resolveTranscriptChange(message.id ?? '', 'dismissed');
         return;
       case 'removeAttachment':
         this.attachments = this.attachments.filter((item) => item.id !== message.id);
@@ -592,6 +688,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     }
 
     this.history.push({ role: 'user', content: prompt, createdAt: new Date().toISOString() });
+    this.appendTranscript({ kind: 'user', text: prompt, at: new Date().toISOString() });
     // Surface the OpenAI-reasoning-no-op hint on the first send with that combo, even if the
     // level was carried over from a previous session (no change event would have fired).
     this.maybeWarnOpenAiReasoning();
@@ -670,7 +767,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
             runTool: toolsEnabled ? (call) => this.runTool(call) : undefined,
             onToolEvent: toolsEnabled
               ? (event) => {
-                  stepActions.push(this.describeToolEvent(event.name, event.args));
+                  const action = this.describeToolEvent(event.name, event.args);
+                  stepActions.push(action);
+                  this.lastToolAction = action;
                   this.post({ type: 'toolEvent', name: event.name, args: event.args });
                 }
               : undefined,
@@ -678,7 +777,10 @@ export class ChatPanel implements vscode.WebviewViewProvider {
               ? (name, result) => {
                   // write/edit show a diff card already; others get a Claude-style ⎿ result line.
                   if (name !== 'write_file' && name !== 'edit_file') {
-                    this.post({ type: 'toolResult', text: summarizeToolResult(name, result) });
+                    const text = summarizeToolResult(name, result);
+                    this.post({ type: 'toolResult', text });
+                    // Record the ⏺ action + ⎿ result together in the persisted transcript.
+                    this.appendTranscript({ kind: 'tool', action: this.lastToolAction || name, result: text, at: new Date().toISOString() });
                   }
                 }
               : undefined,
@@ -715,14 +817,11 @@ export class ChatPanel implements vscode.WebviewViewProvider {
 
         if (!madeProgress) {
           // Empty response with no tool actions: don't render a blank bubble or keep looping.
-          this.history.push({
-            role: 'assistant',
-            content: canAutoContinue
-              ? '⏸ Stopped: the model returned an empty response and took no actions. Try rephrasing, switching models, or another mode.'
-              : '_(The model returned an empty response.)_',
-            createdAt: new Date().toISOString(),
-            model: agentId
-          });
+          const note = canAutoContinue
+            ? '⏸ Stopped: the model returned an empty response and took no actions. Try rephrasing, switching models, or another mode.'
+            : '_(The model returned an empty response.)_';
+          this.history.push({ role: 'assistant', content: note, createdAt: new Date().toISOString(), model: agentId });
+          this.appendTranscript({ kind: 'note', text: note, at: new Date().toISOString() });
           this.post({ type: 'streamEnd' });
           await this.postState();
           break;
@@ -730,10 +829,23 @@ export class ChatPanel implements vscode.WebviewViewProvider {
 
         // If the model worked through tools but didn't narrate, persist a summary of what it did
         // so the conversation and exports aren't blank (Claude-Code-style activity log).
+        const hadNarration = cleaned.trim().length > 0;
         if (!cleaned.trim()) {
           cleaned = stepActions.map((a) => `⏺ ${a}`).join('\n');
         }
         this.history.push({ ...response.message, content: cleaned, model: agentId });
+        // Only record an assistant entry when there was real prose. With no narration the
+        // tool/fileEdit entries already represent this step in the transcript (no duplication).
+        if (hadNarration) {
+          this.appendTranscript({
+            kind: 'assistant',
+            text: cleaned,
+            model: agentId,
+            thinking: response.message.thinking,
+            tokens: response.usage?.total,
+            at: new Date().toISOString()
+          });
+        }
         this.post({ type: 'streamEnd' });
         await this.postState();
         // Chat mode (no file tools): surface any "File:" blocks as inline Apply cards
@@ -749,21 +861,17 @@ export class ChatPanel implements vscode.WebviewViewProvider {
           break;
         }
         if (settings.tokenLimit > 0 && this.sessionTokens >= settings.tokenLimit) {
-          this.history.push({
-            role: 'assistant',
-            content: `⏸ Stopped — token limit reached (${this.sessionTokens.toLocaleString()} / ${settings.tokenLimit.toLocaleString()}). Raise "parley.tokenLimit" or start a new conversation.`,
-            createdAt: new Date().toISOString()
-          });
+          const note = `⏸ Stopped — token limit reached (${this.sessionTokens.toLocaleString()} / ${settings.tokenLimit.toLocaleString()}). Raise "parley.tokenLimit" or start a new conversation.`;
+          this.history.push({ role: 'assistant', content: note, createdAt: new Date().toISOString() });
+          this.appendTranscript({ kind: 'note', text: note, at: new Date().toISOString() });
           await this.postState();
           break;
         }
         if (auto >= settings.maxAutoContinue) {
           // Don't stop silently — tell the user why and how to resume.
-          this.history.push({
-            role: 'assistant',
-            content: `⏸ Paused after ${settings.maxAutoContinue} automatic steps to avoid runaway usage. Type "continue" to keep going.`,
-            createdAt: new Date().toISOString()
-          });
+          const note = `⏸ Paused after ${settings.maxAutoContinue} automatic steps to avoid runaway usage. Type "continue" to keep going.`;
+          this.history.push({ role: 'assistant', content: note, createdAt: new Date().toISOString() });
+          this.appendTranscript({ kind: 'note', text: note, at: new Date().toISOString() });
           await this.postState();
           break;
         }
@@ -773,11 +881,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
 
       const changed = this.checkpoints.changedSince(cpStart);
       if (changed.length > 0) {
-        this.history.push({
-          role: 'assistant',
-          content: `✏️ Changed ${changed.length} file${changed.length === 1 ? '' : 's'}: ${changed.join(', ')}\n_Run "Parley: Revert Last Edit" or "Parley: Revert All Edits" to undo._`,
-          createdAt: new Date().toISOString()
-        });
+        const note = `✏️ Changed ${changed.length} file${changed.length === 1 ? '' : 's'}: ${changed.join(', ')}\n_Run "Parley: Revert Last Edit" or "Parley: Revert All Edits" to undo._`;
+        this.history.push({ role: 'assistant', content: note, createdAt: new Date().toISOString() });
+        this.appendTranscript({ kind: 'note', text: note, at: new Date().toISOString() });
       }
       this.busy = false;
       this.abortController = undefined;
@@ -867,13 +973,11 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       return false;
     }
     void this.state.update('parley.openaiReasoningHintShown', true);
-    this.history.push({
-      role: 'assistant',
-      content:
-        `ℹ️ Heads-up: on Parley the reasoning level isn't applied to **OpenAI / GPT-5** models — it's accepted but has no measurable effect (verified live). ` +
-        `For deeper reasoning, switch to a **Claude** (Opus/Sonnet) or **Gemini** model, where extended thinking genuinely works.`,
-      createdAt: new Date().toISOString()
-    });
+    const hint =
+      `ℹ️ Heads-up: on Parley the reasoning level isn't applied to **OpenAI / GPT-5** models — it's accepted but has no measurable effect (verified live). ` +
+      `For deeper reasoning, switch to a **Claude** (Opus/Sonnet) or **Gemini** model, where extended thinking genuinely works.`;
+    this.history.push({ role: 'assistant', content: hint, createdAt: new Date().toISOString() });
+    this.appendTranscript({ kind: 'note', text: hint, at: new Date().toISOString() });
     return true;
   }
 
@@ -1170,52 +1274,97 @@ export class ChatPanel implements vscode.WebviewViewProvider {
 
   /** Archive the current conversation into the saved-sessions list (most recent first, capped). */
   private archiveCurrent(): void {
-    if (this.history.length === 0) {
+    if (this.transcript.length === 0) {
       return;
     }
-    const firstUser = this.history.find((m) => m.role === 'user');
-    const title = (firstUser?.content ?? 'Conversation').replace(/\s+/g, ' ').trim().slice(0, 60) || 'Conversation';
     const sessions = this.state.get<SavedSession[]>('parley.sessions', []);
-    sessions.unshift({ title, savedAt: new Date().toISOString(), history: [...this.history] });
+    sessions.unshift({
+      title: this.currentTitle(),
+      savedAt: new Date().toISOString(),
+      history: [...this.history],
+      transcript: [...this.transcript],
+      id: this.conversationId
+    });
     void this.state.update('parley.sessions', sessions.slice(0, 20));
   }
 
-  /** Pick a previously archived conversation and load it back into the chat. */
+  /** Pick a previously saved conversation and load its FULL transcript back into the chat. */
   public async openPastConversation(): Promise<void> {
+    const base = this.parleyBase();
+    const diskIndex = await transcriptStore.readIndex(base);
     const sessions = this.state.get<SavedSession[]>('parley.sessions', []);
-    if (sessions.length === 0) {
-      await vscode.window.showInformationMessage('Parley: no saved conversations yet. (Conversations are archived when you start a new one.)');
+
+    type Item = vscode.QuickPickItem & { source: 'disk' | 'session'; id?: string; index?: number };
+    const items: Item[] = [];
+    for (const e of diskIndex) {
+      if (e.id === this.conversationId) {
+        continue;
+      }
+      items.push({
+        label: e.title || 'Conversation',
+        description: `${new Date(e.savedAt).toLocaleString()} · ${e.events} events`,
+        detail: e.model,
+        source: 'disk',
+        id: e.id
+      });
+    }
+    sessions.forEach((s, index) => {
+      if (s.id && (s.id === this.conversationId || diskIndex.some((e) => e.id === s.id))) {
+        return; // already represented on disk
+      }
+      items.push({
+        label: s.title || 'Conversation',
+        description: `${new Date(s.savedAt).toLocaleString()} · ${(s.transcript?.length ?? s.history.length)} events (memory)`,
+        source: 'session',
+        index
+      });
+    });
+
+    if (items.length === 0) {
+      await vscode.window.showInformationMessage('Parley: no saved conversations yet.');
       return;
     }
-    const pick = await vscode.window.showQuickPick(
-      sessions.map((s, index) => ({
-        label: s.title || 'Conversation',
-        description: `${new Date(s.savedAt).toLocaleString()} · ${s.history.length} msgs`,
-        index
-      })),
-      { title: 'Open a past Parley conversation' }
-    );
+    const pick = await vscode.window.showQuickPick(items, { title: 'Open a past Parley conversation' });
     if (!pick) {
       return;
     }
-    const chosen = sessions[pick.index];
+
+    // Save & archive the current one before switching.
     await this.autosaveConversation();
     this.archiveCurrent();
+
+    let transcript: TranscriptEntry[] = [];
+    let id = this.newConversationId();
+    if (pick.source === 'disk' && pick.id) {
+      transcript = await transcriptStore.readEvents(base, pick.id);
+      id = pick.id; // continue appending to the same canonical file
+    } else if (pick.source === 'session' && pick.index !== undefined) {
+      const s = sessions[pick.index];
+      transcript = s.transcript ?? historyToTranscript(s.history);
+      id = s.id ?? this.newConversationId();
+    }
+
+    this.transcript = transcript;
     this.history.length = 0;
-    this.history.push(...chosen.history);
+    this.history.push(...transcriptToHistory(transcript));
+    this.conversationId = id;
+    this.conversationStartedAt = transcript[0]?.at ?? new Date().toISOString();
     this.attachments = [];
+    this.pendingChanges.clear();
     this.sessionTokens = 0;
     this.sessionCost = 0;
-    this.conversationId = this.newConversationId();
     await vscode.commands.executeCommand('workbench.view.extension.parley');
     await vscode.commands.executeCommand('parley.chatView.focus');
     await this.ready;
     await this.postState();
   }
 
-  /** Export the current conversation to a Markdown or JSON file. */
+  /**
+   * Export the conversation. The canonical transcript on disk is completed/flushed first,
+   * then a copy is written in the chosen format to a location the user picks.
+   */
   public async exportConversation(): Promise<void> {
-    if (this.history.length === 0) {
+    if (this.transcript.length === 0) {
       await vscode.window.showInformationMessage('Parley: there is no conversation to export yet.');
       return;
     }
@@ -1232,6 +1381,10 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       return;
     }
 
+    // Complete & save the canonical copy (JSONL + Markdown + index) before exporting a copy elsewhere.
+    this.syncTranscriptFile();
+    await this.autosaveConversation();
+
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const fileName = `parley-conversation-${stamp}.${choice.ext}`;
     const folder = vscode.workspace.workspaceFolders?.[0]?.uri;
@@ -1246,91 +1399,16 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       return;
     }
 
+    const meta = this.transcriptMeta();
     const content =
       choice.fmt === 'json'
-        ? JSON.stringify({ metadata: this.conversationMeta(), messages: this.history }, null, 2)
+        ? JSON.stringify({ metadata: meta, transcript: this.transcript }, null, 2)
         : choice.fmt === 'txt'
-          ? this.toPlainText()
-          : this.toMarkdown();
+          ? transcriptToPlainText(meta, this.transcript)
+          : transcriptToMarkdown(meta, this.transcript);
     await vscode.workspace.fs.writeFile(uri, Buffer.from(content, 'utf8'));
     await vscode.commands.executeCommand('vscode.open', uri);
     void vscode.window.showInformationMessage(`Parley conversation exported to ${vscode.workspace.asRelativePath(uri)}.`);
-  }
-
-  /** Summary metadata about the conversation, included in every export. */
-  private conversationMeta(): {
-    exportedAt: string;
-    models: string[];
-    mode: ChatMode;
-    thinking: ThinkingLevel;
-    speed: 'standard' | 'fast';
-    messages: number;
-    sessionTokens: number;
-    estimatedCostUsd: number;
-  } {
-    const models = [
-      ...new Set(this.history.filter((m) => m.role === 'assistant' && m.model).map((m) => m.model as string))
-    ];
-    return {
-      exportedAt: new Date().toISOString(),
-      models: models.length > 0 ? models : [this.selectedAgentId || this.getSettings().defaultAgent],
-      mode: this.mode,
-      thinking: this.selectedThinking,
-      speed: this.selectedSpeed,
-      messages: this.history.length,
-      sessionTokens: this.sessionTokens,
-      estimatedCostUsd: this.sessionCost
-    };
-  }
-
-  private metaLines(): { label: string; value: string }[] {
-    const m = this.conversationMeta();
-    return [
-      { label: 'Exported', value: new Date(m.exportedAt).toLocaleString() },
-      { label: 'Model(s)', value: m.models.join(', ') },
-      { label: 'Mode', value: m.mode },
-      { label: 'Extended thinking', value: m.thinking },
-      { label: 'Speed', value: m.speed },
-      { label: 'Messages', value: String(m.messages) },
-      { label: 'Session tokens', value: m.sessionTokens.toLocaleString() },
-      { label: 'Estimated cost', value: `~${formatUsd(m.estimatedCostUsd)}` }
-    ];
-  }
-
-  private toMarkdown(): string {
-    const lines: string[] = ['# Parley conversation', ''];
-    for (const { label, value } of this.metaLines()) {
-      lines.push(`- **${label}:** ${value}`);
-    }
-    lines.push('');
-    for (const message of this.history) {
-      if (message.role === 'user') {
-        lines.push('## You', '', message.content, '');
-      } else if (message.role === 'assistant') {
-        lines.push(`## Parley${message.model ? ` · ${message.model}` : ''}`, '', message.content, '');
-      } else {
-        lines.push(`## ${message.role}`, '', message.content, '');
-      }
-    }
-    return lines.join('\n');
-  }
-
-  private toPlainText(): string {
-    const lines: string[] = ['Parley conversation'];
-    for (const { label, value } of this.metaLines()) {
-      lines.push(`${label}: ${value}`);
-    }
-    lines.push('', '='.repeat(60), '');
-    for (const message of this.history) {
-      const who =
-        message.role === 'user'
-          ? 'You'
-          : message.role === 'assistant'
-            ? `Parley${message.model ? ` (${message.model})` : ''}`
-            : message.role;
-      lines.push(`### ${who}`, '', message.content, '', '-'.repeat(40), '');
-    }
-    return lines.join('\n');
   }
 
   /** Tool runner for agent mode: read tools delegate to the read-only runner; writes/commands need UI + checkpoints. */
@@ -1382,6 +1460,11 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         status: s.status === 'done' || s.status === 'in_progress' ? s.status : 'pending'
       }));
     this.post({ type: 'plan', steps: clean });
+    this.appendTranscript({
+      kind: 'plan',
+      steps: clean.map((s) => ({ text: s.step, status: s.status })),
+      at: new Date().toISOString()
+    });
     const done = clean.filter((s) => s.status === 'done').length;
     return `Plan updated (${done}/${clean.length} done).`;
   }
@@ -1498,13 +1581,18 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     }
     const MAX_ROWS = 500;
     const rows = diff.rows.length > MAX_ROWS ? diff.rows.slice(0, MAX_ROWS) : diff.rows;
-    this.post({
-      type: 'fileEdit',
+    const truncated = diff.rows.length > MAX_ROWS;
+    this.post({ type: 'fileEdit', path: rel, added: diff.added, removed: diff.removed, rows, truncated });
+    this.appendTranscript({
+      kind: 'fileEdit',
       path: rel,
       added: diff.added,
       removed: diff.removed,
       rows,
-      truncated: diff.rows.length > MAX_ROWS
+      truncated,
+      status: 'applied',
+      isNew: original.length === 0,
+      at: new Date().toISOString()
     });
   }
 
@@ -1518,16 +1606,30 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     const diff = formatUnifiedDiff(change.originalText, change.proposedText);
     const MAX_ROWS = 500;
     const rows = diff.rows.length > MAX_ROWS ? diff.rows.slice(0, MAX_ROWS) : diff.rows;
-    this.post({
-      type: 'proposedChange',
+    const truncated = diff.rows.length > MAX_ROWS;
+    const isNew = change.originalText.length === 0;
+    this.post({ type: 'proposedChange', id, path: rel, isNew, added: diff.added, removed: diff.removed, rows, truncated });
+    this.appendTranscript({
+      kind: 'fileEdit',
       id,
       path: rel,
-      isNew: change.originalText.length === 0,
       added: diff.added,
       removed: diff.removed,
       rows,
-      truncated: diff.rows.length > MAX_ROWS
+      truncated,
+      status: 'proposed',
+      isNew,
+      at: new Date().toISOString()
     });
+  }
+
+  /** Update a proposed-change transcript entry's status (e.g. after Apply/Dismiss) and re-sync disk. */
+  private resolveTranscriptChange(id: string, status: 'applied' | 'dismissed' | 'error'): void {
+    const entry = this.transcript.find((e) => e.kind === 'fileEdit' && e.id === id);
+    if (entry && entry.kind === 'fileEdit') {
+      entry.status = status;
+      this.syncTranscriptFile();
+    }
   }
 
   /** Apply a pending proposed change when the user clicks its inline Apply button. */
@@ -1539,6 +1641,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     this.pendingChanges.delete(id);
     if (isSensitiveFile(change.rel)) {
       this.post({ type: 'changeResolved', id, status: 'error' });
+      this.resolveTranscriptChange(id, 'error');
       await vscode.window.showErrorMessage(`Parley refused to write a sensitive file: ${change.rel}.`);
       return;
     }
@@ -1547,15 +1650,11 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       // The card already shows the diff, so we just flip it to "Applied" via changeResolved.
       await this.checkpoints.applyWithCheckpoint(change.uri, change.proposedText, `edit ${change.rel}`);
       this.post({ type: 'changeResolved', id, status: 'applied' });
-      // Record it in history (no re-render, so other pending cards survive) and persist.
-      this.history.push({
-        role: 'assistant',
-        content: `✏️ Applied ${change.rel}. _Run "Parley: Revert Last Edit" to undo._`,
-        createdAt: new Date().toISOString()
-      });
+      this.resolveTranscriptChange(id, 'applied');
       await this.autosaveConversation();
     } catch (error) {
       this.post({ type: 'changeResolved', id, status: 'error' });
+      this.resolveTranscriptChange(id, 'error');
       await vscode.window.showErrorMessage(
         `Parley could not apply ${change.rel}: ${error instanceof Error ? error.message : 'error'}`
       );
@@ -1851,6 +1950,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     this.post({
       type: 'state',
       history: this.history,
+      transcript: this.transcript,
+      pendingChangeIds: Array.from(this.pendingChanges.keys()),
       agents: this.agents,
       hasKey,
       busy: this.busy,
@@ -1894,7 +1995,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     <div class="toolbar">
       <span class="title">Parley</span>
       <span id="sessionTok" class="sessiontok" title="Tokens used in this conversation (and estimated cost)"></span>
-      <span id="ctx" class="ctx-meter" style="display:none"><span class="ctxring"></span><span class="ctxnum"></span></span>
+      <span id="ctx" class="ctx-meter" title="Context window used"><span class="ctxring"></span><span class="ctxnum">–</span></span>
       <span class="grow"></span>
       <button id="newChat" title="New conversation" aria-label="New conversation">＋</button>
       <button id="historyBtn" title="Past conversations" aria-label="Past conversations">🕘</button>
@@ -1961,6 +2062,33 @@ export class ChatPanel implements vscode.WebviewViewProvider {
 </body>
 </html>`;
   }
+}
+
+/** Reconstruct the model-facing message history from a transcript (user/assistant text only). */
+function transcriptToHistory(entries: readonly TranscriptEntry[]): ChatMessage[] {
+  const out: ChatMessage[] = [];
+  for (const e of entries) {
+    if (e.kind === 'user') {
+      out.push({ role: 'user', content: e.text, createdAt: e.at });
+    } else if (e.kind === 'assistant') {
+      out.push({ role: 'assistant', content: e.text, model: e.model, thinking: e.thinking, createdAt: e.at });
+    }
+  }
+  return out;
+}
+
+/** Build a minimal transcript from a plain message history (for migrating older saved sessions). */
+function historyToTranscript(history: readonly ChatMessage[]): TranscriptEntry[] {
+  return history.map((m) => {
+    const at = m.createdAt ?? new Date().toISOString();
+    if (m.role === 'user') {
+      return { kind: 'user', text: m.content, at };
+    }
+    if (m.role === 'assistant') {
+      return { kind: 'assistant', text: m.content, model: m.model, thinking: m.thinking, at };
+    }
+    return { kind: 'note', text: m.content, at };
+  });
 }
 
 function normalizeMode(value: string | undefined): ChatMode {

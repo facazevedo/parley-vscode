@@ -127,6 +127,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 .diffstatus.applied { color: var(--vscode-charts-green, #3fb950); }
 .diffstatus.error { color: var(--vscode-errorForeground, #f85149); }
 .diffstatus.dismissed { color: var(--vscode-descriptionForeground); }
+.message.note .content { color: var(--vscode-descriptionForeground); font-size: 0.92em; }
 .cursor::after { content: '▍'; opacity: .6; animation: blink 1s steps(2) infinite; margin-left: 1px; }
 @keyframes blink { 50% { opacity: 0; } }
 .empty { color: var(--vscode-descriptionForeground); text-align: center; margin-top: 24px; }

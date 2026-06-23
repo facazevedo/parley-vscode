@@ -29,7 +29,7 @@ diff review, and safety controls stay independent of the transport.
 - [MCP servers](#mcp-servers)
 - [Inline completion & inline edit](#inline-completion--inline-edit)
 - [Cost, context & limits](#cost-context--limits)
-- [Conversations: new, save, export, compact](#conversations-new-save-export-compact)
+- [Conversations: full transcripts in `.parley`](#conversations-full-transcripts-in-parley)
 - [Git, images & editor commands](#git-images--editor-commands)
 - [Project rules](#project-rules)
 - [Diagnostics & debugging](#diagnostics--debugging)
@@ -94,8 +94,9 @@ not hot‑swap an extension; the reload is required after every (re)install.
 ## The chat window, at a glance
 
 **Header (top):** the title, a live **session counter** (`· 12,345 tok · ~$0.04`),
-a **circular context gauge** that fills green → amber → red as the conversation
-approaches the model's context window, and buttons: **＋** new conversation, **🕘**
+an **always‑visible circular context gauge** that fills green → amber → red as the
+conversation approaches the model's context window (shows `–` when the window size is
+unknown for a model), and buttons: **＋** new conversation, **🕘**
 past conversations, **⊟** compact, **⤓** export, **↻** refresh model list.
 
 **Composer (bottom):**
@@ -331,7 +332,7 @@ keeps working.
 - **`Parley: Show Usage`** reports your account's **real billed spend** for the month
   (cost, requests, tokens). Needs `parley.accountId` (Admin Portal → *My Account*;
   you're prompted on first use).
-- **Context gauge** shows how full the model's context window is.
+- **Context gauge** (always visible in the header) shows how full the model's context window is.
 - **Automatic compaction** is **on by default at 80%** of the context window
   (`parley.autoCompactPercent`; `0` disables). The conversation is summarized,
   keeping the most recent messages. `parley.autoCompactTokens` is an absolute
@@ -343,20 +344,36 @@ keeps working.
 
 ---
 
-## Conversations: new, save, export, compact
+## Conversations: full transcripts in `.parley`
+
+Parley records a **complete, ordered transcript of everything shown** — your messages,
+the model's replies, tool activity (`⏺`/`⎿`), file‑edit diffs, plans, and system notes —
+not just the message text. The canonical copy is saved **as it happens** to a `.parley/`
+folder in your workspace, so it never depends on what's in memory:
+
+```
+.parley/
+  conversations/<id>.jsonl   append-as-it-happens event log (the source of truth)
+  conversations/<id>.md      human-readable copy, rewritten each turn
+  index.json                 list shown by "Open Past Conversation"
+  state.json                 Parley params (model / mode / thinking / speed)
+  .gitignore                 created once (ignore-all) so logs aren't committed by accident
+```
 
 - **New:** the **＋** button, `/clear`, or **`Parley: New Conversation`** (the prior
-  one is archived/saved first).
-- **Auto‑save to disk:** every conversation is written as Markdown after each turn.
-  Open the folder with **`Parley: Open Conversations Folder`**; change it with
-  `parley.conversationsDir`, or disable with `parley.autoSaveConversations`.
-- **Export:** **⤓** or `Parley: Export Conversation` → **Markdown, plain text, or
-  JSON**, each with a metadata header (model(s), mode, thinking level, speed, message
-  count, session tokens, estimated cost).
-- **Past conversations:** **🕘** or `Parley: Open Past Conversation` — archived in VS Code
-  workspace state, so they survive reloads (independent of the Markdown auto‑save).
+  one is saved first).
+- **Auto‑save:** on by default (`parley.autoSaveConversations`). Change the location with
+  `parley.conversationsDir`; open it with **`Parley: Open Conversations Folder`**. With no
+  workspace open it falls back to the extension's global storage.
+- **Past conversations:** **🕘** or `Parley: Open Past Conversation` reloads the **full
+  transcript** from disk (diffs, tool calls and all) and keeps appending to the same file.
+- **Export:** **⤓** or `Parley: Export Conversation` first **completes and saves the
+  canonical transcript**, then writes a **copy** in your chosen format — **Markdown, plain
+  text, or JSON** — to wherever you pick. The copy contains the entire transcript with a
+  metadata header (model(s), mode, thinking level, speed, message count, tokens, cost).
 - **Compact:** **⊟**, `/compact`, or `Parley: Compact Conversation` — summarize the
-  conversation (choose *keep recent* or *everything*) to continue with fewer tokens.
+  conversation (choose *keep recent* or *everything*) to continue with fewer tokens. (This
+  trims the model's context; the saved transcript keeps the full record.)
 
 ---
 
@@ -575,6 +592,8 @@ Marketplace / Open VSX).
 - `src/web/webSearch.ts` — web‑search providers.
 - `src/video/ffmpeg.ts` — frame/audio extraction.
 - `src/diff/` — line diff, unified‑diff cards, diff‑review‑before‑apply, checkpoints.
+- `src/transcript/` — the full conversation transcript model, pure md/txt renderers, and
+  the `.parley` on‑disk store (append‑only JSONL + index + state).
 - `src/completion/` — inline completion provider.
 - `src/context/` — context collection, ignore rules, sensitive‑file filtering.
 - `src/debug/debug.ts` — gated tracing.

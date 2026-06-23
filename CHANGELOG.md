@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.40.0
+
+### Added — complete conversation transcripts saved to `.parley`
+- Parley now records a **full, ordered transcript of everything shown on screen** — your messages, the model's replies, tool activity (`⏺`/`⎿`), file-edit diffs, plans, and system notes — not just the message text.
+- The canonical copy is written to a **`.parley/` folder** in your workspace as it happens:
+  - `conversations/<id>.jsonl` — append-as-it-happens event log (durable; never depends on in-memory state), plus a human-readable `conversations/<id>.md` per turn.
+  - `index.json` (past-conversation list) and `state.json` (Parley params: model/mode/thinking/speed).
+  - A `.parley/.gitignore` (ignore-all) is created once so logs aren't committed by accident — delete it to commit them. The location can be overridden with `parley.conversationsDir`.
+- **Past conversations** now reload the **full transcript** from disk (diffs, tool calls and all), not just messages — and continue appending to the same file.
+- **Export** now **completes and saves the canonical transcript first, then writes a copy** in your chosen format (Markdown / plain text / JSON) to wherever you pick. The exported file contains the entire transcript.
+
+### Fixed
+- Inline **Apply** cards (Chat mode) no longer vanish when the turn ends — the chat now renders from the persisted transcript, so cards, diffs, and tool activity survive re-renders and window reloads.
+
+### Changed
+- The **context-usage ring is always visible** in the header (shows `–` when the model's context-window size is unknown).
+
 ## 0.39.0
 
 ### Fixed — agent no longer "loses its tools" and gives up mid-task
