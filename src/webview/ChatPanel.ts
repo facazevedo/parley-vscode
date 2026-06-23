@@ -518,6 +518,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     }
 
     this.history.push({ role: 'user', content: prompt, createdAt: new Date().toISOString() });
+    // Surface the OpenAI-reasoning-no-op hint on the first send with that combo, even if the
+    // level was carried over from a previous session (no change event would have fired).
+    this.maybeWarnOpenAiReasoning();
     this.attachments = [];
     this.busy = true;
     this.abortController = new AbortController();

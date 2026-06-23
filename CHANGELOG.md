@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.30.0
+
+### Changed
+- The one-time "reasoning isn't applied for OpenAI on Parley" hint now also fires on the **first send** of a turn when a reasoning level + an OpenAI/GPT-5 model are both active — not only when you change the level or model. This catches the common case where the level was carried over from a previous session.
+
 ## 0.29.0
 
 ### Added
