@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.25.0
+
+### Added — inline diff cards for edits
+- When the agent edits or writes a file, the chat now shows a **Claude-Code-style diff card** inline: an `Edit <path>` header with `+added −removed` counts, then a unified diff with a line-number gutter and **red/green** removed/added lines (context lines kept, far-apart unchanged regions collapsed). Driven by a new pure, unit-tested `formatUnifiedDiff` in `src/diff/lineDiff.ts`. Large diffs are capped (with a "diff truncated" marker).
+
 ## 0.24.0
 
 ### Added

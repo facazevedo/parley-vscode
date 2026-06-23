@@ -86,6 +86,22 @@ button:disabled { opacity: 0.5; cursor: default; }
 .thinking > summary { cursor: pointer; list-style: none; user-select: none; font-size: 0.82em; color: var(--vscode-descriptionForeground); padding: 1px 0; }
 .thinking > summary::-webkit-details-marker { display: none; }
 .thinking .think-body { white-space: pre-wrap; font-size: 0.84em; color: var(--vscode-descriptionForeground); opacity: 0.92; margin-top: 4px; }
+/* Inline diff card for applied edits */
+.diffcard { margin: 0 0 10px; border: 1px solid var(--vscode-editorWidget-border, rgba(127, 127, 127, 0.3)); border-radius: 8px; overflow: hidden; }
+.diffhead { display: flex; gap: 8px; align-items: baseline; padding: 5px 10px; font-size: 0.82em; background: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.12)); border-bottom: 1px solid var(--vscode-editorWidget-border, rgba(127, 127, 127, 0.3)); }
+.diffverb { font-weight: 600; }
+.diffpath { font-family: var(--vscode-editor-font-family, monospace); opacity: 0.85; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.diffcounts { color: var(--vscode-descriptionForeground); white-space: nowrap; }
+.diffbody { font-family: var(--vscode-editor-font-family, monospace); font-size: 0.84em; line-height: 1.45; overflow-x: auto; }
+.drow { display: flex; white-space: pre; }
+.dgutter { flex: none; width: 3em; padding: 0 6px; text-align: right; color: var(--vscode-editorLineNumber-foreground, #888); opacity: 0.7; user-select: none; }
+.dsign { flex: none; width: 1.1em; text-align: center; user-select: none; }
+.dtext { flex: 1; padding-right: 10px; }
+.drow.add { background: rgba(63, 185, 80, 0.16); }
+.drow.add .dsign { color: var(--vscode-charts-green, #3fb950); }
+.drow.del { background: rgba(248, 81, 73, 0.16); }
+.drow.del .dsign { color: var(--vscode-errorForeground, #f85149); }
+.drow.gap { color: var(--vscode-descriptionForeground); opacity: 0.6; justify-content: center; padding: 1px 0; }
 .cursor::after { content: '▍'; opacity: .6; animation: blink 1s steps(2) infinite; margin-left: 1px; }
 @keyframes blink { 50% { opacity: 0; } }
 .empty { color: var(--vscode-descriptionForeground); text-align: center; margin-top: 24px; }

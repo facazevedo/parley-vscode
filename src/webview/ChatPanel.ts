@@ -14,6 +14,7 @@ import { totalCharacters } from '../context/contextPreview';
 import { isSensitiveFile } from '../context/sensitiveFileFilter';
 import type { CheckpointStore } from '../diff/checkpoints';
 import { reviewProposedEdit } from '../diff/reviewEdit';
+import { formatUnifiedDiff } from '../diff/lineDiff';
 import { showProposedDiff } from '../diff/showDiff';
 import type { Logger } from '../logging/logger';
 import type { ParleyProvider } from '../parley/ParleyProvider';
@@ -1279,6 +1280,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private async applyProposedEdit(uri: vscode.Uri, rel: string, original: string, proposedText: string): Promise<string> {
     if (this.mode === 'edit' || this.mode === 'auto' || this.mode === 'full') {
       await this.checkpoints.applyWithCheckpoint(uri, proposedText, `edit ${rel}`);
+      this.postFileEdit(rel, original, proposedText);
       return `Applied edit to ${rel} (auto).`;
     }
 
@@ -1291,7 +1293,26 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       return `User rejected the edit to ${rel}.`;
     }
     await this.checkpoints.applyWithCheckpoint(uri, finalText, `edit ${rel}`);
+    this.postFileEdit(rel, original, finalText);
     return `Applied edit to ${rel}.`;
+  }
+
+  /** Show a Claude-Code-style inline diff card in the chat for an applied edit. */
+  private postFileEdit(rel: string, original: string, applied: string): void {
+    const diff = formatUnifiedDiff(original, applied);
+    if (diff.added === 0 && diff.removed === 0) {
+      return;
+    }
+    const MAX_ROWS = 500;
+    const rows = diff.rows.length > MAX_ROWS ? diff.rows.slice(0, MAX_ROWS) : diff.rows;
+    this.post({
+      type: 'fileEdit',
+      path: rel,
+      added: diff.added,
+      removed: diff.removed,
+      rows,
+      truncated: diff.rows.length > MAX_ROWS
+    });
   }
 
   private async toolRunCommand(call: ToolCall): Promise<string> {

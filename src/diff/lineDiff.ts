@@ -110,6 +110,73 @@ export function computeHunks(a: string[], b: string[]): Hunk[] {
   return hunks;
 }
 
+export interface DiffRow {
+  /** `ctx` = unchanged context, `add`/`del` = changed lines, `gap` = collapsed unchanged region. */
+  readonly kind: 'ctx' | 'add' | 'del' | 'gap';
+  readonly oldNo?: number;
+  readonly newNo?: number;
+  readonly text: string;
+}
+
+export interface UnifiedDiff {
+  readonly rows: DiffRow[];
+  readonly added: number;
+  readonly removed: number;
+}
+
+/**
+ * Build a GitHub-style unified diff between two texts, keeping `context` unchanged
+ * lines around each change and collapsing the rest into `gap` markers. Pure, so the
+ * webview can render a Claude-Code-style diff card from the rows. Line numbers are
+ * 1-based (`oldNo` for removed/context, `newNo` for added/context).
+ */
+export function formatUnifiedDiff(originalText: string, proposedText: string, context = 3): UnifiedDiff {
+  const a = originalText.length ? originalText.split('\n') : [];
+  const b = proposedText.length ? proposedText.split('\n') : [];
+  const ops = diffMiddle(a, b);
+
+  const all: DiffRow[] = [];
+  let oldNo = 0;
+  let newNo = 0;
+  let added = 0;
+  let removed = 0;
+  for (const op of ops) {
+    if (op.type === 'eq') {
+      oldNo += 1;
+      newNo += 1;
+      all.push({ kind: 'ctx', oldNo, newNo, text: op.line });
+    } else if (op.type === 'del') {
+      oldNo += 1;
+      removed += 1;
+      all.push({ kind: 'del', oldNo, text: op.line });
+    } else {
+      newNo += 1;
+      added += 1;
+      all.push({ kind: 'add', newNo, text: op.line });
+    }
+  }
+
+  // Keep context lines near changes; collapse longer unchanged runs into a single gap.
+  const keep = new Array<boolean>(all.length).fill(false);
+  for (let i = 0; i < all.length; i += 1) {
+    if (all[i].kind !== 'ctx') {
+      for (let j = Math.max(0, i - context); j <= Math.min(all.length - 1, i + context); j += 1) {
+        keep[j] = true;
+      }
+    }
+  }
+
+  const rows: DiffRow[] = [];
+  for (let i = 0; i < all.length; i += 1) {
+    if (all[i].kind !== 'ctx' || keep[i]) {
+      rows.push(all[i]);
+    } else if (rows.length === 0 || rows[rows.length - 1].kind !== 'gap') {
+      rows.push({ kind: 'gap', text: '⋯' });
+    }
+  }
+  return { rows, added, removed };
+}
+
 /** Rebuild the file applying only the accepted hunks (rejected hunks keep the original lines). */
 export function applyHunks(original: string[], hunks: Hunk[], accepted: boolean[]): string[] {
   const out: string[] = [];
