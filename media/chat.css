@@ -103,6 +103,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 .mp-thinking button.active { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border-color: var(--vscode-button-background); }
 .mp-foot { font-size: 0.74em; color: var(--vscode-descriptionForeground); padding: 4px 8px 2px; }
 .inputbox:focus-within { border-color: var(--vscode-focusBorder); }
+.inputbox.dragover { border-color: var(--vscode-focusBorder); border-style: dashed; background: var(--vscode-list-dropBackground, var(--vscode-input-background)); }
 .inputbox textarea { min-height: 54px; resize: vertical; width: 100%; box-sizing: border-box; border: 0; background: transparent; color: var(--vscode-input-foreground); padding: 4px; outline: none; }
 .actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .actions select { color: var(--vscode-dropdown-foreground); background: var(--vscode-dropdown-background); border: 1px solid var(--vscode-dropdown-border); border-radius: 6px; padding: 3px 5px; font-size: 0.85em; min-width: 0; }

@@ -20,6 +20,7 @@ import type { ParleyProvider } from '../parley/ParleyProvider';
 import { extractMentionPaths } from '../parley/parsing';
 import { AGENT_TOOLS, READ_ONLY_TOOLS, runAgentTool } from '../parley/tools';
 import { normalizeThinkingLevel, resolveThinking, type ThinkingLevel } from '../parley/thinking';
+import { estimateCostUsd } from '../parley/pricing';
 import type { AgentInfo, ChatMessage, ContextAttachment, ImageAttachment, ToolCall } from '../parley/types';
 
 const PROJECT_RULES_FILES = ['.parleyrules', 'AGENTS.md', '.cursorrules'];
@@ -35,6 +36,7 @@ interface ChatPanelMessage {
     | 'modeChanged'
     | 'thinkingChanged'
     | 'attachFiles'
+    | 'pasteImage'
     | 'removeAttachment'
     | 'export'
     | 'compact'
@@ -52,6 +54,8 @@ interface ChatPanelMessage {
   readonly text?: string;
   readonly url?: string;
   readonly query?: string;
+  readonly dataUri?: string;
+  readonly name?: string;
   readonly contextOptions?: ContextOptions;
 }
 
@@ -90,6 +94,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private contextOptions: Required<ContextOptions> = { ...DEFAULT_CONTEXT_OPTIONS };
   private mode: ChatMode = 'chat';
   private sessionTokens = 0;
+  private sessionCost = 0;
   private attachments: PendingAttachment[] = [];
   private busy = false;
   private abortController?: AbortController;
@@ -118,6 +123,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     this.selectedThinking = normalizeThinkingLevel(this.state.get<string>('parley.selectedThinking', settings.thinking));
     this.mode = normalizeMode(this.state.get<string>('parley.mode', settings.defaultMode));
     this.sessionTokens = this.state.get<number>('parley.sessionTokens', 0);
+    this.sessionCost = this.state.get<number>('parley.sessionCost', 0);
   }
 
   private save(): void {
@@ -126,6 +132,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     void this.state.update('parley.selectedThinking', this.selectedThinking);
     void this.state.update('parley.mode', this.mode);
     void this.state.update('parley.sessionTokens', this.sessionTokens);
+    void this.state.update('parley.sessionCost', this.sessionCost);
   }
 
   public resolveWebviewView(webviewView: vscode.WebviewView): void {
@@ -175,6 +182,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         this.history.length = 0;
         this.attachments = [];
         this.sessionTokens = 0;
+        this.sessionCost = 0;
         await this.postState();
         return;
       case 'openHistory':
@@ -196,6 +204,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         return;
       case 'attachFiles':
         await this.pickAttachments();
+        return;
+      case 'pasteImage':
+        await this.addPastedImage(message.dataUri, message.name);
         return;
       case 'export':
         await this.exportConversation();
@@ -254,6 +265,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         this.history.length = 0;
         this.attachments = [];
         this.sessionTokens = 0;
+        this.sessionCost = 0;
         await this.postState();
         return true;
       case 'compact':
@@ -386,7 +398,16 @@ export class ChatPanel implements vscode.WebviewViewProvider {
             onUsage: (usage) => {
               turnTokens += usage.total;
               this.sessionTokens += usage.total;
-              this.post({ type: 'tokens', total: turnTokens, session: this.sessionTokens });
+              const cost = estimateCostUsd(agentId, usage);
+              if (cost) {
+                this.sessionCost += cost;
+              }
+              this.post({
+                type: 'tokens',
+                total: turnTokens,
+                session: this.sessionTokens,
+                sessionCostUsd: this.sessionCost
+              });
             },
             maxToolRounds: settings.maxToolRounds
           }
@@ -510,6 +531,23 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     await this.postState();
   }
 
+  /** Attach an image pasted (Ctrl+V) or dropped into the composer as a base64 data URI. */
+  private async addPastedImage(dataUri?: string, name?: string): Promise<void> {
+    if (!dataUri || !/^data:image\/[a-z0-9.+-]+;base64,/i.test(dataUri)) {
+      return;
+    }
+    // Guard against pathologically large pastes (data URIs are ~33% larger than the bytes).
+    const MAX_BYTES = 12 * 1024 * 1024;
+    if (dataUri.length > MAX_BYTES * 1.4) {
+      void vscode.window.showWarningMessage('Parley: that image is too large to attach (max ~12 MB).');
+      return;
+    }
+    const label = name && name.trim() ? name.trim() : `pasted-image-${this.attachments.length + 1}.png`;
+    const id = `att-${Date.now()}-${this.attachments.length}`;
+    this.attachments.push({ id, label, kind: 'image', image: { label, dataUri } });
+    await this.postState();
+  }
+
   /**
    * Compact the conversation: ask the model to summarize it, then replace the
    * history with that summary so the chat can continue with far fewer tokens.
@@ -604,6 +642,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     this.history.push(...chosen.history);
     this.attachments = [];
     this.sessionTokens = 0;
+    this.sessionCost = 0;
     await vscode.commands.executeCommand('workbench.view.extension.parley');
     await vscode.commands.executeCommand('parley.chatView.focus');
     await this.ready;
@@ -906,6 +945,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       busy: this.busy,
       mode: this.mode,
       sessionTokens: this.sessionTokens,
+      sessionCostUsd: this.sessionCost,
       selectedAgentId: this.selectedAgentId,
       selectedThinking: this.selectedThinking,
       contextOptions: this.contextOptions,
@@ -939,7 +979,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   <div class="shell">
     <div class="toolbar">
       <span class="title">Parley</span>
-      <span id="sessionTok" class="sessiontok" title="Tokens used in this conversation"></span>
+      <span id="sessionTok" class="sessiontok" title="Tokens used in this conversation (and estimated cost)"></span>
       <span class="grow"></span>
       <button id="newChat" title="New conversation" aria-label="New conversation">＋</button>
       <button id="historyBtn" title="Past conversations" aria-label="Past conversations">🕘</button>
@@ -983,7 +1023,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
           </div>
           <div class="mp-foot">Thinking shows the model's reasoning before it answers (uses more output tokens). Shell commands ask before running — except in <strong>Full access</strong> mode.</div>
         </div>
-        <textarea id="prompt" placeholder="Ask Parley…  (@file to attach · Enter to send · Shift+Enter for newline)"></textarea>
+        <textarea id="prompt" placeholder="Ask Parley…  (@file to attach · paste or drop an image · Enter to send · Shift+Enter for newline)"></textarea>
         <div class="actions">
           <select id="agent" class="model" aria-label="Parley model"></select>
           <button type="button" id="modeBtn" class="modebtn" title="Mode &amp; thinking" aria-label="Mode">Chat ▾</button>

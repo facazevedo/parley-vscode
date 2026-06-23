@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.13.0
+
+### Added
+- **Estimated cost.** The session counter in the chat header now shows an estimated USD cost (e.g. `· 12,345 tok · ~$0.04`) alongside tokens, accumulated per turn from the published Parley per-model rates and persisted with the conversation. Llama 4 Maverick shows `$0.00` (free); unknown models show tokens only. New pure, unit-tested `src/parley/pricing.ts`.
+- **Paste & drop images.** Paste a screenshot (Ctrl/Cmd+V) or drag-and-drop an image file directly onto the composer to attach it to the next turn — no file dialog needed. The drop target highlights while dragging; oversized images (>~12 MB) are rejected with a warning.
+
+### Engineering
+- 5 new unit tests for the pricing/rate table (now 29 unit tests).
+
 ## 0.12.0
 
 ### Added

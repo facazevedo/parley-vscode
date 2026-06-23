@@ -125,7 +125,7 @@ Multi-change edits offer **Apply All / Choose… / Reject** — "Choose…" lets
 ### 💾 Sessions, history & usage
 - The conversation (and your model/thinking/agent-mode choices) **persists across reloads** per workspace.
 - **Past conversations** are archived when you start a new one; reopen them with 🕘 or **`Parley: Open Past Conversation`**.
-- Each reply shows a subtle footer with the **model** and **token usage**; the header shows a **running token total** for the conversation.
+- Each reply shows a subtle footer with the **model** and **token usage**; the header shows a **running token total** and an **estimated cost** (`~$`) for the conversation, computed from Parley's published per-model rates.
 - **Token limit** — set a per-conversation token budget with **`Parley: Set Token Limit`** (or `parley.tokenLimit`); **`0` = unlimited** (default). When reached, the agent stops and asks you to raise it or start fresh.
 
 ### 🖋️ Rich replies
@@ -136,7 +136,7 @@ The **📎** button attaches files to your next message:
 - **Text files** are added as context.
 - **Images** (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.bmp`) are sent as multimodal `image_url` input to vision-capable models (Claude, Gemini, GPT-5).
 
-Attachments show as removable chips and are cleared after sending.
+You can also **paste a screenshot** (Ctrl/Cmd+V) or **drag-and-drop an image** straight onto the composer — no dialog needed. Attachments show as removable chips and are cleared after sending.
 
 ### 🎨 Image generation
 **`Parley: Generate Image`** prompts for a description and size, calls
