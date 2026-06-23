@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.29.0
+
+### Added
+- **One-time hint** when you select a reasoning level while an **OpenAI / GPT-5** model is active: a short chat note explains that Parley accepts the level but doesn't apply it for OpenAI (verified live), and suggests switching to a **Claude** or **Gemini** model for real extended reasoning. Shown once per workspace; also fires if you switch to an OpenAI model while reasoning is on.
+
 ## 0.28.0
 
 ### Changed — honest reasoning/speed labeling (after live testing)

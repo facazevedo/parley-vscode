@@ -290,6 +290,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       case 'agentChanged':
         this.selectedAgentId = message.agentId ?? this.selectedAgentId;
         this.save();
+        if (this.maybeWarnOpenAiReasoning()) {
+          await this.postState();
+        }
         return;
       case 'modeChanged':
         this.mode = normalizeMode(message.mode);
@@ -299,6 +302,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       case 'thinkingChanged':
         this.selectedThinking = normalizeThinkingLevel(message.thinking);
         this.save();
+        this.maybeWarnOpenAiReasoning();
         await this.postState();
         return;
       case 'speedChanged':
@@ -744,6 +748,33 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       default:
         return name;
     }
+  }
+
+  /**
+   * One-time chat hint: extended thinking is a no-op on OpenAI models via Parley
+   * (verified — the reasoning level is accepted but not applied), so nudge toward
+   * Claude/Gemini. Returns true if the hint was added this call.
+   */
+  private maybeWarnOpenAiReasoning(): boolean {
+    if (this.selectedThinking === 'off') {
+      return false;
+    }
+    const model = this.selectedAgentId || this.getSettings().defaultAgent;
+    if (!/^openai\//i.test(model)) {
+      return false;
+    }
+    if (this.state.get<boolean>('parley.openaiReasoningHintShown', false)) {
+      return false;
+    }
+    void this.state.update('parley.openaiReasoningHintShown', true);
+    this.history.push({
+      role: 'assistant',
+      content:
+        `ℹ️ Heads-up: on Parley the reasoning level isn't applied to **OpenAI / GPT-5** models — it's accepted but has no measurable effect (verified live). ` +
+        `For deeper reasoning, switch to a **Claude** (Opus/Sonnet) or **Gemini** model, where extended thinking genuinely works.`,
+      createdAt: new Date().toISOString()
+    });
+    return true;
   }
 
   private async pickAttachments(): Promise<void> {
