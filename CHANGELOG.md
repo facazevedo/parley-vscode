@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.28.0
+
+### Changed — honest reasoning/speed labeling (after live testing)
+- Live-tested the reasoning and speed parameters against the Parley API and corrected the in-product labels to match reality:
+  - **Claude** extended thinking — **works** (enabling it returns a real `thinking` field and ~2–3× the reasoning tokens).
+  - **Gemini** reasoning — **has an effect** (token usage changes substantially with the level).
+  - **OpenAI/GPT-5.x** `reasoning_effort` — **accepted but NOT applied by Parley** (reasoning depth/latency identical across minimal→high on gpt-5-nano and gpt-5.5). The level is still sent for forward-compatibility.
+  - **Fast** (`service_tier: "priority"`) — **accepted** by the gateway (HTTP 200, no error); the actual ≈1.5× speed-up depends on your account's tier.
+- The Mode popover now states this so the control isn't misleading.
+
 ## 0.27.0
 
 ### Added — Speed (OpenAI service tier), like Codex

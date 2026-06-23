@@ -1548,7 +1548,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
           <button type="button" class="mp-item" data-mode="auto"><span class="mp-name">Auto mode</span><span class="mp-desc">Agent decides and applies edits automatically</span></button>
           <button type="button" class="mp-item" data-mode="full"><span class="mp-name">Full access <span class="mp-caution">⚠ CAUTION</span></span><span class="mp-desc">Auto-applies edits AND runs shell commands without asking</span></button>
           <div class="mp-sep"></div>
-          <div class="mp-head">Extended thinking <span class="mp-note">— Claude, GPT-5, Gemini</span></div>
+          <div class="mp-head">Extended thinking <span class="mp-note">— effective on Claude &amp; Gemini</span></div>
           <div class="mp-thinking">
             <button type="button" data-thinking="off">Off</button>
             <button type="button" data-thinking="adaptive">Adaptive</button>
@@ -1562,7 +1562,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
             <button type="button" data-speed="standard">Standard</button>
             <button type="button" data-speed="fast">⚡ Fast</button>
           </div>
-          <div class="mp-foot">Thinking shows the model's reasoning (uses more output tokens). <strong>Fast</strong> requests OpenAI's priority service tier (≈1.5× speed, higher usage cost). Shell commands ask before running — except in <strong>Full access</strong> mode.</div>
+          <div class="mp-foot">Thinking shows the model's reasoning (uses more output tokens). Verified live: it works on <strong>Claude</strong> &amp; <strong>Gemini</strong>; <strong>OpenAI</strong> accepts a reasoning level but Parley doesn't currently apply it. <strong>Fast</strong> requests OpenAI's priority tier (accepted by the gateway; actual ≈1.5× speed depends on your account). Shell commands ask before running — except in <strong>Full access</strong> mode.</div>
         </div>
         <textarea id="prompt" placeholder="Ask Parley…  (@file to attach · paste or drop an image/PDF/audio · Enter to send · Shift+Enter for newline)"></textarea>
         <div class="actions">
