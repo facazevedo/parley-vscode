@@ -100,6 +100,12 @@ corrected to the exact API count per round).
 - `write_file` — create/overwrite a file; reviewed/checkpointed
 - `run_command` — run a shell command; **requires per-command confirmation** (except Full access), then returns its output
 - `fetch_url` — fetch a public `https://` page as text
+- plus any tools from your configured **MCP servers** (see below)
+
+**MCP servers.** Configure Model Context Protocol servers in `parley.mcpServers`
+(stdio), e.g. `{ "filesystem": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "${workspaceFolder}"] } }`.
+Parley launches them, lists their tools, and exposes them to the agent as
+`mcp__<server>__<tool>`. Run **`Parley: Reconnect MCP Servers`** after editing the config.
 
 Sensitive files are refused, file paths are constrained to the workspace, and no
 edit or command happens without your explicit approval. **Stop** aborts in-flight
@@ -211,6 +217,7 @@ with any model.
 | `Parley: Show Usage` | Show real billed spend for the current month |
 | `Parley: New Conversation` | Save the current chat and start a fresh one |
 | `Parley: Open Conversations Folder` | Reveal the auto-saved transcripts |
+| `Parley: Reconnect MCP Servers` | Restart configured MCP servers and show status |
 | `Parley: Run Diagnostics` | Probe the live API and report what works |
 | `Parley: Init Project Rules` | Scaffold an AGENTS.md rules file |
 | `Parley: Toggle Inline Completion` | Enable/disable ghost-text completions |

@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.32.0",
+  "version": "0.33.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -106,6 +106,11 @@
       {
         "command": "parley.initProjectRules",
         "title": "Parley: Init Project Rules",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.reconnectMcp",
+        "title": "Parley: Reconnect MCP Servers",
         "category": "Parley"
       },
       {
@@ -270,6 +275,20 @@
           "default": 0,
           "minimum": 0,
           "markdownDescription": "When the conversation's size exceeds this many tokens, automatically compact (summarize) it before the next turn to control cost and avoid context-window errors. The size is measured with Parley's `/v1/messages/count_tokens` endpoint when available, falling back to a character-based estimate. **`0` disables (default).** (Compaction is lossy — it replaces history with a summary.) The agent loop also trims stale tool outputs automatically regardless of this setting."
+        },
+        "parley.mcpServers": {
+          "type": "object",
+          "default": {},
+          "markdownDescription": "Model Context Protocol (MCP) servers to launch and expose to the agent, keyed by name. Each value is `{ \"command\": string, \"args\"?: string[], \"env\"?: object }` (stdio transport). Their tools appear to the model as `mcp__<name>__<tool>`. Example: `{ \"filesystem\": { \"command\": \"npx\", \"args\": [\"-y\", \"@modelcontextprotocol/server-filesystem\", \"${workspaceFolder}\"] } }`. Run **`Parley: Reconnect MCP Servers`** after editing.",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "command": { "type": "string" },
+              "args": { "type": "array", "items": { "type": "string" } },
+              "env": { "type": "object", "additionalProperties": { "type": "string" } }
+            },
+            "required": ["command"]
+          }
         },
         "parley.commandTimeoutSeconds": {
           "type": "number",

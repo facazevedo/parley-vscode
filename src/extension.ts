@@ -21,6 +21,7 @@ import { dbg, debugLogPath, initDebug } from './debug/debug';
 import { CheckpointStore } from './diff/checkpoints';
 import { ProposedContentProvider } from './diff/showDiff';
 import { Logger } from './logging/logger';
+import { McpManager } from './mcp/McpManager';
 import { ParleyAuthStore } from './parley/auth';
 import { createParleyProvider } from './parley/providerFactory';
 import type { ParleyProvider } from './parley/ParleyProvider';
@@ -32,18 +33,25 @@ export function activate(context: vscode.ExtensionContext): void {
   const auth = new ParleyAuthStore(context.secrets);
   const diffProvider = new ProposedContentProvider();
   const checkpoints = new CheckpointStore();
+  const mcp = new McpManager(logger);
+  context.subscriptions.push({ dispose: () => mcp.dispose() });
   let settings = getSettings();
   let provider: ParleyProvider = createParleyProvider(settings, auth, logger);
   logger.setLevel(settings.logLevel);
   logger.info(`Activated Parley extension with provider: ${provider.id}`);
   dbg('activate', 'extension activated', { endpoint: settings.endpoint, defaultAgent: settings.defaultAgent, mode: settings.defaultMode });
   context.subscriptions.push(logger);
+  void mcp.start(settings.mcpServers);
 
   const refreshConfiguration = (): void => {
+    const prevMcp = JSON.stringify(settings.mcpServers);
     settings = getSettings();
     logger.setLevel(settings.logLevel);
     provider = createParleyProvider(settings, auth, logger);
     logger.info(`Parley configuration refreshed; provider: ${provider.id}`);
+    if (JSON.stringify(settings.mcpServers) !== prevMcp) {
+      void mcp.start(settings.mcpServers);
+    }
   };
 
   context.subscriptions.push(
@@ -71,7 +79,8 @@ export function activate(context: vscode.ExtensionContext): void {
     commandDeps,
     context.workspaceState,
     checkpoints,
-    context.globalStorageUri
+    context.globalStorageUri,
+    mcp
   );
   // Route prompt-style commands into the chat panel so replies stream in-conversation.
   commandDeps.runPrompt = (prompt, options) => chatPanel.submitExternalPrompt(prompt, options);
@@ -89,6 +98,13 @@ export function activate(context: vscode.ExtensionContext): void {
       await vscode.commands.executeCommand('parley.chatView.focus');
       await vscode.window.showInformationMessage(
         'Parley is open. To dock it like Codex, drag the Parley view header into the Secondary Side Bar, or use View: Toggle Secondary Side Bar Visibility first.'
+      );
+    }),
+    vscode.commands.registerCommand('parley.reconnectMcp', async () => {
+      await mcp.start(getSettings().mcpServers);
+      const status = mcp.status();
+      await vscode.window.showInformationMessage(
+        status.length ? `Parley MCP: ${status.join(', ')}.` : 'Parley: no MCP servers configured (set "parley.mcpServers").'
       );
     }),
     vscode.commands.registerCommand('parley.newConversation', () => chatPanel.newConversation()),

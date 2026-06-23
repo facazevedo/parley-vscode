@@ -26,6 +26,8 @@ import { documentProviderFor } from '../parley/files';
 import { contextWindowFor, modelSupportsThinking } from '../parley/models';
 import { estimateCostUsd, formatUsd } from '../parley/pricing';
 import { dbg } from '../debug/debug';
+import type { McpManager } from '../mcp/McpManager';
+import { isMcpTool } from '../mcp/naming';
 import {
   extractAudioMp3,
   extractFrames,
@@ -159,7 +161,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     private readonly commandDeps: CommandDependencies,
     private readonly state: vscode.Memento,
     private readonly checkpoints: CheckpointStore,
-    private readonly globalStorageUri: vscode.Uri
+    private readonly globalStorageUri: vscode.Uri,
+    private readonly mcp: McpManager
   ) {
     const settings = this.getSettings();
     // Restore the previous session if present, else fall back to settings defaults.
@@ -601,10 +604,18 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       );
     }
 
+    // Built-in tools for the mode + any configured MCP tools (MCP excluded from read-only Plan mode).
+    const baseTools = this.mode === 'plan' ? READ_ONLY_TOOLS : AGENT_TOOLS;
+    const turnTools = toolsEnabled
+      ? this.mode === 'plan'
+        ? baseTools
+        : [...baseTools, ...this.mcp.getTools()]
+      : undefined;
+
     let turnTokens = 0;
     const cpStart = this.checkpoints.size;
     this.post({ type: 'tokens', total: 0 });
-    dbg('turn', 'start', { agentId, mode: this.mode, toolsEnabled, canAutoContinue, stream: useStream, thinking: this.selectedThinking, speed: this.selectedSpeed });
+    dbg('turn', 'start', { agentId, mode: this.mode, toolsEnabled, canAutoContinue, stream: useStream, thinking: this.selectedThinking, speed: this.selectedSpeed, mcpTools: this.mcp.getTools().length });
 
     try {
       let auto = 0;
@@ -638,7 +649,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
             signal: this.abortController.signal,
             onToken: useStream ? (delta) => this.post({ type: 'streamDelta', delta }) : undefined,
             onThinking: useStream ? (delta) => this.post({ type: 'thinkingDelta', delta }) : undefined,
-            tools: toolsEnabled ? (this.mode === 'plan' ? READ_ONLY_TOOLS : AGENT_TOOLS) : undefined,
+            tools: turnTools,
             runTool: toolsEnabled ? (call) => this.runTool(call) : undefined,
             onToolEvent: toolsEnabled
               ? (event) => {
@@ -1293,6 +1304,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
 
   /** Tool runner for agent mode: read tools delegate to the read-only runner; writes/commands need UI + checkpoints. */
   private async runTool(call: ToolCall): Promise<string> {
+    if (isMcpTool(call.name)) {
+      return this.mcp.callTool(call.name, call.arguments);
+    }
     if (call.name === 'write_file') {
       return this.toolWriteFile(call);
     }

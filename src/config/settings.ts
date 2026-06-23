@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { normalizeThinkingLevel, type ThinkingLevel } from '../parley/thinking';
+import type { McpServerConfig } from '../mcp/McpManager';
 
 export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
 
@@ -33,6 +34,7 @@ export interface ParleySettings {
   readonly autoSaveConversations: boolean;
   readonly conversationsDir: string;
   readonly commandTimeoutSeconds: number;
+  readonly mcpServers: Record<string, McpServerConfig>;
   readonly inlineCompletionEnabled: boolean;
   readonly inlineCompletionModel: string;
   readonly inlineCompletionDebounceMs: number;
@@ -70,6 +72,7 @@ export function getSettings(): ParleySettings {
     autoSaveConversations: config.get<boolean>('autoSaveConversations', true),
     conversationsDir: config.get<string>('conversationsDir', '').trim(),
     commandTimeoutSeconds: clampInt(config.get<number>('commandTimeoutSeconds', 300), 5, 3600),
+    mcpServers: config.get<Record<string, McpServerConfig>>('mcpServers', {}) ?? {},
     inlineCompletionEnabled: inline.get<boolean>('enabled', true),
     inlineCompletionModel: inline.get<string>('model', DEFAULT_COMPLETION_MODEL).trim() || DEFAULT_COMPLETION_MODEL,
     inlineCompletionDebounceMs: inline.get<number>('debounceMs', 350),

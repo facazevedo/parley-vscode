@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.33.0
+
+### Added — MCP (Model Context Protocol) servers
+- Configure MCP servers in **`parley.mcpServers`** (stdio transport). Parley spawns each one, runs the JSON-RPC `initialize` handshake, lists its tools, and exposes them to the agent as **`mcp__<server>__<tool>`** — so the model can use external/MCP tools in the agent loop alongside the built-ins. New module `src/mcp/` with a defensive client (a server that fails to start is logged and skipped — chat keeps working) and unit-tested name mapping.
+- **`Parley: Reconnect MCP Servers`** restarts them and reports status; servers also restart automatically when the config changes. MCP tools are available in every agent mode except read-only Plan mode.
+
 ## 0.32.0
 
 ### Added — Claude-Code / Codex / Cursor parity (batch 1)
