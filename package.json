@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.38.0",
+  "version": "0.39.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -257,10 +257,10 @@
         },
         "parley.maxToolRounds": {
           "type": "number",
-          "default": 25,
+          "default": 50,
           "minimum": 1,
-          "maximum": 200,
-          "markdownDescription": "Maximum tool-call rounds the agent may take within a single turn."
+          "maximum": 400,
+          "markdownDescription": "Maximum tool-call rounds the agent may take within a single turn before pausing. When the limit is reached the agent keeps its tools and auto-continues into the next step (it does not lose access to its tools), so raising this mainly reduces turn boundaries on long tasks."
         },
         "parley.maxAutoContinue": {
           "type": "number",

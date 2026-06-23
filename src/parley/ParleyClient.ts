@@ -43,7 +43,7 @@ const COMPLETION_SYSTEM =
   'Markdown fences, no repetition of the surrounding code.';
 
 const MAX_TOOL_RESULT_CHARS = 8000;
-const DEFAULT_MAX_TOOL_ROUNDS = 25;
+const DEFAULT_MAX_TOOL_ROUNDS = 50;
 
 interface OpenAiMessage {
   role: string;
@@ -443,9 +443,10 @@ export class ParleyClient implements ParleyProvider {
     const maxRounds = options.maxToolRounds ?? DEFAULT_MAX_TOOL_ROUNDS;
 
     let lastUsage: TokenUsage | undefined;
+    let lastResult: CompletionResult | undefined;
     for (let round = 0; round < maxRounds; round += 1) {
       dbg('toolloop', `round ${round + 1}/${maxRounds}`, { convoMessages: convo.length });
-      trimOldToolMessages(convo, 8); // keep the convo from ballooning across many tool rounds
+      trimOldToolMessages(convo, 12); // keep the convo from ballooning across many tool rounds
       const roundPayload: Record<string, unknown> = {
         model,
         messages: convo,
@@ -465,6 +466,7 @@ export class ParleyClient implements ParleyProvider {
       // reassembled from the streamed deltas. This is what makes the agent's
       // activity appear token-by-token (Claude-Code style).
       const result = await this.streamRound(response, options.onToken, options.onUsage, options.onThinking);
+      lastResult = result;
       if (result.usage) {
         lastUsage = result.usage;
       }
@@ -504,17 +506,17 @@ export class ParleyClient implements ParleyProvider {
       }
     }
 
-    // Out of tool rounds: ask once more without tools so the model commits to an answer.
-    this.logger.debug(`Tool loop hit ${maxRounds} rounds; requesting a final answer.`);
-    const final = await this.singleCompletion(
-      convo,
-      model,
-      { onToken: options.onToken, onThinking: options.onThinking, signal: options.signal },
-      thinking,
-      responseFormat,
-      serviceTier
-    );
-    return { content: final.content, usage: final.usage ?? lastUsage, thinking: final.thinking };
+    // Out of tool rounds for this step. Return the work done so far and let the chat
+    // panel's auto-continue resume the next step WITH tools still available. We must NOT
+    // make a final no-tools call here: mid-task, the model perceives the missing tools as
+    // "the tool interface became unavailable" and gives up instead of finishing.
+    this.logger.debug(`Tool loop hit ${maxRounds} rounds; pausing this step (auto-continue resumes with tools).`);
+    return {
+      content: lastResult?.content ?? '',
+      usage: lastUsage,
+      thinking: lastResult?.thinking,
+      thinkingSignature: lastResult?.thinkingSignature
+    };
   }
 
   /** Stream one chat-completions round, surfacing text via onToken and reassembling tool calls from deltas. */

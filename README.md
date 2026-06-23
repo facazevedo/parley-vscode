@@ -457,7 +457,7 @@ root is auto‑injected into the system prompt as project rules. Scaffold one wi
 | `parley.thinking` | `off` | Extended thinking: `off`/`adaptive`/`low`/`medium`/`high` |
 | `parley.defaultMode` | `chat` | `chat`/`ask`/`edit`/`plan`/`auto`/`full` |
 | `parley.autoContinue` | `true` | Keep working until done in agent modes |
-| `parley.maxToolRounds` | `25` | Max tool‑call rounds per turn |
+| `parley.maxToolRounds` | `50` | Max tool‑call rounds per turn before it auto‑continues (keeps its tools) |
 | `parley.maxAutoContinue` | `25` | Max auto‑continue steps (`0` disables) |
 | `parley.tokenLimit` | `0` | Per‑conversation token budget (`0` = unlimited) |
 | `parley.autoCompactPercent` | `80` | Auto‑compact at this % of the context window (`0` off) |

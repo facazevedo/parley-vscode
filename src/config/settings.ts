@@ -71,7 +71,7 @@ export function getSettings(): ParleySettings {
     thinking: normalizeThinkingLevel(config.get<string>('thinking', 'off')),
     defaultMode: normalizeMode(config.get<string>('defaultMode', 'chat')),
     autoContinue: config.get<boolean>('autoContinue', true),
-    maxToolRounds: clampInt(config.get<number>('maxToolRounds', 25), 1, 200),
+    maxToolRounds: clampInt(config.get<number>('maxToolRounds', 50), 1, 400),
     maxAutoContinue: clampInt(config.get<number>('maxAutoContinue', 25), 0, 200),
     tokenLimit: Math.max(0, Math.floor(config.get<number>('tokenLimit', 0))),
     autoCompactTokens: Math.max(0, Math.floor(config.get<number>('autoCompactTokens', 0))),

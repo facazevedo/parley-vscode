@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.39.0
+
+### Fixed — agent no longer "loses its tools" and gives up mid-task
+- **Root cause:** when an agent turn hit the tool-round limit, the loop made one final model call **with the tools removed** to force a text answer. Mid-task, the model correctly observed it had no tools and replied *"the tool interface became unavailable in this run"* and stopped — then auto-continue restarted, it worked briefly, hit the wall again, and repeated. This is what made it "stop many times before finishing."
+- Now, when the round limit is reached, the agent **keeps its tools and auto-continues** into the next step instead of being handed a tool-less request. The misleading "tools unavailable / can't continue in this run" message is gone.
+- **`parley.maxToolRounds` default raised 25 → 50** (max 400), so long multi-file tasks cross fewer turn boundaries. Tool outputs retained per turn raised 8 → 12 to cut redundant re-reads.
+
+### Changed — agent installs its own dependencies
+- The agent system prompt now tells the agent to **install missing dependencies itself** via `run_command` (`pip install`, `npm install`, …) rather than reporting "pytest/numpy is not installed" as a blocker. It also clarifies that **"install those tools" means install the missing packages/CLIs** (not its function-calling tools, which it previously refused thinking it couldn't "enable tools"). In **Full Access** mode it's told commands run without asking, so it installs/builds/tests freely.
+- The prompt also explicitly states the tools are **always available** (never claim otherwise) and that **trimmed older tool outputs are normal** (re-read if needed) — and asks the model not to paste raw reasoning notes-to-self into replies.
+
 ## 0.38.0
 
 ### Changed — tiny, platform-agnostic VSIX (esbuild bundle)
