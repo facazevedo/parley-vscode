@@ -87,6 +87,17 @@ button:disabled { opacity: 0.5; cursor: default; }
 .thinking > summary { cursor: pointer; list-style: none; user-select: none; font-size: 0.82em; color: var(--vscode-descriptionForeground); padding: 1px 0; }
 .thinking > summary::-webkit-details-marker { display: none; }
 .thinking .think-body { white-space: pre-wrap; font-size: 0.84em; color: var(--vscode-descriptionForeground); opacity: 0.92; margin-top: 4px; }
+/* Live task checklist (update_plan) */
+.plancard { margin: 0 0 10px; border: 1px solid var(--vscode-editorWidget-border, rgba(127,127,127,0.3)); border-radius: 8px; padding: 6px 10px; }
+.planhead { font-size: 0.74em; text-transform: uppercase; letter-spacing: .05em; color: var(--vscode-descriptionForeground); margin-bottom: 4px; }
+.planrow { display: flex; gap: 7px; align-items: baseline; font-size: 0.86em; line-height: 1.5; }
+.planicon { flex: none; width: 1.1em; text-align: center; }
+.planrow.done .plantext { text-decoration: line-through; opacity: 0.65; }
+.planrow.done .planicon { color: var(--vscode-charts-green, #3fb950); }
+.planrow.in_progress .planicon { color: var(--vscode-charts-blue, var(--vscode-focusBorder)); }
+.planrow.in_progress .plantext { font-weight: 600; }
+.planrow.pending { opacity: 0.8; }
+
 /* Inline diff card for applied edits */
 .diffcard { margin: 0 0 10px; border: 1px solid var(--vscode-editorWidget-border, rgba(127, 127, 127, 0.3)); border-radius: 8px; overflow: hidden; }
 .diffhead { display: flex; gap: 8px; align-items: baseline; padding: 5px 10px; font-size: 0.82em; background: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.12)); border-bottom: 1px solid var(--vscode-editorWidget-border, rgba(127, 127, 127, 0.3)); }

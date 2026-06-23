@@ -3,6 +3,7 @@ import { registerAskSelectionCommand } from './commands/askSelection';
 import type { CommandDependencies } from './commands/common';
 import { registerExplainFileCommand } from './commands/explainFile';
 import { registerFixDiagnosticsCommand } from './commands/fixDiagnostics';
+import { registerGenerateCommitMessageCommand } from './commands/generateCommitMessage';
 import { registerGenerateImageCommand } from './commands/generateImage';
 import { registerGenerateTestsCommand } from './commands/generateTests';
 import { registerInitProjectRulesCommand } from './commands/initProjectRules';
@@ -147,6 +148,7 @@ export function activate(context: vscode.ExtensionContext): void {
   registerFixDiagnosticsCommand(context, commandDeps);
   registerSuggestTerminalCommand(context, commandDeps);
   registerGenerateImageCommand(context, commandDeps);
+  registerGenerateCommitMessageCommand(context, commandDeps);
   registerToggleInlineCompletionCommand(context);
   registerShowUsageCommand(context, commandDeps);
   registerRunDiagnosticsCommand(context, commandDeps);

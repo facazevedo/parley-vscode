@@ -44,6 +44,9 @@ import type {
 } from '../parley/types';
 
 const PROJECT_RULES_FILES = ['.parleyrules', 'AGENTS.md', '.cursorrules'];
+// User-defined slash commands: a `name.md` here becomes `/name` whose body is the prompt
+// (with `$ARGS` replaced by anything typed after the command).
+const CUSTOM_COMMAND_DIRS = ['.parley/commands', '.claude/commands'];
 
 interface ChatPanelMessage {
   readonly type:
@@ -138,6 +141,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private sessionCost = 0;
   private jsonNext = false; // one-shot: request the next reply as a JSON object (/json)
   private conversationId = ''; // stable id → filename for the auto-saved transcript
+  private customCommandNames: string[] = []; // user-defined /commands from .parley|.claude/commands
   private attachments: PendingAttachment[] = [];
   private busy = false;
   private abortController?: AbortController;
@@ -254,6 +258,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
 
     this.resolveReady();
     void this.refreshAgents();
+    void this.refreshCustomCommands().then(() => this.postState());
     void this.postState();
   }
 
@@ -419,14 +424,63 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         this.history.push({
           role: 'assistant',
           content:
-            '**Slash commands**\n- `/clear` (or `/new`) — start a new conversation\n- `/compact` — summarize to free up context (choose keep-recent or all)\n- `/cost` — show this conversation\'s token/cost usage\n- `/model` — switch the model\n- `/init` — create a project rules file (AGENTS.md)\n- `/json` — make the next reply a JSON object\n- `/help` — this list\n\nMost actions also have commands in the Command Palette (search "Parley").',
+            '**Slash commands**\n- `/clear` (or `/new`) — start a new conversation\n- `/compact` — summarize to free up context (choose keep-recent or all)\n- `/cost` — show this conversation\'s token/cost usage\n- `/model` — switch the model\n- `/init` — create a project rules file (AGENTS.md)\n- `/json` — make the next reply a JSON object\n- `/help` — this list\n\n**Custom commands:** add a `name.md` file under `.parley/commands/` (or `.claude/commands/`) and it becomes `/name` — its text is used as the prompt, with `$ARGS` replaced by anything you type after the command.\n\nMost actions also have commands in the Command Palette (search "Parley").',
           createdAt: new Date().toISOString()
         });
         await this.postState();
         return true;
       default:
-        return false;
+        return this.runCustomCommand(cmd, input);
     }
+  }
+
+  /** Scan the workspace for user-defined `/command` markdown files (cached for the slash menu). */
+  private async refreshCustomCommands(): Promise<void> {
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+    if (!root) {
+      this.customCommandNames = [];
+      return;
+    }
+    const names = new Set<string>();
+    for (const dir of CUSTOM_COMMAND_DIRS) {
+      try {
+        const entries = await vscode.workspace.fs.readDirectory(vscode.Uri.joinPath(root, dir));
+        for (const [name, type] of entries) {
+          if (type === vscode.FileType.File && name.toLowerCase().endsWith('.md')) {
+            names.add(name.slice(0, -3));
+          }
+        }
+      } catch {
+        // Directory absent — fine.
+      }
+    }
+    this.customCommandNames = [...names].sort((a, b) => a.localeCompare(b));
+  }
+
+  /** Run a user-defined `/command`: expand its file body (with `$ARGS`) and send it as a turn. */
+  private async runCustomCommand(name: string, input: string): Promise<boolean> {
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+    if (!root) {
+      return false;
+    }
+    const match = this.customCommandNames.find((n) => n.toLowerCase() === name);
+    if (!match) {
+      return false;
+    }
+    for (const dir of CUSTOM_COMMAND_DIRS) {
+      try {
+        const body = Buffer.from(
+          await vscode.workspace.fs.readFile(vscode.Uri.joinPath(root, dir, `${match}.md`))
+        ).toString('utf8');
+        const args = input.replace(/^\/\S+\s*/, '').trim();
+        const expanded = /\$ARGS/.test(body) ? body.replace(/\$ARGS/g, args) : args ? `${body}\n\n${args}` : body;
+        await this.runTurn(expanded, this.contextOptions);
+        return true;
+      } catch {
+        // Try the next directory.
+      }
+    }
+    return false;
   }
 
   /** Re-run the last user message (drop the responses after it). */
@@ -718,6 +772,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       modeNote =
         'You are an autonomous coding agent in VS Code. Keep working — read files (use read_file start_line/end_line for large files), search, edit (use edit_file for precise changes to existing files, write_file for new ones), and run commands — until the user\'s request is FULLY complete. Do not stop to ask whether to continue or wait for confirmation.\n\n' +
         'You are NOT limited to a single interaction or a fixed number of steps — you will be re-invoked automatically to continue, so never apologize about "running out of time" or "this interaction"; just keep going. If a command is terminated for exceeding its timeout, that is recoverable: re-run it, split it into smaller steps, or proceed — do not give up.\n\n' +
+        'For any task with more than a couple of steps, call the `update_plan` tool first with the high-level steps, then update it (one step `in_progress` at a time, mark steps `done` as you finish) so the user can follow your progress.\n\n' +
         'IMPORTANT — always communicate in plain text as you work: before each tool call, write a short sentence saying what you are about to do and why; after finishing a logical chunk, summarize what changed. NEVER reply with only tool calls and no text, and never return an empty message. When the entire task is genuinely finished, give a brief final summary (files created/changed, commands run, whether lint/tests/build passed, and any known limitations) and end your final message with <DONE> on its own line.';
     }
     return [rules, modeNote].filter(Boolean).join('\n\n') || undefined;
@@ -1247,7 +1302,29 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     if (call.name === 'run_command') {
       return this.toolRunCommand(call);
     }
+    if (call.name === 'update_plan') {
+      return this.toolUpdatePlan(call);
+    }
     return runAgentTool(call);
+  }
+
+  /** Render the agent's task checklist in the chat (Claude-Code / Codex style). */
+  private toolUpdatePlan(call: ToolCall): string {
+    let steps: Array<{ step?: string; status?: string }> = [];
+    try {
+      steps = (JSON.parse(call.arguments || '{}').steps ?? []) as Array<{ step?: string; status?: string }>;
+    } catch {
+      return 'Error: arguments were not valid JSON.';
+    }
+    const clean = steps
+      .filter((s) => s && typeof s.step === 'string')
+      .map((s) => ({
+        step: String(s.step).slice(0, 200),
+        status: s.status === 'done' || s.status === 'in_progress' ? s.status : 'pending'
+      }));
+    this.post({ type: 'plan', steps: clean });
+    const done = clean.filter((s) => s.status === 'done').length;
+    return `Plan updated (${done}/${clean.length} done).`;
   }
 
   private async toolWriteFile(call: ToolCall): Promise<string> {
@@ -1411,14 +1488,48 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       return [];
     }
     const out: ContextAttachment[] = [];
+    const cap = settings.contextMaxCharacters;
+
+    // @git — include the uncommitted diff vs HEAD.
+    if (/(?:^|\s)@git\b/i.test(prompt)) {
+      const diff = await runShellCommand('git --no-pager diff HEAD', root.fsPath, 15000);
+      const content = (diff && diff !== '(no output)' ? diff : 'No uncommitted changes.').slice(0, cap);
+      out.push({ id: 'mention-git', kind: 'user-file', label: '@git (uncommitted diff)', content, characterCount: content.length, truncated: diff.length > content.length });
+    }
+
+    // @<url> — fetch the page text.
+    for (const m of prompt.matchAll(/(?:^|\s)@(https?:\/\/\S+)/gi)) {
+      const url = m[1].replace(/[)\].,;]+$/, '');
+      const text = await runAgentTool({ id: '', name: 'fetch_url', arguments: JSON.stringify({ url }) });
+      const content = text.slice(0, cap);
+      out.push({ id: `mention-url-${url}`, kind: 'user-file', label: `@${url}`, content, characterCount: content.length, truncated: text.length > content.length });
+    }
+
+    // @path — a file's contents, or a folder's listing.
     for (const rel of extractMentionPaths(prompt)) {
-      if (isSensitiveFile(rel)) {
+      if (rel === 'git' || /^https?:/i.test(rel) || isSensitiveFile(rel)) {
         continue;
       }
       try {
         const uri = vscode.Uri.joinPath(root, rel);
+        const stat = await vscode.workspace.fs.stat(uri);
+        if (stat.type === vscode.FileType.Directory) {
+          const files = await vscode.workspace.findFiles(
+            `${rel.replace(/[/\\]+$/, '')}/**/*`,
+            '{**/node_modules/**,**/.git/**,**/out/**,**/dist/**}',
+            60
+          );
+          const listing =
+            files
+              .map((u) => path.relative(root.fsPath, u.fsPath).replace(/\\/g, '/'))
+              .filter((r) => !isSensitiveFile(r))
+              .join('\n') || '(empty)';
+          const content = listing.slice(0, cap);
+          out.push({ id: `mention-dir-${rel}`, kind: 'user-file', label: `@${rel}/ (folder)`, content, characterCount: content.length, truncated: listing.length > content.length });
+          continue;
+        }
         const raw = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
-        const content = raw.length > settings.contextMaxCharacters ? raw.slice(0, settings.contextMaxCharacters) : raw;
+        const content = raw.length > cap ? raw.slice(0, cap) : raw;
         out.push({
           id: `mention-${rel}`,
           kind: 'user-file',
@@ -1429,7 +1540,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
           truncated: raw.length > content.length
         });
       } catch {
-        // Not a readable file (probably a normal "@mention" word) — ignore.
+        // Not a readable file/dir (probably a normal "@mention" word) — ignore.
       }
     }
     return out;
@@ -1489,6 +1600,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       this.logger.warn(error instanceof Error ? error.message : 'Failed to list Parley agents.');
       this.agents = [{ id: this.getSettings().defaultAgent, label: this.getSettings().defaultAgent }];
     }
+    await this.refreshCustomCommands();
     await this.postState();
   }
 
@@ -1515,6 +1627,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       selectedAgentId: this.selectedAgentId,
       selectedThinking: this.selectedThinking,
       selectedSpeed: this.selectedSpeed,
+      customCommands: this.customCommandNames,
       contextOptions: this.contextOptions,
       attachments: this.attachments.map((a) => ({ id: a.id, label: a.label, kind: a.kind }))
     });

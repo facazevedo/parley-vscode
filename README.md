@@ -105,9 +105,12 @@ Sensitive files are refused, file paths are constrained to the workspace, and no
 edit or command happens without your explicit approval. **Stop** aborts in-flight
 work *and kills a running command*. After a turn, a **"Changed N files"** summary
 lists what was edited (undo with `Parley: Revert All Edits`). The agent loop also
-trims stale tool output and auto-compacts to control cost. Type **`/`** in the
-composer for a **slash-command menu**: `/clear`, `/compact`, `/cost`, `/model`,
-`/init`, `/json` (next reply as JSON), `/help`.
+trims stale tool output and auto-compacts to control cost. In agent modes it also
+keeps a **live task checklist** (via an `update_plan` tool) so you can follow long
+runs. Type **`/`** in the composer for a **slash-command menu**: `/clear`,
+`/compact`, `/cost`, `/model`, `/init`, `/json` (next reply as JSON), `/help`, plus
+any **custom commands** you define (drop a `name.md` in `.parley/commands/` — its
+body is the prompt, with `$ARGS` replaced by text after the command).
 
 ### ✏️ Inline edit (Ctrl+Alt+K)
 Select code, press **`Ctrl+Alt+K`** (`Cmd+Alt+K` on macOS) or run
@@ -117,7 +120,7 @@ Applied edits are checkpointed; **`Parley: Revert Last Edit`** undoes the most r
 Multi-change edits offer **Apply All / Choose… / Reject** — "Choose…" lets you accept or reject **individual hunks**.
 
 ### 🏷️ @-mentions & project rules
-- Type **`@`** in the composer to get a **file autocomplete** — pick a file (↑/↓, Enter) to attach it as context.
+- Type **`@`** in the composer to get a **file autocomplete** — pick a file (↑/↓, Enter) to attach it as context. Also supported: **`@<folder>`** (folder listing), **`@git`** (uncommitted diff), and **`@https://…`** (fetch a page).
 - A **`.parleyrules`**, **`AGENTS.md`**, or **`.cursorrules`** file in the workspace root is auto-injected into the system prompt as project rules.
 
 > Semantic `@codebase` search isn't offered because the Parley API exposes no
@@ -204,6 +207,7 @@ with any model.
 | `Parley: Regenerate Last Response` | Re-run the last user message |
 | `Parley: Set Token Limit` | Set the per-conversation token budget |
 | `Parley: Generate Image` | Generate an image with `gpt-image-1` |
+| `Parley: Generate Commit Message` | Write a commit message from the staged diff into Source Control |
 | `Parley: Show Usage` | Show real billed spend for the current month |
 | `Parley: New Conversation` | Save the current chat and start a fresh one |
 | `Parley: Open Conversations Folder` | Reveal the auto-saved transcripts |

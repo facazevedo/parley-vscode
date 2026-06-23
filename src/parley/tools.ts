@@ -127,6 +127,32 @@ export const AGENT_TOOLS: readonly ToolDefinition[] = [
         required: ['url']
       }
     }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'update_plan',
+      description:
+        'Maintain a short checklist of the high-level steps for the current task (3-8 items). Call it when you begin a multi-step task and again whenever a step changes status, so the user can follow along. Exactly one step should be "in_progress" at a time.',
+      parameters: {
+        type: 'object',
+        properties: {
+          steps: {
+            type: 'array',
+            description: 'Ordered list of steps with their current status.',
+            items: {
+              type: 'object',
+              properties: {
+                step: { type: 'string', description: 'Short description of the step.' },
+                status: { type: 'string', enum: ['pending', 'in_progress', 'done'], description: 'Current status.' }
+              },
+              required: ['step', 'status']
+            }
+          }
+        },
+        required: ['steps']
+      }
+    }
   }
 ];
 

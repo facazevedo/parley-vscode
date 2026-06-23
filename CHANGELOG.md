@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.32.0
+
+### Added — Claude-Code / Codex / Cursor parity (batch 1)
+- **Live task checklist.** In agent modes the model can call an `update_plan` tool; the steps render as a checklist in the chat (☐ / ▸ in-progress / ☑ done), updated in place so long runs are legible.
+- **Custom slash commands.** Drop a `name.md` file in `.parley/commands/` (or `.claude/commands/`) and it becomes `/name` — the file body is the prompt, with `$ARGS` replaced by anything typed after the command. Custom commands appear in the `/` menu.
+- **Richer `@`-mentions.** Besides `@file`: **`@<folder>`** attaches a folder listing, **`@git`** attaches the uncommitted diff (vs HEAD), and **`@https://…`** fetches a page's text.
+- **`Parley: Generate Commit Message`.** Summarizes the staged diff (or working tree) into a Conventional Commits message and drops it into the Source Control input box.
+
+_Next: MCP server support, an "Apply" button on chat code blocks, and visible-terminal command execution._
+
 ## 0.31.0
 
 ### Changed — future-proof Claude 4.x model support

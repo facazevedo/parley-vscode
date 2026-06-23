@@ -18,6 +18,7 @@ const EXPECTED_COMMANDS = [
   'parley.revertLastEdit',
   'parley.revertAll',
   'parley.generateImage',
+  'parley.generateCommitMessage',
   'parley.toggleInlineCompletion',
   'parley.setTokenLimit',
   'parley.showUsage',
