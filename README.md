@@ -138,8 +138,9 @@ The **📎** button attaches files to your next message:
 - **Images** (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.bmp`) are sent as multimodal `image_url` input to vision-capable models (Claude, Gemini, GPT-5).
 - **PDFs** (`.pdf`) are routed per provider: OpenAI/Google models **upload** them to Parley's `/v1/files` endpoint and reference them by id; Bedrock/Anthropic models receive them **inline** as a base64 document block.
 - **Audio** (`.wav`, `.mp3`) is sent as a multimodal `input_audio` block — supported on OpenAI and Google models (Parley warns otherwise).
+- **Video** (`.mp4/.mov/.mkv/.webm/.avi/…`) is handled client-side via **ffmpeg** (Parley has no native video type): you choose to **sample frames** (sent as images to a vision model), **extract the audio track** (sent as `input_audio`), or **both**. Needs `ffmpeg`/`ffprobe` on PATH or `parley.video.ffmpegPath`; if missing, Parley links you to the download. Tune with `parley.video.maxFrames` / `frameWidth` / `maxAudioSeconds`.
 
-You can also **paste a screenshot** (Ctrl/Cmd+V) or **drag-and-drop an image, PDF, or audio file** straight onto the composer — no dialog needed. Attachments show as removable chips and are cleared after sending.
+You can also **paste a screenshot** (Ctrl/Cmd+V) or **drag-and-drop an image, PDF, or audio file** straight onto the composer — no dialog needed (video uses the 📎 button so ffmpeg can read it from disk). Attachments show as removable chips and are cleared after sending.
 
 ### 🎨 Image generation
 **`Parley: Generate Image`** prompts for a description and size, calls

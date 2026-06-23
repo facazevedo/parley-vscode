@@ -32,6 +32,10 @@ export interface ParleySettings {
   readonly inlineCompletionEnabled: boolean;
   readonly inlineCompletionModel: string;
   readonly inlineCompletionDebounceMs: number;
+  readonly videoMaxFrames: number;
+  readonly videoFrameWidth: number;
+  readonly videoMaxAudioSeconds: number;
+  readonly videoFfmpegPath: string;
   readonly contextMaxCharacters: number;
   readonly includeDiagnostics: boolean;
   readonly respectGitignore: boolean;
@@ -45,6 +49,7 @@ export function getSettings(): ParleySettings {
   const context = vscode.workspace.getConfiguration('parley.context');
   const telemetry = vscode.workspace.getConfiguration('parley.telemetry');
   const inline = vscode.workspace.getConfiguration('parley.inlineCompletion');
+  const video = vscode.workspace.getConfiguration('parley.video');
 
   return {
     endpoint: config.get<string>('endpoint', DEFAULT_ENDPOINT).trim() || DEFAULT_ENDPOINT,
@@ -60,6 +65,10 @@ export function getSettings(): ParleySettings {
     inlineCompletionEnabled: inline.get<boolean>('enabled', true),
     inlineCompletionModel: inline.get<string>('model', DEFAULT_COMPLETION_MODEL).trim() || DEFAULT_COMPLETION_MODEL,
     inlineCompletionDebounceMs: inline.get<number>('debounceMs', 350),
+    videoMaxFrames: clampInt(video.get<number>('maxFrames', 12), 1, 60),
+    videoFrameWidth: clampInt(video.get<number>('frameWidth', 768), 128, 2048),
+    videoMaxAudioSeconds: clampInt(video.get<number>('maxAudioSeconds', 600), 5, 7200),
+    videoFfmpegPath: video.get<string>('ffmpegPath', '').trim(),
     contextMaxCharacters: context.get<number>('maxCharacters', 12000),
     includeDiagnostics: context.get<boolean>('includeDiagnostics', true),
     respectGitignore: context.get<boolean>('respectGitignore', true),

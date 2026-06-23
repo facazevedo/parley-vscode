@@ -23,6 +23,13 @@ import { normalizeThinkingLevel, resolveThinking, type ThinkingLevel } from '../
 import { estimateCostUsd } from '../parley/pricing';
 import { audioFormatFromExt, audioFormatFromMime, modelSupportsAudio } from '../parley/audio';
 import { documentProviderFor } from '../parley/files';
+import {
+  extractAudioMp3,
+  extractFrames,
+  hasFfmpeg,
+  resolveFfprobePath,
+  type FfmpegBinaries
+} from '../video/ffmpeg';
 import type {
   AgentInfo,
   AudioAttachment,
@@ -70,6 +77,7 @@ interface ChatPanelMessage {
 }
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp']);
+const VIDEO_EXTENSIONS = new Set(['.mp4', '.mov', '.mkv', '.webm', '.avi', '.m4v', '.mpeg', '.mpg', '.wmv']);
 const DOCUMENT_MIME: Record<string, string> = { '.pdf': 'application/pdf' };
 // Upload MIME types for text-family files (per Parley's /v1/files supported types).
 const TEXT_UPLOAD_MIME: Record<string, string> = {
@@ -583,9 +591,15 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     const maxChars = this.getSettings().contextMaxCharacters;
     for (const uri of uris) {
       try {
-        const bytes = await vscode.workspace.fs.readFile(uri);
         const label = path.basename(uri.fsPath);
         const ext = path.extname(uri.fsPath).toLowerCase();
+
+        if (VIDEO_EXTENSIONS.has(ext)) {
+          await this.attachVideo(uri, label);
+          continue;
+        }
+
+        const bytes = await vscode.workspace.fs.readFile(uri);
         const id = `att-${Date.now()}-${this.attachments.length}`;
 
         if (IMAGE_EXTENSIONS.has(ext)) {
@@ -633,6 +647,87 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       }
     }
     await this.postState();
+  }
+
+  /** Resolve the ffmpeg/ffprobe binaries from settings (falling back to PATH lookups). */
+  private ffmpegBins(): FfmpegBinaries {
+    const ffmpeg = this.getSettings().videoFfmpegPath || 'ffmpeg';
+    return { ffmpeg, ffprobe: resolveFfprobePath(ffmpeg) };
+  }
+
+  /**
+   * Parley has no video content type. With ffmpeg available we approximate it:
+   * sample frames (sent to a vision model as images) and/or extract the audio
+   * track (sent as an `input_audio` clip). Without ffmpeg we explain how to add it.
+   */
+  private async attachVideo(uri: vscode.Uri, label: string): Promise<void> {
+    const bins = this.ffmpegBins();
+    if (!(await hasFfmpeg(bins))) {
+      const choice = await vscode.window.showWarningMessage(
+        `Attaching video needs ffmpeg, which wasn't found. Install it and add it to your PATH (or set "parley.video.ffmpegPath"), then try again.`,
+        'Get ffmpeg'
+      );
+      if (choice === 'Get ffmpeg') {
+        await vscode.env.openExternal(vscode.Uri.parse('https://ffmpeg.org/download.html'));
+      }
+      return;
+    }
+
+    const FRAMES = { label: 'Sample frames (visual)', detail: 'Extract frames and send them as images to a vision model' };
+    const AUDIO = { label: 'Extract audio (spoken)', detail: 'Send the audio track for transcription/understanding (OpenAI/Google)' };
+    const BOTH = { label: 'Both frames and audio', detail: 'Visual frames plus the audio track' };
+    const pick = await vscode.window.showQuickPick([FRAMES, AUDIO, BOTH], {
+      title: `Attach "${label}" as…`,
+      placeHolder: 'Parley has no native video; choose how to convey it'
+    });
+    if (!pick) {
+      return;
+    }
+
+    const settings = this.getSettings();
+    const wantFrames = pick === FRAMES || pick === BOTH;
+    const wantAudio = pick === AUDIO || pick === BOTH;
+
+    await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: `Processing ${label} with ffmpeg…` },
+      async () => {
+        try {
+          if (wantFrames) {
+            const frames = await extractFrames(bins, uri.fsPath, {
+              maxFrames: settings.videoMaxFrames,
+              width: settings.videoFrameWidth
+            });
+            frames.forEach((frame, i) => {
+              const frameLabel = `${label} #${i + 1}`;
+              this.attachments.push({
+                id: `att-${Date.now()}-${this.attachments.length}`,
+                label: frameLabel,
+                kind: 'image',
+                image: { label: frameLabel, dataUri: `data:${frame.mime};base64,${frame.base64}` }
+              });
+            });
+            if (frames.length === 0) {
+              void vscode.window.showWarningMessage(`Parley: no frames could be extracted from ${label}.`);
+            }
+          }
+          if (wantAudio) {
+            const base64 = await extractAudioMp3(bins, uri.fsPath, { maxSeconds: settings.videoMaxAudioSeconds });
+            const audioLabel = `${label} (audio)`;
+            this.attachments.push({
+              id: `att-${Date.now()}-${this.attachments.length}`,
+              label: audioLabel,
+              kind: 'audio',
+              audio: { label: audioLabel, format: 'mp3', base64 }
+            });
+          }
+        } catch (error) {
+          this.logger.warn(`ffmpeg failed for ${uri.fsPath}: ${error instanceof Error ? error.message : 'unknown'}`);
+          void vscode.window.showErrorMessage(
+            `Parley could not process ${label} with ffmpeg. See the Parley output log for details.`
+          );
+        }
+      }
+    );
   }
 
   /** Attach a file pasted (Ctrl+V) or dropped into the composer as a base64 data URI (image or PDF). */

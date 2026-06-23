@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.17.0
+
+### Added
+- **Video attachments (via ffmpeg).** Parley has no native video type, so attaching a video (`.mp4/.mov/.mkv/.webm/.avi/…` through 📎) offers to **sample frames** (sent as images to a vision model), **extract the audio track** (sent as an `input_audio` clip on OpenAI/Google), or **both**. Frames are sampled evenly across the clip and downscaled to bound payload size. Requires `ffmpeg`/`ffprobe` on PATH (or `parley.video.ffmpegPath`); if it's missing, Parley says so and links to the download page — no crash. New settings: `parley.video.maxFrames` (12), `parley.video.frameWidth` (768), `parley.video.maxAudioSeconds` (600), `parley.video.ffmpegPath`.
+
+### Engineering
+- New `src/video/ffmpeg.ts` (frame/audio extraction) with pure, unit-tested helpers; 36 unit tests.
+
 ## 0.16.0
 
 ### Added

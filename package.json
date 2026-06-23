@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -256,6 +256,32 @@
           "default": 350,
           "minimum": 0,
           "markdownDescription": "Idle delay before requesting an inline completion, in milliseconds."
+        },
+        "parley.video.maxFrames": {
+          "type": "number",
+          "default": 12,
+          "minimum": 1,
+          "maximum": 60,
+          "markdownDescription": "Maximum frames sampled from an attached video (evenly spread across its duration) and sent as images. Requires `ffmpeg` on PATH."
+        },
+        "parley.video.frameWidth": {
+          "type": "number",
+          "default": 768,
+          "minimum": 128,
+          "maximum": 2048,
+          "markdownDescription": "Width (px) that sampled video frames are downscaled to before sending, to bound payload size. Aspect ratio is preserved."
+        },
+        "parley.video.maxAudioSeconds": {
+          "type": "number",
+          "default": 600,
+          "minimum": 5,
+          "maximum": 7200,
+          "markdownDescription": "Maximum seconds of a video's audio track to extract when attaching audio, to bound payload size."
+        },
+        "parley.video.ffmpegPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to the `ffmpeg` binary used for video frame/audio extraction. Leave empty to use `ffmpeg` from PATH. `ffprobe` is located beside it. Set this if PATH detection fails (common on Windows — point it at `ffmpeg.exe`)."
         },
         "parley.context.maxCharacters": {
           "type": "number",
