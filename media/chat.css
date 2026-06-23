@@ -148,9 +148,9 @@ button:disabled { opacity: 0.5; cursor: default; }
 .mp-name { display: block; font-size: 0.92em; }
 .mp-desc { display: block; font-size: 0.78em; opacity: 0.75; }
 .mp-sep { height: 1px; background: var(--vscode-menu-separatorBackground, var(--vscode-sideBar-border)); margin: 5px 4px; }
-.mp-thinking { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 6px 4px; }
-.mp-thinking button { font-size: 0.8em; padding: 2px 8px; border: 1px solid var(--vscode-dropdown-border); border-radius: 12px; background: transparent; color: inherit; cursor: pointer; }
-.mp-thinking button.active { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border-color: var(--vscode-button-background); }
+.mp-thinking, .mp-speed { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 6px 4px; }
+.mp-thinking button, .mp-speed button { font-size: 0.8em; padding: 2px 8px; border: 1px solid var(--vscode-dropdown-border); border-radius: 12px; background: transparent; color: inherit; cursor: pointer; }
+.mp-thinking button.active, .mp-speed button.active { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border-color: var(--vscode-button-background); }
 .mp-foot { font-size: 0.74em; color: var(--vscode-descriptionForeground); padding: 4px 8px 2px; }
 .inputbox:focus-within { border-color: var(--vscode-focusBorder); }
 .inputbox.dragover { border-color: var(--vscode-focusBorder); border-style: dashed; background: var(--vscode-list-dropBackground, var(--vscode-input-background)); }

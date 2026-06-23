@@ -55,6 +55,7 @@ interface ChatPanelMessage {
     | 'agentChanged'
     | 'modeChanged'
     | 'thinkingChanged'
+    | 'speedChanged'
     | 'attachFiles'
     | 'pasteFile'
     | 'removeAttachment'
@@ -68,6 +69,7 @@ interface ChatPanelMessage {
   readonly prompt?: string;
   readonly agentId?: string;
   readonly thinking?: string;
+  readonly speed?: string;
   readonly mode?: string;
   readonly value?: boolean;
   readonly id?: string;
@@ -129,6 +131,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private agents: readonly AgentInfo[] = [];
   private selectedAgentId = '';
   private selectedThinking: ThinkingLevel = 'off';
+  private selectedSpeed: 'standard' | 'fast' = 'standard';
   private contextOptions: Required<ContextOptions> = { ...DEFAULT_CONTEXT_OPTIONS };
   private mode: ChatMode = 'chat';
   private sessionTokens = 0;
@@ -162,6 +165,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     }
     this.selectedAgentId = this.state.get<string>('parley.selectedAgentId', settings.defaultAgent);
     this.selectedThinking = normalizeThinkingLevel(this.state.get<string>('parley.selectedThinking', settings.thinking));
+    this.selectedSpeed = this.state.get<string>('parley.selectedSpeed', 'standard') === 'fast' ? 'fast' : 'standard';
     this.mode = normalizeMode(this.state.get<string>('parley.mode', settings.defaultMode));
     this.sessionTokens = this.state.get<number>('parley.sessionTokens', 0);
     this.sessionCost = this.state.get<number>('parley.sessionCost', 0);
@@ -172,6 +176,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     void this.state.update('parley.history', this.history);
     void this.state.update('parley.selectedAgentId', this.selectedAgentId);
     void this.state.update('parley.selectedThinking', this.selectedThinking);
+    void this.state.update('parley.selectedSpeed', this.selectedSpeed);
     void this.state.update('parley.mode', this.mode);
     void this.state.update('parley.sessionTokens', this.sessionTokens);
     void this.state.update('parley.sessionCost', this.sessionCost);
@@ -293,6 +298,11 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         return;
       case 'thinkingChanged':
         this.selectedThinking = normalizeThinkingLevel(message.thinking);
+        this.save();
+        await this.postState();
+        return;
+      case 'speedChanged':
+        this.selectedSpeed = message.speed === 'fast' ? 'fast' : 'standard';
         this.save();
         await this.postState();
         return;
@@ -533,7 +543,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     let turnTokens = 0;
     const cpStart = this.checkpoints.size;
     this.post({ type: 'tokens', total: 0 });
-    dbg('turn', 'start', { agentId, mode: this.mode, toolsEnabled, canAutoContinue, stream: useStream, thinking: this.selectedThinking });
+    dbg('turn', 'start', { agentId, mode: this.mode, toolsEnabled, canAutoContinue, stream: useStream, thinking: this.selectedThinking, speed: this.selectedSpeed });
 
     try {
       let auto = 0;
@@ -559,6 +569,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
             documents: isCont || documents.length === 0 ? undefined : documents,
             audios: isCont || audios.length === 0 ? undefined : audios,
             thinking: resolveThinking(this.selectedThinking),
+            speed: this.selectedSpeed,
             responseFormat,
             systemExtra
           },
@@ -1121,6 +1132,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     models: string[];
     mode: ChatMode;
     thinking: ThinkingLevel;
+    speed: 'standard' | 'fast';
     messages: number;
     sessionTokens: number;
     estimatedCostUsd: number;
@@ -1133,6 +1145,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       models: models.length > 0 ? models : [this.selectedAgentId || this.getSettings().defaultAgent],
       mode: this.mode,
       thinking: this.selectedThinking,
+      speed: this.selectedSpeed,
       messages: this.history.length,
       sessionTokens: this.sessionTokens,
       estimatedCostUsd: this.sessionCost
@@ -1146,6 +1159,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       { label: 'Model(s)', value: m.models.join(', ') },
       { label: 'Mode', value: m.mode },
       { label: 'Extended thinking', value: m.thinking },
+      { label: 'Speed', value: m.speed },
       { label: 'Messages', value: String(m.messages) },
       { label: 'Session tokens', value: m.sessionTokens.toLocaleString() },
       { label: 'Estimated cost', value: `~${formatUsd(m.estimatedCostUsd)}` }
@@ -1466,6 +1480,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       contextPct,
       selectedAgentId: this.selectedAgentId,
       selectedThinking: this.selectedThinking,
+      selectedSpeed: this.selectedSpeed,
       contextOptions: this.contextOptions,
       attachments: this.attachments.map((a) => ({ id: a.id, label: a.label, kind: a.kind }))
     });
@@ -1541,7 +1556,13 @@ export class ChatPanel implements vscode.WebviewViewProvider {
             <button type="button" data-thinking="medium">Med</button>
             <button type="button" data-thinking="high">High</button>
           </div>
-          <div class="mp-foot">Thinking shows the model's reasoning before it answers (uses more output tokens). Shell commands ask before running — except in <strong>Full access</strong> mode.</div>
+          <div class="mp-sep"></div>
+          <div class="mp-head">Speed <span class="mp-note">— OpenAI / ChatGPT only</span></div>
+          <div class="mp-speed">
+            <button type="button" data-speed="standard">Standard</button>
+            <button type="button" data-speed="fast">⚡ Fast</button>
+          </div>
+          <div class="mp-foot">Thinking shows the model's reasoning (uses more output tokens). <strong>Fast</strong> requests OpenAI's priority service tier (≈1.5× speed, higher usage cost). Shell commands ask before running — except in <strong>Full access</strong> mode.</div>
         </div>
         <textarea id="prompt" placeholder="Ask Parley…  (@file to attach · paste or drop an image/PDF/audio · Enter to send · Shift+Enter for newline)"></textarea>
         <div class="actions">

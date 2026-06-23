@@ -151,12 +151,14 @@ export class ParleyClient implements ParleyProvider {
     const messages = this.buildMessages(request, documentParts);
     const thinking = request.thinking;
     const responseFormat = request.responseFormat;
+    // OpenAI-only "Fast" speed → priority service tier (ignored for other providers).
+    const serviceTier = /^openai\//i.test(model) && request.speed === 'fast' ? 'priority' : undefined;
 
     const useTools = Boolean(options?.tools && options.tools.length > 0 && options.runTool);
     try {
       const result = useTools
-        ? await this.runToolLoop(messages, model, options as SendMessageOptions, thinking, responseFormat)
-        : await this.singleCompletion(messages, model, options, thinking, responseFormat);
+        ? await this.runToolLoop(messages, model, options as SendMessageOptions, thinking, responseFormat, serviceTier)
+        : await this.singleCompletion(messages, model, options, thinking, responseFormat, serviceTier);
 
       const proposedChanges = await extractProposedChanges(result.content);
 
@@ -183,7 +185,8 @@ export class ParleyClient implements ParleyProvider {
     payload: Record<string, unknown>,
     model: string,
     thinking?: ThinkingConfig,
-    responseFormat?: Record<string, unknown>
+    responseFormat?: Record<string, unknown>,
+    serviceTier?: string
   ): void {
     const t = buildThinkingRequest(model, thinking);
     if (t) {
@@ -199,6 +202,9 @@ export class ParleyClient implements ParleyProvider {
     }
     if (responseFormat) {
       payload.response_format = responseFormat;
+    }
+    if (serviceTier) {
+      payload.service_tier = serviceTier;
     }
   }
 
@@ -384,11 +390,12 @@ export class ParleyClient implements ParleyProvider {
     model: string,
     options?: SendMessageOptions,
     thinking?: ThinkingConfig,
-    responseFormat?: Record<string, unknown>
+    responseFormat?: Record<string, unknown>,
+    serviceTier?: string
   ): Promise<CompletionResult> {
     const stream = Boolean(options?.onToken);
     const payload: Record<string, unknown> = { model, messages, stream };
-    this.applyExtras(payload, model, thinking, responseFormat);
+    this.applyExtras(payload, model, thinking, responseFormat, serviceTier);
     if (stream) {
       payload.stream_options = { include_usage: true };
     }
@@ -429,7 +436,8 @@ export class ParleyClient implements ParleyProvider {
     model: string,
     options: SendMessageOptions,
     thinking?: ThinkingConfig,
-    responseFormat?: Record<string, unknown>
+    responseFormat?: Record<string, unknown>,
+    serviceTier?: string
   ): Promise<CompletionResult> {
     const convo = [...messages];
     const maxRounds = options.maxToolRounds ?? DEFAULT_MAX_TOOL_ROUNDS;
@@ -445,7 +453,7 @@ export class ParleyClient implements ParleyProvider {
         stream: true,
         stream_options: { include_usage: true }
       };
-      this.applyExtras(roundPayload, model, thinking, responseFormat);
+      this.applyExtras(roundPayload, model, thinking, responseFormat, serviceTier);
       const response = await this.request('/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -503,7 +511,8 @@ export class ParleyClient implements ParleyProvider {
       model,
       { onToken: options.onToken, onThinking: options.onThinking, signal: options.signal },
       thinking,
-      responseFormat
+      responseFormat,
+      serviceTier
     );
     return { content: final.content, usage: final.usage ?? lastUsage, thinking: final.thinking };
   }

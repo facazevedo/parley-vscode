@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.27.0
+
+### Added — Speed (OpenAI service tier), like Codex
+- New **Speed** control in the composer's Mode popover: **Standard** (default) or **⚡ Fast**. For OpenAI/ChatGPT models, Fast sends `service_tier: "priority"` (OpenAI's ~1.5× faster, higher-usage tier — the same "Speed" toggle Codex exposes). It's gated to OpenAI models (ignored elsewhere) and persisted per conversation; the choice is included in conversation exports. (Parley's docs don't list this parameter, so if the gateway rejects it you'll now see the stream error — it's an OpenAI-only passthrough.)
+
 ## 0.26.0
 
 ### Fixed — agent could stall during build/verify

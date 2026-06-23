@@ -70,6 +70,8 @@ export interface ChatRequest {
   readonly audios?: readonly AudioAttachment[];
   /** Extended-thinking configuration; omit to disable reasoning. */
   readonly thinking?: ThinkingConfig;
+  /** OpenAI processing speed: `fast` → `service_tier: "priority"`. Ignored for non-OpenAI models. */
+  readonly speed?: 'standard' | 'fast';
   /** OpenAI-style `response_format` (e.g. `{ type: 'json_object' }`) to constrain output. */
   readonly responseFormat?: Record<string, unknown>;
   /** Extra system-prompt text (e.g. project rules from .parleyrules / AGENTS.md). */
