@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.37.0
+
+### Changed — complete README guide
+- Rewrote `README.md` into a full user manual covering **every** feature and nuance: requirements/install/quick‑start, the chat UI tour, all six modes + the agent loop (activity `⏺`/`⎿`, live task checklist, inline diff cards), the full tool list (incl. `web_search`, `update_plan`, MCP tools), the honest **per‑provider reasoning & speed matrix** (Claude/Gemini thinking works; OpenAI `reasoning_effort` is a no‑op via Parley; Fast = `service_tier`), all `@`‑mentions, **`@codebase`** lexical vs optional on‑device semantic (MiniLM) with setup/fallback, slash + custom commands, every attachment type (image/PDF/audio/video‑via‑ffmpeg), web search, MCP servers, inline completion/edit, cost/context/usage/auto‑compaction, conversations (new/auto‑save/export md‑txt‑json/compact), git/image/editor commands, project rules, diagnostics/debug log, safety & privacy, a **full command + settings reference**, models, gateway limits, troubleshooting, and dev/packaging/architecture.
+- Corrected stale notes (semantic `@codebase` is now offered; activity markers are `⏺`/`⎿`).
+
 ## 0.36.0
 
 ### Added — optional local semantic `@codebase` index (off by default)
