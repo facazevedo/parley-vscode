@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.14.0
+
+### Added
+- **Exact token counting for auto-compaction.** When `parley.autoCompactTokens` is set, the conversation size is now measured with Parley's `/v1/messages/count_tokens` endpoint (exact) instead of a character heuristic, falling back to the heuristic if the endpoint is unavailable.
+- **PDF attachments.** Attach a `.pdf` (via 📎, paste, or drag-and-drop) and Parley routes it correctly per provider: OpenAI/Google models **upload it to `/v1/files`** and reference it by id; Bedrock/Anthropic models receive it **inline** as a base64 `document` block. (OpenAI/Google file limits: 20 files/account, 48-hour expiry.)
+- **Structured JSON output.** A new **`/json`** slash command makes the next reply a JSON object (`response_format: { type: "json_object" }`). OpenAI and Gemini use native constrained decoding; Bedrock/Anthropic are best-effort.
+
+### Engineering
+- New pure `src/parley/files.ts` (document provider routing) with tests; new `ParleyProvider.countTokens`; 31 unit tests.
+
 ## 0.13.0
 
 ### Added

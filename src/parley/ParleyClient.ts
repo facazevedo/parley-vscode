@@ -3,6 +3,7 @@ import { renderPromptWithContext } from '../context/renderPromptWithContext';
 import { extractProposedChanges } from '../diff/extractChanges';
 import { cleanCompletion, isContextLengthError, parseUsage } from './parsing';
 import { buildThinkingRequest, type ThinkingConfig } from './thinking';
+import { documentProviderFor } from './files';
 import { ParleyAuthStore } from './auth';
 import type { ParleyProvider, SendMessageOptions } from './ParleyProvider';
 import {
@@ -13,6 +14,7 @@ import {
   type ChatRequest,
   type ChatResponse,
   type CompletionRequest,
+  type DocumentAttachment,
   type ImageRequest,
   type ImageResult,
   type TokenUsage
@@ -127,13 +129,15 @@ export class ParleyClient implements ParleyProvider {
 
   public async sendMessage(request: ChatRequest, options?: SendMessageOptions): Promise<ChatResponse> {
     const model = request.agentId?.trim() || this.defaultModel;
-    const messages = this.buildMessages(request);
+    const documentParts = await this.prepareDocumentParts(model, request.documents ?? [], options?.signal);
+    const messages = this.buildMessages(request, documentParts);
     const thinking = request.thinking;
+    const responseFormat = request.responseFormat;
 
     const useTools = Boolean(options?.tools && options.tools.length > 0 && options.runTool);
     const result = useTools
-      ? await this.runToolLoop(messages, model, options as SendMessageOptions, thinking)
-      : await this.singleCompletion(messages, model, options, thinking);
+      ? await this.runToolLoop(messages, model, options as SendMessageOptions, thinking, responseFormat)
+      : await this.singleCompletion(messages, model, options, thinking, responseFormat);
 
     const proposedChanges = await extractProposedChanges(result.content);
 
@@ -150,13 +154,107 @@ export class ParleyClient implements ParleyProvider {
     };
   }
 
-  /** Add `thinking` + a matching `max_tokens` headroom to a request payload when enabled. */
-  private applyThinking(payload: Record<string, unknown>, model: string, thinking?: ThinkingConfig): void {
+  /** Apply per-request extras (extended thinking, structured output) to a chat payload. */
+  private applyExtras(
+    payload: Record<string, unknown>,
+    model: string,
+    thinking?: ThinkingConfig,
+    responseFormat?: Record<string, unknown>
+  ): void {
     const t = buildThinkingRequest(model, thinking);
     if (t) {
       payload.thinking = t.thinking;
       payload.max_tokens = t.max_tokens;
     }
+    if (responseFormat) {
+      payload.response_format = responseFormat;
+    }
+  }
+
+  /**
+   * Exact prompt-token count via the Anthropic-style `/v1/messages/count_tokens`
+   * endpoint. System messages are folded into the top-level `system` field.
+   * Returns `undefined` if the endpoint errors so callers can fall back.
+   */
+  public async countTokens(
+    model: string,
+    messages: readonly ChatMessage[],
+    system?: string
+  ): Promise<number | undefined> {
+    const systemParts: string[] = system ? [system] : [];
+    const turns: Array<{ role: string; content: string }> = [];
+    for (const m of messages) {
+      if (m.role === 'system') {
+        systemParts.push(m.content);
+      } else {
+        turns.push({ role: m.role, content: m.content });
+      }
+    }
+    if (turns.length === 0) {
+      return undefined;
+    }
+    try {
+      const body: Record<string, unknown> = { model, messages: turns };
+      if (systemParts.length > 0) {
+        body.system = systemParts.join('\n\n');
+      }
+      const response = await this.request('/messages/count_tokens', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const json = (await response.json()) as { input_tokens?: number };
+      return typeof json.input_tokens === 'number' ? json.input_tokens : undefined;
+    } catch (error) {
+      this.logger.debug(`count_tokens unavailable: ${error instanceof Error ? error.message : 'error'}`);
+      return undefined;
+    }
+  }
+
+  /**
+   * Turn document attachments into multimodal content parts. OpenAI/Google models
+   * upload via `/v1/files` and reference the file by id; Bedrock/Anthropic (and any
+   * upload failure) fall back to an inline base64 `document` block.
+   */
+  private async prepareDocumentParts(
+    model: string,
+    documents: readonly DocumentAttachment[],
+    signal?: AbortSignal
+  ): Promise<unknown[]> {
+    if (documents.length === 0) {
+      return [];
+    }
+    const provider = documentProviderFor(model);
+    const parts: unknown[] = [];
+    for (const doc of documents) {
+      if (provider) {
+        try {
+          const fileId = await this.uploadFile(doc, provider, signal);
+          parts.push({ type: 'file', file_id: fileId });
+          continue;
+        } catch (error) {
+          this.logger.warn(`File upload failed for ${doc.filename}: ${error instanceof Error ? error.message : 'error'}`);
+        }
+      }
+      parts.push({ type: 'document', source: { type: 'base64', media_type: doc.mimeType, data: doc.base64 } });
+    }
+    return parts;
+  }
+
+  /** Upload a document to `/v1/files` for the given provider and return its Parley file id. */
+  private async uploadFile(doc: DocumentAttachment, provider: 'openai' | 'google', signal?: AbortSignal): Promise<string> {
+    const bytes = Buffer.from(doc.base64, 'base64');
+    const form = new FormData();
+    form.append('file', new Blob([bytes], { type: doc.mimeType }), doc.filename);
+    form.append('provider', provider);
+    // Note: no Content-Type header — fetch sets the multipart boundary for FormData.
+    const response = await this.request('/files', { method: 'POST', body: form, signal });
+    const json = (await response.json()) as { fileId?: string; providerFileId?: string };
+    const id = json.fileId ?? json.providerFileId;
+    if (!id) {
+      throw new ParleyApiError(0, 'Parley returned no file id for the upload.');
+    }
+    return id;
   }
 
   public async complete(request: CompletionRequest, signal?: AbortSignal): Promise<string> {
@@ -208,11 +306,12 @@ export class ParleyClient implements ParleyProvider {
     messages: OpenAiMessage[],
     model: string,
     options?: SendMessageOptions,
-    thinking?: ThinkingConfig
+    thinking?: ThinkingConfig,
+    responseFormat?: Record<string, unknown>
   ): Promise<CompletionResult> {
     const stream = Boolean(options?.onToken);
     const payload: Record<string, unknown> = { model, messages, stream };
-    this.applyThinking(payload, model, thinking);
+    this.applyExtras(payload, model, thinking, responseFormat);
     if (stream) {
       payload.stream_options = { include_usage: true };
     }
@@ -252,7 +351,8 @@ export class ParleyClient implements ParleyProvider {
     messages: OpenAiMessage[],
     model: string,
     options: SendMessageOptions,
-    thinking?: ThinkingConfig
+    thinking?: ThinkingConfig,
+    responseFormat?: Record<string, unknown>
   ): Promise<CompletionResult> {
     const convo = [...messages];
     const maxRounds = options.maxToolRounds ?? DEFAULT_MAX_TOOL_ROUNDS;
@@ -267,7 +367,7 @@ export class ParleyClient implements ParleyProvider {
         stream: true,
         stream_options: { include_usage: true }
       };
-      this.applyThinking(roundPayload, model, thinking);
+      this.applyExtras(roundPayload, model, thinking, responseFormat);
       const response = await this.request('/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -321,7 +421,8 @@ export class ParleyClient implements ParleyProvider {
       convo,
       model,
       { onToken: options.onToken, onThinking: options.onThinking, signal: options.signal },
-      thinking
+      thinking,
+      responseFormat
     );
     return { content: final.content, usage: final.usage ?? lastUsage, thinking: final.thinking };
   }
@@ -459,7 +560,7 @@ export class ParleyClient implements ParleyProvider {
     return { content, toolCalls, usage, thinking: thinking || undefined, thinkingSignature };
   }
 
-  private buildMessages(request: ChatRequest): OpenAiMessage[] {
+  private buildMessages(request: ChatRequest, documentParts: unknown[] = []): OpenAiMessage[] {
     const system = request.systemExtra
       ? `${SYSTEM_PROMPT}\n\n# Project rules (from the workspace)\n${request.systemExtra}`
       : SYSTEM_PROMPT;
@@ -476,15 +577,12 @@ export class ParleyClient implements ParleyProvider {
 
       if (isLast && message.role === 'user') {
         const text = renderPromptWithContext(message.content, request.context);
-        const images = request.images ?? [];
-        if (images.length > 0) {
-          messages.push({
-            role: 'user',
-            content: [
-              { type: 'text', text },
-              ...images.map((image) => ({ type: 'image_url', image_url: { url: image.dataUri } }))
-            ]
-          });
+        const extras: unknown[] = [
+          ...(request.images ?? []).map((image) => ({ type: 'image_url', image_url: { url: image.dataUri } })),
+          ...documentParts
+        ];
+        if (extras.length > 0) {
+          messages.push({ role: 'user', content: [{ type: 'text', text }, ...extras] });
           return;
         }
         messages.push({ role: 'user', content: text });

@@ -38,14 +38,30 @@ export interface ImageAttachment {
   readonly dataUri: string;
 }
 
+/**
+ * A document (e.g. PDF) attached to a chat turn. For OpenAI/Google models it is
+ * uploaded via `/v1/files` and referenced by id; for Bedrock/Anthropic it is
+ * sent inline as a base64 `document` content block.
+ */
+export interface DocumentAttachment {
+  readonly filename: string;
+  readonly mimeType: string;
+  /** Base64-encoded file bytes (no data-URI prefix). */
+  readonly base64: string;
+}
+
 export interface ChatRequest {
   readonly prompt: string;
   readonly agentId?: string;
   readonly messages: readonly ChatMessage[];
   readonly context: readonly ContextAttachment[];
   readonly images?: readonly ImageAttachment[];
+  /** Documents (e.g. PDFs) to attach to the latest user turn. */
+  readonly documents?: readonly DocumentAttachment[];
   /** Extended-thinking configuration; omit to disable reasoning. */
   readonly thinking?: ThinkingConfig;
+  /** OpenAI-style `response_format` (e.g. `{ type: 'json_object' }`) to constrain output. */
+  readonly responseFormat?: Record<string, unknown>;
   /** Extra system-prompt text (e.g. project rules from .parleyrules / AGENTS.md). */
   readonly systemExtra?: string;
 }

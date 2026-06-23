@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -229,7 +229,7 @@
           "type": "number",
           "default": 0,
           "minimum": 0,
-          "markdownDescription": "When the conversation's estimated size exceeds this many tokens, automatically compact (summarize) it before the next turn to control cost and avoid context-window errors. **`0` disables (default).** (Compaction is lossy — it replaces history with a summary.) The agent loop also trims stale tool outputs automatically regardless of this setting."
+          "markdownDescription": "When the conversation's size exceeds this many tokens, automatically compact (summarize) it before the next turn to control cost and avoid context-window errors. The size is measured with Parley's `/v1/messages/count_tokens` endpoint when available, falling back to a character-based estimate. **`0` disables (default).** (Compaction is lossy — it replaces history with a summary.) The agent loop also trims stale tool outputs automatically regardless of this setting."
         },
         "parley.inlineCompletion.enabled": {
           "type": "boolean",

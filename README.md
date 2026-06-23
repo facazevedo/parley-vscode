@@ -106,7 +106,7 @@ edit or command happens without your explicit approval. **Stop** aborts in-fligh
 work *and kills a running command*. After a turn, a **"Changed N files"** summary
 lists what was edited (undo with `Parley: Revert All Edits`). The agent loop also
 trims stale tool output and (optionally) auto-compacts to control cost. Composer
-**slash commands**: `/clear`, `/compact`, `/help`.
+**slash commands**: `/clear`, `/compact`, `/json` (next reply as a JSON object), `/help`.
 
 ### ✏️ Inline edit (Ctrl+Alt+K)
 Select code, press **`Ctrl+Alt+K`** (`Cmd+Alt+K` on macOS) or run
@@ -135,8 +135,9 @@ Replies render Markdown — headings, lists, **bold**, links (open externally), 
 The **📎** button attaches files to your next message:
 - **Text files** are added as context.
 - **Images** (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.bmp`) are sent as multimodal `image_url` input to vision-capable models (Claude, Gemini, GPT-5).
+- **PDFs** (`.pdf`) are routed per provider: OpenAI/Google models **upload** them to Parley's `/v1/files` endpoint and reference them by id; Bedrock/Anthropic models receive them **inline** as a base64 document block.
 
-You can also **paste a screenshot** (Ctrl/Cmd+V) or **drag-and-drop an image** straight onto the composer — no dialog needed. Attachments show as removable chips and are cleared after sending.
+You can also **paste a screenshot** (Ctrl/Cmd+V) or **drag-and-drop an image or PDF** straight onto the composer — no dialog needed. Attachments show as removable chips and are cleared after sending.
 
 ### 🎨 Image generation
 **`Parley: Generate Image`** prompts for a description and size, calls

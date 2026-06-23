@@ -21,7 +21,14 @@ import { extractMentionPaths } from '../parley/parsing';
 import { AGENT_TOOLS, READ_ONLY_TOOLS, runAgentTool } from '../parley/tools';
 import { normalizeThinkingLevel, resolveThinking, type ThinkingLevel } from '../parley/thinking';
 import { estimateCostUsd } from '../parley/pricing';
-import type { AgentInfo, ChatMessage, ContextAttachment, ImageAttachment, ToolCall } from '../parley/types';
+import type {
+  AgentInfo,
+  ChatMessage,
+  ContextAttachment,
+  DocumentAttachment,
+  ImageAttachment,
+  ToolCall
+} from '../parley/types';
 
 const PROJECT_RULES_FILES = ['.parleyrules', 'AGENTS.md', '.cursorrules'];
 
@@ -36,7 +43,7 @@ interface ChatPanelMessage {
     | 'modeChanged'
     | 'thinkingChanged'
     | 'attachFiles'
-    | 'pasteImage'
+    | 'pasteFile'
     | 'removeAttachment'
     | 'export'
     | 'compact'
@@ -60,6 +67,7 @@ interface ChatPanelMessage {
 }
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp']);
+const DOCUMENT_MIME: Record<string, string> = { '.pdf': 'application/pdf' };
 
 const DEFAULT_CONTEXT_OPTIONS: Required<ContextOptions> = {
   includeSelection: true,
@@ -72,9 +80,10 @@ const DEFAULT_CONTEXT_OPTIONS: Required<ContextOptions> = {
 interface PendingAttachment {
   readonly id: string;
   readonly label: string;
-  readonly kind: 'image' | 'text';
+  readonly kind: 'image' | 'text' | 'document';
   readonly image?: ImageAttachment;
   readonly text?: ContextAttachment;
+  readonly document?: DocumentAttachment;
 }
 
 interface SavedSession {
@@ -95,6 +104,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private mode: ChatMode = 'chat';
   private sessionTokens = 0;
   private sessionCost = 0;
+  private jsonNext = false; // one-shot: request the next reply as a JSON object (/json)
   private attachments: PendingAttachment[] = [];
   private busy = false;
   private abortController?: AbortController;
@@ -205,8 +215,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       case 'attachFiles':
         await this.pickAttachments();
         return;
-      case 'pasteImage':
-        await this.addPastedImage(message.dataUri, message.name);
+      case 'pasteFile':
+        await this.addPastedFile(message.dataUri, message.name);
         return;
       case 'export':
         await this.exportConversation();
@@ -255,6 +265,20 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     return Math.round(this.history.reduce((n, m) => n + (m.content?.length ?? 0), 0) / 4);
   }
 
+  /** Exact prompt-token count for the current history via the gateway, falling back to the heuristic. */
+  private async countHistoryTokens(): Promise<number> {
+    const model = this.selectedAgentId || this.getSettings().defaultAgent;
+    try {
+      const exact = await this.getProvider().countTokens(model, this.history);
+      if (typeof exact === 'number') {
+        return exact;
+      }
+    } catch {
+      // Fall back to the heuristic below.
+    }
+    return this.estimateHistoryTokens();
+  }
+
   /** Handle composer slash commands. Returns true if the input was a known command. */
   private async handleSlash(input: string): Promise<boolean> {
     const cmd = input.slice(1).split(/\s+/)[0].toLowerCase();
@@ -271,11 +295,20 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       case 'compact':
         await this.compactConversation();
         return true;
+      case 'json':
+        this.jsonNext = true;
+        this.history.push({
+          role: 'assistant',
+          content: '🧩 The next reply will be a JSON object (`response_format: json_object`). Ask your question now.',
+          createdAt: new Date().toISOString()
+        });
+        await this.postState();
+        return true;
       case 'help':
         this.history.push({
           role: 'assistant',
           content:
-            '**Slash commands**\n- `/clear` (or `/new`) — start a new conversation\n- `/compact` — summarize to free up context\n- `/help` — this list\n\nMost actions also have commands in the Command Palette (search "Parley").',
+            '**Slash commands**\n- `/clear` (or `/new`) — start a new conversation\n- `/compact` — summarize to free up context\n- `/json` — make the next reply a JSON object\n- `/help` — this list\n\nMost actions also have commands in the Command Palette (search "Parley").',
           createdAt: new Date().toISOString()
         });
         await this.postState();
@@ -315,7 +348,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     if (
       settings.autoCompactTokens > 0 &&
       this.history.length >= 4 &&
-      this.estimateHistoryTokens() > settings.autoCompactTokens
+      (await this.countHistoryTokens()) > settings.autoCompactTokens
     ) {
       await this.compactConversation();
     }
@@ -330,8 +363,11 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     const mentions = await this.resolveMentions(prompt, settings);
     const context = [...collected, ...textAttachments, ...mentions];
     const images = this.attachments.filter((a) => a.kind === 'image').map((a) => a.image!);
+    const documents = this.attachments.filter((a) => a.kind === 'document').map((a) => a.document!);
     const toolsEnabled = this.mode !== 'chat';
     const systemExtra = await this.buildSystemExtra();
+    const responseFormat = this.jsonNext ? { type: 'json_object' } : undefined;
+    this.jsonNext = false;
 
     // Per-message chat stays frictionless; only confirm when the attached context
     // is large. (The diff-review-before-apply step still gates any file changes.)
@@ -383,7 +419,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
             context: isCont ? [] : context,
             agentId,
             images: isCont || images.length === 0 ? undefined : images,
+            documents: isCont || documents.length === 0 ? undefined : documents,
             thinking: resolveThinking(this.selectedThinking),
+            responseFormat,
             systemExtra
           },
           {
@@ -506,6 +544,14 @@ export class ChatPanel implements vscode.WebviewViewProvider {
           const mime = ext === '.jpg' ? 'image/jpeg' : `image/${ext.slice(1)}`;
           const dataUri = `data:${mime};base64,${Buffer.from(bytes).toString('base64')}`;
           this.attachments.push({ id, label, kind: 'image', image: { label, dataUri } });
+        } else if (DOCUMENT_MIME[ext]) {
+          const base64 = Buffer.from(bytes).toString('base64');
+          this.attachments.push({
+            id,
+            label,
+            kind: 'document',
+            document: { filename: label, mimeType: DOCUMENT_MIME[ext], base64 }
+          });
         } else {
           const raw = Buffer.from(bytes).toString('utf8');
           const content = raw.length > maxChars ? raw.slice(0, maxChars) : raw;
@@ -531,20 +577,28 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     await this.postState();
   }
 
-  /** Attach an image pasted (Ctrl+V) or dropped into the composer as a base64 data URI. */
-  private async addPastedImage(dataUri?: string, name?: string): Promise<void> {
-    if (!dataUri || !/^data:image\/[a-z0-9.+-]+;base64,/i.test(dataUri)) {
+  /** Attach a file pasted (Ctrl+V) or dropped into the composer as a base64 data URI (image or PDF). */
+  private async addPastedFile(dataUri?: string, name?: string): Promise<void> {
+    if (!dataUri) {
       return;
     }
     // Guard against pathologically large pastes (data URIs are ~33% larger than the bytes).
     const MAX_BYTES = 12 * 1024 * 1024;
     if (dataUri.length > MAX_BYTES * 1.4) {
-      void vscode.window.showWarningMessage('Parley: that image is too large to attach (max ~12 MB).');
+      void vscode.window.showWarningMessage('Parley: that file is too large to attach (max ~12 MB).');
       return;
     }
-    const label = name && name.trim() ? name.trim() : `pasted-image-${this.attachments.length + 1}.png`;
     const id = `att-${Date.now()}-${this.attachments.length}`;
-    this.attachments.push({ id, label, kind: 'image', image: { label, dataUri } });
+    if (/^data:image\/[a-z0-9.+-]+;base64,/i.test(dataUri)) {
+      const label = name && name.trim() ? name.trim() : `pasted-image-${this.attachments.length + 1}.png`;
+      this.attachments.push({ id, label, kind: 'image', image: { label, dataUri } });
+    } else if (/^data:application\/pdf;base64,/i.test(dataUri)) {
+      const label = name && name.trim() ? name.trim() : `pasted-${this.attachments.length + 1}.pdf`;
+      const base64 = dataUri.slice(dataUri.indexOf(',') + 1);
+      this.attachments.push({ id, label, kind: 'document', document: { filename: label, mimeType: 'application/pdf', base64 } });
+    } else {
+      return;
+    }
     await this.postState();
   }
 

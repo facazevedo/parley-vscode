@@ -1,5 +1,6 @@
 import type {
   AgentInfo,
+  ChatMessage,
   ChatRequest,
   ChatResponse,
   CompletionRequest,
@@ -37,5 +38,7 @@ export interface ParleyProvider {
   sendMessage(request: ChatRequest, options?: SendMessageOptions): Promise<ChatResponse>;
   complete(request: CompletionRequest, signal?: AbortSignal): Promise<string>;
   generateImage(request: ImageRequest, signal?: AbortSignal): Promise<ImageResult>;
+  /** Exact prompt-token count via the gateway; `undefined` if the endpoint is unavailable. */
+  countTokens(model: string, messages: readonly ChatMessage[], system?: string): Promise<number | undefined>;
   signOut(): Promise<void>;
 }
