@@ -1,6 +1,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { parseUnifiedDiffToChanges } from './patchToChanges';
+import { parseFileCodeBlocks } from './fileBlocks';
 import type { ProposedFileChange } from '../parley/types';
 
 /**
@@ -30,14 +31,7 @@ export async function extractFileCodeBlockChanges(response: string): Promise<Pro
   }
 
   const changes: ProposedFileChange[] = [];
-  const pattern = /(?:^|\n)(?:#{1,6}\s*)?(?:File|Path):\s*`?([^\n`]+?)`?\s*\n+```[\w.+-]*\n([\s\S]*?)```/g;
-  for (const match of response.matchAll(pattern)) {
-    const rawPath = match[1]?.trim();
-    const code = match[2];
-    if (!rawPath || code === undefined) {
-      continue;
-    }
-
+  for (const { rawPath, code } of parseFileCodeBlocks(response)) {
     const filePath = path.isAbsolute(rawPath) ? rawPath : path.join(workspaceFolder.uri.fsPath, rawPath);
     const proposedText = code.endsWith('\n') ? code : `${code}\n`;
 

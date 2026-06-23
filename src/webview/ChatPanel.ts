@@ -73,6 +73,8 @@ interface ChatPanelMessage {
     | 'copyText'
     | 'openLink'
     | 'mentionQuery'
+    | 'applyChange'
+    | 'dismissChange'
     | 'setApiKey';
   readonly prompt?: string;
   readonly agentId?: string;
@@ -149,6 +151,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private customCommandNames: string[] = []; // user-defined /commands from .parley|.claude/commands
   private commandChannel?: vscode.OutputChannel; // visible mirror of agent shell commands
   private embeddingIndex?: EmbeddingIndex; // lazy local semantic index for @codebase
+  // Proposed file changes from a chat-mode reply, awaiting an inline Apply click.
+  private readonly pendingChanges = new Map<string, { uri: vscode.Uri; rel: string; original: string; proposedText: string }>();
+  private changeSeq = 0;
   private attachments: PendingAttachment[] = [];
   private busy = false;
   private abortController?: AbortController;
@@ -347,6 +352,13 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       }
       case 'mentionQuery':
         await this.sendMentionResults(message.query ?? '');
+        return;
+      case 'applyChange':
+        await this.applyPendingChange(message.id ?? '');
+        return;
+      case 'dismissChange':
+        this.pendingChanges.delete(message.id ?? '');
+        this.post({ type: 'changeResolved', id: message.id ?? '', status: 'dismissed' });
         return;
       case 'removeAttachment':
         this.attachments = this.attachments.filter((item) => item.id !== message.id);
@@ -724,7 +736,14 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         this.history.push({ ...response.message, content: cleaned, model: agentId });
         this.post({ type: 'streamEnd' });
         await this.postState();
-        await handleResponse(this.commandDeps, response, { skipMessageDisplay: true });
+        // Chat mode (no file tools): surface any "File:" blocks as inline Apply cards
+        // instead of modal popups. Agent modes apply edits through tools, so skip there.
+        await handleResponse(this.commandDeps, response, { skipMessageDisplay: true, skipProposedChanges: true });
+        if (!toolsEnabled) {
+          for (const change of response.proposedChanges ?? []) {
+            this.postProposedChange(change);
+          }
+        }
 
         if (!canAutoContinue || done || this.abortController.signal.aborted) {
           break;
@@ -1480,6 +1499,60 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       rows,
       truncated: diff.rows.length > MAX_ROWS
     });
+  }
+
+  /** Render an interactive "Apply" card for a chat-mode proposed file change (Cursor-style). */
+  private postProposedChange(change: { filePath: string; originalText: string; proposedText: string }): void {
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+    const uri = vscode.Uri.file(change.filePath);
+    const rel = root ? path.relative(root.fsPath, change.filePath).replace(/\\/g, '/') : change.filePath;
+    const id = `chg${this.changeSeq++}`;
+    this.pendingChanges.set(id, { uri, rel, original: change.originalText, proposedText: change.proposedText });
+    const diff = formatUnifiedDiff(change.originalText, change.proposedText);
+    const MAX_ROWS = 500;
+    const rows = diff.rows.length > MAX_ROWS ? diff.rows.slice(0, MAX_ROWS) : diff.rows;
+    this.post({
+      type: 'proposedChange',
+      id,
+      path: rel,
+      isNew: change.originalText.length === 0,
+      added: diff.added,
+      removed: diff.removed,
+      rows,
+      truncated: diff.rows.length > MAX_ROWS
+    });
+  }
+
+  /** Apply a pending proposed change when the user clicks its inline Apply button. */
+  private async applyPendingChange(id: string): Promise<void> {
+    const change = this.pendingChanges.get(id);
+    if (!change) {
+      return;
+    }
+    this.pendingChanges.delete(id);
+    if (isSensitiveFile(change.rel)) {
+      this.post({ type: 'changeResolved', id, status: 'error' });
+      await vscode.window.showErrorMessage(`Parley refused to write a sensitive file: ${change.rel}.`);
+      return;
+    }
+    try {
+      // The inline Apply click is the confirmation, so apply directly (still checkpointed/revertible).
+      // The card already shows the diff, so we just flip it to "Applied" via changeResolved.
+      await this.checkpoints.applyWithCheckpoint(change.uri, change.proposedText, `edit ${change.rel}`);
+      this.post({ type: 'changeResolved', id, status: 'applied' });
+      // Record it in history (no re-render, so other pending cards survive) and persist.
+      this.history.push({
+        role: 'assistant',
+        content: `✏️ Applied ${change.rel}. _Run "Parley: Revert Last Edit" to undo._`,
+        createdAt: new Date().toISOString()
+      });
+      await this.autosaveConversation();
+    } catch (error) {
+      this.post({ type: 'changeResolved', id, status: 'error' });
+      await vscode.window.showErrorMessage(
+        `Parley could not apply ${change.rel}: ${error instanceof Error ? error.message : 'error'}`
+      );
+    }
   }
 
   private async toolRunCommand(call: ToolCall): Promise<string> {

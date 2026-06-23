@@ -1,10 +1,13 @@
 .git/**
 .vscode/**
+node_modules/**
 src/**
 test/**
+out/**
+dist/**/*.map
 docs/**
 debug/**
-out/test/**
+esbuild.js
 **/*.map
 tsconfig.json
 .gitignore

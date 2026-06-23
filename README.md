@@ -50,6 +50,7 @@ diff review, and safety controls stay independent of the transport.
 - A **Parley API key** (`sk-parley-v1-…`) from MIT IS&T or the Parley Admin Portal.
 - Optional, only for specific features:
   - **ffmpeg / ffprobe** on your PATH — for **video** attachments.
+  - **`npm`** on your PATH — only for the opt‑in local semantic `@codebase` index (one‑time runtime install).
   - A **Google Programmable Search** key + `cx`, or a **Tavily** key — only if you switch web search off DuckDuckGo.
 
 The extension talks to Parley's **OpenAI‑compatible API** at
@@ -164,6 +165,12 @@ steps render as an in‑place checklist (☐ pending · ▸ in‑progress · ☑
 in the chat as a unified diff card — file path, `+added −removed` counts, red/green
 lines with a line‑number gutter, far‑apart unchanged regions collapsed.
 
+**Apply button (Chat mode).** In plain **Chat** mode the model doesn't touch files;
+instead, any complete‑file change it proposes is rendered as an inline diff card with
+an **Apply** (or **Create file**) and **Dismiss** button — click **Apply** to write it
+(checkpointed/revertible). This is the Cursor‑style "suggest in chat, apply on click"
+flow; the heavier agent modes apply through tools instead.
+
 After a turn, a **"✏️ Changed N files"** summary lists what was edited. **Stop**
 aborts in‑flight work *and kills a running command*.
 
@@ -217,14 +224,18 @@ Controlled by `parley.codebaseSearch.provider`:
   model** (transformers.js / ONNX). **Keyless and fully private** (nothing leaves
   your machine); finds files by *meaning*, not just keywords. To use it:
   1. Set `parley.codebaseSearch.provider` to `local`.
-  2. Run **`Parley: Rebuild Codebase Index`** (downloads the model ~25 MB once, then
-     works offline; re‑run after big changes).
-  - If the index isn't built or the model can't load, `@codebase` **falls back to
-    lexical** automatically — it never breaks.
+  2. Run **`Parley: Rebuild Codebase Index`**. The first build installs the embedding
+     runtime into the extension's global storage (one‑time, needs **`npm` on your
+     PATH**, a few minutes), then downloads the MiniLM model (~25 MB) once. Both are
+     cached and work offline afterward. Re‑run after big changes.
+  - If the runtime/index isn't ready or the model can't load, `@codebase` **falls back
+    to lexical** automatically — it never breaks.
 
-> **Why semantic is opt‑in:** bundling the embedding runtime makes the extension
-> large (~80 MB) and platform‑specific (a native sub‑dependency). The default
-> (`lexical`) keeps the base experience lightweight, keyless, and private.
+> **Why semantic is opt‑in (and installed on demand):** the embedding runtime is large
+> and platform‑specific (native `onnxruntime`/`sharp` binaries). Rather than bloat the
+> VSIX, the extension ships tiny (~100 KB) and installs the runtime locally — fetching
+> the binaries that match *your* machine — only when you opt in. The default (`lexical`)
+> needs nothing.
 
 `parley.codebaseSearch.maxFiles` (default 4) controls how many files are included.
 
@@ -342,7 +353,8 @@ keeps working.
 - **Export:** **⤓** or `Parley: Export Conversation` → **Markdown, plain text, or
   JSON**, each with a metadata header (model(s), mode, thinking level, speed, message
   count, session tokens, estimated cost).
-- **Past conversations:** **🕘** or `Parley: Open Past Conversation` (in‑memory archive).
+- **Past conversations:** **🕘** or `Parley: Open Past Conversation` — archived in VS Code
+  workspace state, so they survive reloads (independent of the Markdown auto‑save).
 - **Compact:** **⊟**, `/compact`, or `Parley: Compact Conversation` — summarize the
   conversation (choose *keep recent* or *everything*) to continue with fewer tokens.
 
@@ -496,6 +508,10 @@ Verified live against the API:
   it's accepted but **not applied** by Parley today (see [Reasoning & speed](#reasoning--speed-important-nuances)).
 - **No embeddings endpoint** — that's why the semantic `@codebase` index runs a local
   model instead of calling Parley.
+- **No client‑controlled prompt caching** — Anthropic `cache_control` breakpoints are
+  accepted but **not propagated** to Bedrock (verified live: no cache writes/reads from
+  explicit markers), so the extension doesn't send them. Bedrock still applies *automatic*
+  prompt caching to repeated prefixes transparently, at no cost or effort to you.
 - **No web‑search endpoint** — `web_search` calls DuckDuckGo/Google/Tavily directly.
 - **No video content type** — video is approximated with ffmpeg (frames/audio).
 - **Stateless** — there's no server‑side conversation history; full context is sent
@@ -524,22 +540,26 @@ Verified live against the API:
 
 ```bash
 npm install
-npm run compile           # tsc -> out/
+npm run compile           # tsc typecheck -> out/  +  esbuild bundle -> dist/extension.js
 npm test                  # compile + node --test (unit)
 npm run lint              # eslint
 npm run format            # prettier --write
+npm run watch             # esbuild --watch (rebuilds dist/ on save for F5)
 npm run test:integration  # launches VS Code (needs a display; CI uses xvfb)
 npm run package           # @vscode/vsce -> parley-vscode-<version>.vsix
 ```
 
-Press **F5** for an Extension Development Host. CI (GitHub Actions) compiles,
-unit‑tests, packages, and runs VS Code integration tests on every push to `main`
-(Node 22); a `vX.Y.Z` tag publishes a GitHub Release with the `.vsix` (and, if the
-`VSCE_PAT` / `OVSX_PAT` secrets are set, to the Marketplace / Open VSX).
+The extension is **bundled with esbuild** into a single `dist/extension.js`, so the
+VSIX is tiny (~100 KB) and platform‑agnostic — no `node_modules` is shipped. The one
+optional runtime dependency (`@xenova/transformers`, for the local semantic
+`@codebase` index) is **not** in the package; it's installed on demand into global
+storage the first time you build the index. Press **F5** for an Extension Development
+Host (run `npm run watch` alongside to keep `dist/` fresh).
 
-> Enabling the local semantic index bundles `@xenova/transformers`, which makes the
-> VSIX large (~80 MB) and platform‑specific. If you don't need it, leave
-> `parley.codebaseSearch.provider` at `lexical`.
+CI (GitHub Actions) typechecks, unit‑tests, bundles/packages, and runs VS Code
+integration tests on every push to `main` (Node 22); a `vX.Y.Z` tag publishes a GitHub
+Release with the `.vsix` (and, if the `VSCE_PAT` / `OVSX_PAT` secrets are set, to the
+Marketplace / Open VSX).
 
 ---
 

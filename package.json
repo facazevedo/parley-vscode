@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.37.0",
+  "version": "0.38.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -17,7 +17,7 @@
     "onStartupFinished",
     "onView:parley.chatView"
   ],
-  "main": "./out/src/extension.js",
+  "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
       "activitybar": [
@@ -344,7 +344,10 @@
         "parley.codebaseSearch.provider": {
           "type": "string",
           "default": "lexical",
-          "enum": ["lexical", "local"],
+          "enum": [
+            "lexical",
+            "local"
+          ],
           "enumDescriptions": [
             "Keyword ranking (ripgrep-style) — keyless, private, instant (default)",
             "Local semantic embeddings (MiniLM, on-device) — true meaning-based search; downloads a model (~25 MB) on first index. Run 'Parley: Rebuild Codebase Index' to build it."
@@ -465,8 +468,12 @@
     }
   },
   "scripts": {
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
+    "compile": "tsc -p ./ && node esbuild.js",
+    "bundle": "node esbuild.js --production",
+    "typecheck": "tsc -p ./",
+    "watch": "node esbuild.js --watch",
+    "watch:tsc": "tsc -watch -p ./",
+    "vscode:prepublish": "npm run typecheck && npm run bundle",
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" \"media/*.{js,css}\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\" \"media/*.{js,css}\"",
@@ -482,13 +489,11 @@
     "@typescript-eslint/parser": "^7.18.0",
     "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^2.32.0",
+    "esbuild": "^0.24.2",
     "eslint": "^8.57.1",
     "glob": "^10.5.0",
     "mocha": "^10.8.2",
     "prettier": "^3.8.4",
     "typescript": "^5.5.4"
-  },
-  "dependencies": {
-    "@xenova/transformers": "^2.17.2"
   }
 }

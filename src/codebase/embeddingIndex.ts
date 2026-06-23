@@ -1,20 +1,34 @@
+import { spawn } from 'child_process';
 import { promises as fsp } from 'fs';
 import * as path from 'path';
+import { pathToFileURL } from 'url';
 import * as vscode from 'vscode';
 import type { Logger } from '../logging/logger';
 import { dbg } from '../debug/debug';
 
 /**
- * Optional local semantic index for `@codebase`, using a bundled MiniLM model via
- * transformers.js (ONNX/WASM) — no API key, runs offline after a one-time model
- * download. It's heavy (the dependency is large) and entirely opt-in
- * (`parley.codebaseSearch.provider` = "local"); every path is defensive and the
- * caller falls back to lexical retrieval if anything here fails.
+ * Optional local semantic index for `@codebase`, using a MiniLM model via
+ * transformers.js (ONNX) — no API key, runs offline after a one-time model
+ * download. It's entirely opt-in (`parley.codebaseSearch.provider` = "local").
+ *
+ * The transformers.js runtime is large and platform-specific (it pulls native
+ * `onnxruntime-node`/`sharp` binaries), so it is NOT shipped in the VSIX. Instead
+ * it's installed on demand into the extension's global storage the first time you
+ * build the index — that way the base extension stays small and platform-agnostic,
+ * and the native binaries fetched match your machine. Requires `npm` on PATH for
+ * that one-time install. Every path here is defensive: the caller falls back to
+ * lexical retrieval if anything fails.
  */
 const MODEL = 'Xenova/all-MiniLM-L6-v2';
+const TRANSFORMERS_VERSION = '2.17.2';
 const MAX_CHARS_PER_FILE = 4000;
 
 type Embedder = (texts: string[]) => Promise<number[][]>;
+
+interface TransformersModule {
+  pipeline: (task: string, model: string) => Promise<(input: string[], opts: object) => Promise<{ data: Float32Array; dims: number[] }>>;
+  env: { allowRemoteModels: boolean; cacheDir: string };
+}
 
 interface IndexEntry {
   path: string;
@@ -40,15 +54,89 @@ export class EmbeddingIndex {
     return vscode.Uri.joinPath(this.globalStorageUri, 'codebase', `${safe}.json`);
   }
 
-  /** Lazily load transformers.js + the MiniLM pipeline (downloaded/cached to global storage). */
-  private async getEmbedder(): Promise<Embedder> {
+  /** Directory where the transformers.js runtime is installed on demand. */
+  private get runtimeDir(): string {
+    return vscode.Uri.joinPath(this.globalStorageUri, 'runtime').fsPath;
+  }
+
+  /** True if the transformers.js runtime has already been installed locally. */
+  private async isRuntimeInstalled(): Promise<boolean> {
+    try {
+      await fsp.access(path.join(this.runtimeDir, 'node_modules', '@xenova', 'transformers', 'package.json'));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Install transformers.js into global storage via npm (one-time, ~hundreds of MB). */
+  private async installRuntime(): Promise<void> {
+    await fsp.mkdir(this.runtimeDir, { recursive: true });
+    // A private package.json so npm installs locally into runtimeDir/node_modules.
+    await fsp.writeFile(
+      path.join(this.runtimeDir, 'package.json'),
+      JSON.stringify({ name: 'parley-runtime', private: true, version: '1.0.0' }),
+      'utf8'
+    );
+    dbg('codebase', 'installing transformers runtime', { dir: this.runtimeDir });
+    await vscode.window.withProgress(
+      {
+        location: vscode.ProgressLocation.Notification,
+        title: 'Parley: installing the local embedding runtime (one-time, this may take a few minutes)…',
+        cancellable: false
+      },
+      () =>
+        new Promise<void>((resolve, reject) => {
+          const child = spawn(
+            'npm',
+            ['install', `@xenova/transformers@${TRANSFORMERS_VERSION}`, '--no-audit', '--no-fund', '--loglevel=error'],
+            { cwd: this.runtimeDir, shell: true }
+          );
+          let stderr = '';
+          child.stderr?.on('data', (d) => {
+            stderr += d.toString();
+          });
+          child.on('error', (err) =>
+            reject(new Error(`Could not run npm (is it on your PATH?): ${err.message}`))
+          );
+          child.on('close', (code) => {
+            if (code === 0) {
+              resolve();
+            } else {
+              reject(new Error(`npm install exited with code ${code}. ${stderr.slice(-400)}`));
+            }
+          });
+        })
+    );
+  }
+
+  /**
+   * Import the installed transformers.js. Uses a tiny ESM shim placed beside the
+   * install so the bare specifier resolves against runtimeDir/node_modules
+   * regardless of the package's export conditions.
+   */
+  private async loadTransformers(): Promise<TransformersModule> {
+    const shim = path.join(this.runtimeDir, 'load-transformers.mjs');
+    await fsp.writeFile(shim, "export * from '@xenova/transformers';\n", 'utf8');
+    return (await dynamicImport(pathToFileURL(shim).href)) as TransformersModule;
+  }
+
+  /**
+   * Lazily load transformers.js + the MiniLM pipeline. When `allowInstall` is true
+   * (explicit index build) it installs the runtime on first use; otherwise (e.g. a
+   * search) it throws if the runtime is absent so the caller falls back to lexical.
+   */
+  private async getEmbedder(allowInstall: boolean): Promise<Embedder> {
     if (this.embedder) {
       return this.embedder;
     }
-    const mod = (await dynamicImport('@xenova/transformers')) as {
-      pipeline: (task: string, model: string) => Promise<(input: string[], opts: object) => Promise<{ data: Float32Array; dims: number[] }>>;
-      env: { allowRemoteModels: boolean; cacheDir: string };
-    };
+    if (!(await this.isRuntimeInstalled())) {
+      if (!allowInstall) {
+        throw new Error('local embedding runtime not installed (run "Parley: Rebuild Codebase Index")');
+      }
+      await this.installRuntime();
+    }
+    const mod = await this.loadTransformers();
     mod.env.allowRemoteModels = true;
     mod.env.cacheDir = vscode.Uri.joinPath(this.globalStorageUri, 'models').fsPath;
     const extractor = await mod.pipeline('feature-extraction', MODEL);
@@ -66,7 +154,7 @@ export class EmbeddingIndex {
 
   /** Build (and persist) the index from the given files. Returns the number indexed. */
   public async build(root: string, docs: ReadonlyArray<{ path: string; text: string }>): Promise<number> {
-    const embed = await this.getEmbedder();
+    const embed = await this.getEmbedder(true);
     const entries: IndexEntry[] = [];
     const BATCH = 16;
     for (let i = 0; i < docs.length; i += BATCH) {
@@ -108,7 +196,7 @@ export class EmbeddingIndex {
       if (this.entries.length === 0) {
         return undefined; // not indexed yet
       }
-      const embed = await this.getEmbedder();
+      const embed = await this.getEmbedder(false);
       const [q] = await embed([query]);
       const scored = this.entries.map((e) => ({ path: e.path, score: dot(q, e.vec) }));
       return scored.sort((a, b) => b.score - a.score).slice(0, topN).map((s) => s.path);

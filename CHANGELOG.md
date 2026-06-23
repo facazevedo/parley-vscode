@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.38.0
+
+### Changed — tiny, platform-agnostic VSIX (esbuild bundle)
+- The extension is now **bundled with esbuild** into a single `dist/extension.js`. The VSIX dropped from **~80 MB / 4264 files to ~105 KB / 14 files** and is no longer tied to the OS it was packaged on.
+- The optional local‑semantic `@codebase` runtime (`@xenova/transformers` + native `onnxruntime`/`sharp`) is **no longer shipped**. The first time you build the index (`Parley: Rebuild Codebase Index`) it's installed on demand into global storage — fetching the binaries that match *your* machine — so the platform‑specific weight only lands if you opt in. Requires `npm` on PATH for that one‑time install; falls back to lexical if unavailable.
+
+### Added — Apply button in Chat mode
+- In plain **Chat** mode, complete‑file changes the model proposes now render as an **inline diff card with an Apply / Create file and Dismiss button**, replacing the old modal pop‑ups. Clicking **Apply** writes the file (checkpointed/revertible via `Parley: Revert Last Edit`). Agent modes still apply through tools. This is the Cursor‑style "suggest in chat, apply on click" flow.
+
+### Investigated — prompt caching (not available via Parley)
+- Verified live that Anthropic `cache_control` breakpoints are **accepted but not propagated** to Bedrock by the gateway (no cache writes/reads from explicit markers, on system or user messages) — the same situation as OpenAI `reasoning_effort`. The extension therefore does **not** send them. Bedrock still applies *automatic* prefix caching transparently. Documented in the README's gateway‑limits section.
+
+### Internal
+- New unit tests: the proposed‑change parser (`fileBlocks`) and a **bundle‑integrity** test that loads the built `dist/extension.js` and asserts it exports `activate`/`deactivate` (59 tests total). Build scripts: `compile` now typechecks (tsc) and bundles (esbuild); `package` builds a minified production bundle via `vscode:prepublish`; `watch` runs esbuild in watch mode for F5.
+
 ## 0.37.0
 
 ### Changed — complete README guide

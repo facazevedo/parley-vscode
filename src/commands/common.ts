@@ -167,6 +167,8 @@ export async function reportProviderError(deps: CommandDependencies, error: unkn
 export interface HandleResponseOptions {
   /** Skip the assistant-message popup when the caller already rendered it (e.g. the chat panel). */
   readonly skipMessageDisplay?: boolean;
+  /** Skip the modal proposed-changes review (the chat panel renders inline Apply cards instead). */
+  readonly skipProposedChanges?: boolean;
 }
 
 export async function handleResponse(
@@ -194,6 +196,10 @@ export async function handleResponse(
     } else if (answer === 'Copy') {
       await vscode.env.clipboard.writeText(suggestion.command);
     }
+  }
+
+  if (options.skipProposedChanges) {
+    return;
   }
 
   for (const change of response.proposedChanges ?? []) {
