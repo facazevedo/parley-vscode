@@ -187,8 +187,15 @@ export class ParleyClient implements ParleyProvider {
   ): void {
     const t = buildThinkingRequest(model, thinking);
     if (t) {
-      payload.thinking = t.thinking;
-      payload.max_tokens = t.max_tokens;
+      if (t.thinking) {
+        payload.thinking = t.thinking;
+      }
+      if (t.max_tokens) {
+        payload.max_tokens = t.max_tokens;
+      }
+      if (t.reasoning_effort) {
+        payload.reasoning_effort = t.reasoning_effort;
+      }
     }
     if (responseFormat) {
       payload.response_format = responseFormat;
@@ -589,6 +596,7 @@ export class ParleyClient implements ParleyProvider {
           // Surface it instead of silently finishing with empty content.
           if (parsed.error) {
             const detail = typeof parsed.error === 'string' ? parsed.error : parsed.error.message ?? 'unknown error';
+            dbg('stream', 'error event', detail);
             throw new ParleyApiError(0, `Parley stream error: ${detail}`);
           }
           const finish = parsed.choices?.[0]?.finish_reason;
@@ -749,6 +757,7 @@ export class ParleyClient implements ParleyProvider {
           }
           const parsed = this.parseChunk(data);
           if (parsed.error) {
+            dbg('stream', 'error event', parsed.error);
             throw new ParleyApiError(0, `Parley stream error: ${parsed.error}`);
           }
           if (parsed.usage) {

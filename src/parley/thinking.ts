@@ -54,25 +54,49 @@ export function resolveThinking(level: ThinkingLevel): ThinkingConfig | undefine
 }
 
 export interface ThinkingPayload {
-  readonly thinking: { type: 'enabled' | 'adaptive'; budget_tokens?: number };
-  readonly max_tokens: number;
+  /** Anthropic/Bedrock/Gemini style reasoning block. */
+  readonly thinking?: { type: 'enabled' | 'adaptive'; budget_tokens?: number };
+  readonly max_tokens?: number;
+  /** OpenAI-style reasoning control (OpenAI rejects the `thinking` block with a 400). */
+  readonly reasoning_effort?: 'low' | 'medium' | 'high';
 }
 
 /**
  * Build the request fields for extended thinking, applying provider quirks.
  * Returns `undefined` when no thinking should be sent.
+ *
+ * Each provider exposes reasoning differently:
+ * - **OpenAI** and **Google/Gemini** use the OpenAI-style `reasoning_effort`
+ *   (`low`/`medium`/`high`). Sending the `thinking` block to them yields
+ *   `400 Unknown parameter: 'thinking'`.
+ * - **Claude** (Bedrock/Anthropic) uses the Anthropic-style `thinking` block
+ *   plus `max_tokens`. Bedrock Claude Opus 4.7 only supports adaptive thinking.
+ * - Other models (e.g. Llama) have no reasoning controls, so nothing is sent.
  */
 export function buildThinkingRequest(model: string, config: ThinkingConfig | undefined): ThinkingPayload | undefined {
   if (!config) {
     return undefined;
   }
-  // Bedrock Claude Opus 4.7 only supports adaptive thinking.
-  const effective: ThinkingConfig =
-    config.type === 'enabled' && /opus-4-7/i.test(model) ? { type: 'adaptive' } : config;
 
-  if (effective.type === 'adaptive') {
-    return { thinking: { type: 'adaptive' }, max_tokens: ADAPTIVE_MAX_TOKENS };
+  // OpenAI + Google expose reasoning via the OpenAI-compatible `reasoning_effort`.
+  if (/^openai\//i.test(model) || /^google\//i.test(model) || /gemini/i.test(model)) {
+    const budget = config.budgetTokens ?? 0;
+    const effort: 'low' | 'medium' | 'high' =
+      config.type === 'adaptive' ? 'medium' : budget >= 16000 ? 'high' : budget >= 8192 ? 'medium' : 'low';
+    return { reasoning_effort: effort };
   }
-  const budget = effective.budgetTokens ?? BUDGETS.low;
-  return { thinking: { type: 'enabled', budget_tokens: budget }, max_tokens: budget + RESPONSE_HEADROOM };
+
+  // Claude (Anthropic / Bedrock) uses the Anthropic-style `thinking` block.
+  if (/claude|anthropic/i.test(model)) {
+    const effective: ThinkingConfig =
+      config.type === 'enabled' && /opus-4-7/i.test(model) ? { type: 'adaptive' } : config;
+    if (effective.type === 'adaptive') {
+      return { thinking: { type: 'adaptive' }, max_tokens: ADAPTIVE_MAX_TOKENS };
+    }
+    const budget = effective.budgetTokens ?? BUDGETS.low;
+    return { thinking: { type: 'enabled', budget_tokens: budget }, max_tokens: budget + RESPONSE_HEADROOM };
+  }
+
+  // Models without a reasoning mode (e.g. Llama) — send nothing.
+  return undefined;
 }

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.23.0
+
+### Fixed — extended thinking is now provider-aware (root cause of the GPT-5.5 failure)
+- The debug log showed `openai/gpt-5.5` with Thinking = High returning **`400 Unknown parameter: 'thinking'`**, which aborted the stream (and, before v0.21, looked like an empty response). The Anthropic-style `thinking: { type, budget_tokens }` block isn't valid for OpenAI. Each provider's reasoning is now called its own way:
+  - **OpenAI** and **Google/Gemini** → `reasoning_effort` (`low`/`medium`/`high`).
+  - **Claude** (Bedrock/Anthropic) → the `thinking` block + `max_tokens` (Opus 4.7 forced to adaptive).
+  - **Other models** (e.g. Llama) → nothing.
+  So selecting a thinking level works on every model instead of breaking OpenAI/Gemini.
+- Streamed error events are now also written to the debug log (full text), not just thrown.
+
 ## 0.22.0
 
 ### Added — debug tracing
