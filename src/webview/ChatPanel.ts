@@ -921,7 +921,14 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         '\n\n' +
         'If a command is terminated for exceeding its timeout, that is recoverable: re-run it, split it into smaller steps, or proceed — do not give up.\n\n' +
         'For any task with more than a couple of steps, call the `update_plan` tool first with the high-level steps, then update it (one step `in_progress` at a time, mark steps `done` as you finish) so the user can follow your progress.\n\n' +
-        'IMPORTANT — always communicate in plain text as you work: before each tool call, write a short sentence saying what you are about to do and why; after finishing a logical chunk, summarize what changed. Do NOT paste raw reasoning notes-to-self (fragments like "Need to…", "Use python? read __all__.") into your reply — write clear sentences for the user. NEVER reply with only tool calls and no text, and never return an empty message. When the entire task is genuinely finished, give a brief final summary (files created/changed, commands run, whether lint/tests/build passed, and any known limitations) and end your final message with <DONE> on its own line.';
+        'IMPORTANT — always communicate in plain text as you work: before each tool call, write a short sentence saying what you are about to do and why; after finishing a logical chunk, summarize what changed. Do NOT paste raw reasoning notes-to-self (fragments like "Need to…", "Use python? read __all__.") into your reply — write clear sentences for the user. NEVER reply with only tool calls and no text, and never return an empty message.\n\n' +
+        'When the entire task is genuinely finished, your final message MUST end with a summary section formatted EXACTLY like this:\n' +
+        '**SUMMARY**\n' +
+        '- <what you did — one bullet per item>\n' +
+        '- <files created/changed>\n' +
+        '- <commands run and whether lint/tests/build passed>\n' +
+        '- <any known limitations or follow-ups>\n' +
+        'Use a bold **SUMMARY** heading on its own line, then concise Markdown bullet points (`- `). Put <DONE> on its own line AFTER the summary. Always include this SUMMARY section when finishing — even for small tasks.';
     }
     return [rules, modeNote].filter(Boolean).join('\n\n') || undefined;
   }

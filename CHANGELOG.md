@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.41.0
+
+### Changed — agents always end with a bold **SUMMARY**
+- When an agent task finishes, the final message now always ends with a **SUMMARY** section (bold heading + Markdown bullet points) covering what was done, files changed, commands run / whether checks passed, and any known limitations — followed by `<DONE>`. Applies to all agent modes (ask/edit/auto/full).
+
 ## 0.40.0
 
 ### Added — complete conversation transcripts saved to `.parley`
