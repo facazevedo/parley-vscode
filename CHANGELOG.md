@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.34.0
+
+### Added — visible command execution
+- Agent shell commands (`run_command`) now mirror the command and its **full output** to a dedicated **"Parley Agent"** output channel as they run (Claude-Code/Cursor-style transparency), while still capturing the output for the model and showing the `⏺`/`⎿` summary in chat.
+
+### Note
+- The Cursor-style **"Apply" button** on arbitrary chat code blocks is intentionally **not** added: it requires a dedicated apply/merge model that Parley doesn't provide, and a naive "replace file with snippet" would be destructive. Full-file edits already route through the diff-review/checkpoint flow via `File:` blocks and the `write_file`/`edit_file` tools.
+
+This completes the Claude-Code / Codex / Cursor parity pass (custom commands, task checklist, richer @-mentions, commit messages, MCP, visible commands).
+
 ## 0.33.0
 
 ### Added — MCP (Model Context Protocol) servers

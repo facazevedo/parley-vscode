@@ -144,6 +144,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private jsonNext = false; // one-shot: request the next reply as a JSON object (/json)
   private conversationId = ''; // stable id → filename for the auto-saved transcript
   private customCommandNames: string[] = []; // user-defined /commands from .parley|.claude/commands
+  private commandChannel?: vscode.OutputChannel; // visible mirror of agent shell commands
   private attachments: PendingAttachment[] = [];
   private busy = false;
   private abortController?: AbortController;
@@ -1487,12 +1488,27 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         return 'User declined to run the command.';
       }
     }
-    return runShellCommand(
+    const output = await runShellCommand(
       command,
       folder?.uri.fsPath,
       this.getSettings().commandTimeoutSeconds * 1000,
       this.abortController?.signal
     );
+    // Mirror the command + its full output to a visible channel (Claude-Code/Cursor-style),
+    // while still returning the captured output to the model.
+    const channel = this.agentChannel();
+    channel.appendLine(`$ ${command}`);
+    channel.appendLine(output);
+    channel.appendLine('');
+    channel.show(true);
+    return output;
+  }
+
+  private agentChannel(): vscode.OutputChannel {
+    if (!this.commandChannel) {
+      this.commandChannel = vscode.window.createOutputChannel('Parley Agent');
+    }
+    return this.commandChannel;
   }
 
   /** Resolve `@path` mentions in the prompt into file context attachments. */
