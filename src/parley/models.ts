@@ -8,8 +8,8 @@
 const CONTEXT_WINDOWS: ReadonlyArray<readonly [RegExp, number]> = [
   [/gpt-5\.4|gpt-5\.5/i, 1_000_000],
   [/gpt-5/i, 400_000], // gpt-5, 5.1, 5.2, nano, mini, codex
-  [/claude-haiku-4-5/i, 200_000],
-  [/claude-(sonnet|opus)-4-[67]/i, 1_000_000],
+  [/claude-haiku-4-\d/i, 200_000],
+  [/claude-(sonnet|opus)-4-\d/i, 1_000_000],
   [/llama-4-maverick/i, 1_000_000],
   [/gemini-2\.5-pro|gemini-3\.1-pro/i, 1_000_000],
   [/gemini-3\.0-flash/i, 200_000]

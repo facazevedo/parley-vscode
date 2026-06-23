@@ -9,6 +9,7 @@ test('contextWindowFor returns documented windows, specific GPT-5 variants first
   assert.equal(contextWindowFor('openai/gpt-5-nano'), 400_000);
   assert.equal(contextWindowFor('bedrock/claude-haiku-4-5'), 200_000);
   assert.equal(contextWindowFor('bedrock/claude-sonnet-4-6'), 1_000_000);
+  assert.equal(contextWindowFor('bedrock/claude-opus-4-8'), 1_000_000); // future-proof: not yet on Parley
   assert.equal(contextWindowFor('google/gemini-3.0-flash'), 200_000);
   assert.equal(contextWindowFor('google/gemini-3.1-pro'), 1_000_000);
   assert.equal(contextWindowFor('unknown/model'), undefined);

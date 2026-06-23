@@ -22,9 +22,9 @@ export interface ModelRate {
  */
 const RATES: ReadonlyArray<readonly [RegExp, ModelRate]> = [
   // Claude (Bedrock / Anthropic)
-  [/claude-haiku-4-5/i, { input: 1.0, output: 5.0 }],
-  [/claude-sonnet-4-6/i, { input: 3.0, output: 15.0 }],
-  [/claude-opus-4-[67]/i, { input: 5.0, output: 25.0 }],
+  [/claude-haiku-4-\d/i, { input: 1.0, output: 5.0 }],
+  [/claude-sonnet-4-\d/i, { input: 3.0, output: 15.0 }],
+  [/claude-opus-4-\d/i, { input: 5.0, output: 25.0 }],
   // OpenAI GPT-5 family (specific variants before the GPT-5 fallback)
   [/gpt-5-nano/i, { input: 0.1, output: 0.5 }],
   [/gpt-5-mini/i, { input: 0.25, output: 2.0 }],

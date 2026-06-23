@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.31.0
+
+### Changed — future-proof Claude 4.x model support
+- Investigated Claude **Opus 4.8** on Parley: it is **not available** (not in `/v1/models`; every id form — `bedrock/claude-opus-4-8`, `anthropic/…`, dated Bedrock id, `global.anthropic.*` ARN, bare — returns HTTP 400, while `opus-4-7` works). There is no undocumented id that enables it; the gateway's catalog tops out at Opus 4.7.
+- Broadened the context-window, pricing, and reasoning matching to any Claude 4.x (`opus`/`sonnet`/`haiku` `4-N`), so the moment MIT adds Opus 4.8 (or another 4.x) to Parley it's fully handled — context gauge, cost estimate, and extended thinking — instead of being treated as an unknown model. Models are already listed dynamically from `/v1/models`, so it will appear in the picker automatically.
+
 ## 0.30.0
 
 ### Changed

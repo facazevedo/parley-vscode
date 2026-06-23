@@ -16,6 +16,7 @@ test('rateFor matches Claude and Gemini families by id', () => {
   assert.deepEqual(rateFor('bedrock/claude-haiku-4-5'), { input: 1.0, output: 5.0 });
   assert.deepEqual(rateFor('bedrock/claude-sonnet-4-6'), { input: 3.0, output: 15.0 });
   assert.deepEqual(rateFor('bedrock/claude-opus-4-7'), { input: 5.0, output: 25.0 });
+  assert.deepEqual(rateFor('bedrock/claude-opus-4-8'), { input: 5.0, output: 25.0 }); // future-proof
   assert.deepEqual(rateFor('google/gemini-3.1-pro'), { input: 4.0, output: 18.0 });
   assert.deepEqual(rateFor('google/gemini-3.0-flash'), { input: 0.5, output: 3.0 });
 });
