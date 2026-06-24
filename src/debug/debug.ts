@@ -15,6 +15,10 @@ export const DEBUG = true;
 
 let channel: vscode.OutputChannel | undefined;
 let logFile: string | undefined;
+// The debug FILE (and its folder) is only created once Parley is actually used in the
+// workspace — not on mere activation, which happens for every window at startup. Until
+// armed, dbg() still streams to the "Parley Debug" output channel.
+let fileArmed = false;
 let writeQueue: Promise<void> = Promise.resolve();
 
 /** Initialize debug sinks. Safe to call once on activation; a no-op when DEBUG is false. */
@@ -27,7 +31,17 @@ export function initDebug(context: vscode.ExtensionContext): void {
   const ws = vscode.workspace.workspaceFolders?.[0]?.uri;
   const dir = ws ? path.join(ws.fsPath, 'debug') : path.join(context.globalStorageUri.fsPath, 'debug');
   logFile = path.join(dir, 'parley-debug.log');
-  dbg('init', `Debug logging ON. Log file: ${logFile}`);
+  // Note: no write here — that would create the `debug/` folder before Parley is used.
+  channel.appendLine(`[${stamp()}] [init] Debug logging ON. Log file (created on first use): ${logFile}`);
+}
+
+/**
+ * Allow dbg() to start writing to the on-disk log (and create its folder). Called the
+ * first time the user actually uses Parley (e.g. sends a chat/agent turn), so repos where
+ * Parley is never used don't get a stray `debug/` folder.
+ */
+export function armDebugFile(): void {
+  fileArmed = true;
 }
 
 /** The folder where the debug log lives, or undefined if debug is off / uninitialized. */
@@ -56,7 +70,7 @@ export function dbg(area: string, message: string, data?: unknown): void {
   }
   const line = `[${stamp()}] [${area}] ${message}${data !== undefined ? ` ${stringify(data)}` : ''}`;
   channel?.appendLine(line);
-  if (logFile) {
+  if (logFile && fileArmed) {
     const file = logFile;
     writeQueue = writeQueue
       .then(async () => {

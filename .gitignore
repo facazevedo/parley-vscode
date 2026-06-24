@@ -4,4 +4,6 @@ dist/
 *.vsix
 .vscode-test/
 .DS_Store
-debug/*.log
+debug/
+**/parley-debug.log
+.parley/

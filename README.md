@@ -404,9 +404,11 @@ root is auto‑injected into the system prompt as project rules. Scaffold one wi
   whether thinking is honored on your models) and opens a pass/fail report.
 - **Debug logging** is gated by a single `DEBUG` switch in `src/debug/debug.ts`.
   When on, verbose traces (request shapes, response provider/model headers, finish
-  reasons, token usage, tool rounds, turn flow) go to the **"Parley Debug"** output
-  channel and to `debug/parley-debug.log` in the workspace. **`Parley: Open Debug
-  Log`** opens it. The API key is never logged.
+  reasons, token usage, tool rounds, turn flow) stream to the **"Parley Debug"** output
+  channel, and are written to `debug/parley-debug.log` **only once you actually use Parley
+  in the workspace** (the first chat/agent turn) — so repos where you never use Parley
+  don't get a stray `debug/` folder. **`Parley: Open Debug Log`** opens it. The API key is
+  never logged.
 
 ---
 

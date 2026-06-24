@@ -25,7 +25,7 @@ import { audioFormatFromExt, audioFormatFromMime, modelSupportsAudio } from '../
 import { documentProviderFor } from '../parley/files';
 import { contextWindowFor, modelSupportsThinking } from '../parley/models';
 import { estimateCostUsd, formatUsd } from '../parley/pricing';
-import { dbg } from '../debug/debug';
+import { armDebugFile, dbg } from '../debug/debug';
 import type { McpManager } from '../mcp/McpManager';
 import { isMcpTool } from '../mcp/naming';
 import { webSearch } from '../web/webSearch';
@@ -624,6 +624,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       await vscode.window.showInformationMessage('Parley is still responding. Stop the current reply first.');
       return;
     }
+    // The user is actively using Parley now — allow the debug log file to be created.
+    armDebugFile();
 
     const settings = this.getSettings();
     const model = this.selectedAgentId || settings.defaultAgent;

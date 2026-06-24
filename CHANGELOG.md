@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.42.0
+
+### Fixed — `debug/` folder no longer created unless you use Parley
+- The extension activates on startup for every window, and debug logging eagerly wrote a line on init — creating a `debug/` folder in repos where Parley was never used. The debug **file** (and its folder) is now created **only on your first chat/agent turn**; until then, debug traces stream to the **"Parley Debug"** output channel only. (Existing stray `debug/` folders can be deleted safely.)
+
 ## 0.41.0
 
 ### Changed — agents always end with a bold **SUMMARY**
