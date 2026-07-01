@@ -240,6 +240,22 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     // persisted per conversation, so Revert works across window reloads.
     this.checkpoints.setMarkerProvider(() => this.transcript.length);
     void this.checkpoints.bind(this.parleyBase(), this.conversationId);
+    // Incremental semantic index: re-embed a file on save, but only when the local
+    // provider is selected AND the embedder is already loaded (never load it for a save).
+    vscode.workspace.onDidSaveTextDocument((doc) => {
+      const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+      if (!root || !this.embeddingIndex || this.getSettings().codebaseSearchProvider !== 'local') {
+        return;
+      }
+      if (doc.uri.scheme !== 'file' || doc.getText().length > 200000) {
+        return;
+      }
+      const rel = path.relative(root.fsPath, doc.uri.fsPath).replace(/\\/g, '/');
+      if (rel.startsWith('..') || isSensitiveFile(rel)) {
+        return;
+      }
+      void this.embeddingIndex.updateFile(root.fsPath, rel, doc.getText());
+    });
   }
 
   private save(): void {

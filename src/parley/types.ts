@@ -102,6 +102,10 @@ export interface CompletionRequest {
   readonly suffix: string;
   readonly languageId: string;
   readonly model: string;
+  /** Recent edit lines elsewhere in the workspace ("file:line: text", one per line). */
+  readonly recentEdits?: string;
+  /** Basenames of other open editor tabs. */
+  readonly openFiles?: string;
 }
 
 /** Image generation request for `gpt-image-1`. */

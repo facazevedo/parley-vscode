@@ -1,5 +1,7 @@
 import { spawn } from 'child_process';
+import { createHash } from 'crypto';
 import { promises as fsp } from 'fs';
+import { chunkText } from './chunk';
 import * as path from 'path';
 import { pathToFileURL } from 'url';
 import * as vscode from 'vscode';
@@ -21,18 +23,36 @@ import { dbg } from '../debug/debug';
  */
 const MODEL = 'Xenova/all-MiniLM-L6-v2';
 const TRANSFORMERS_VERSION = '2.17.2';
-const MAX_CHARS_PER_FILE = 4000;
 
 type Embedder = (texts: string[]) => Promise<number[][]>;
 
 interface TransformersModule {
-  pipeline: (task: string, model: string) => Promise<(input: string[], opts: object) => Promise<{ data: Float32Array; dims: number[] }>>;
+  pipeline: (
+    task: string,
+    model: string
+  ) => Promise<(input: string[], opts: object) => Promise<{ data: Float32Array; dims: number[] }>>;
   env: { allowRemoteModels: boolean; cacheDir: string };
 }
 
-interface IndexEntry {
-  path: string;
+interface ChunkEntry {
+  /** 1-based first line of the chunk. */
+  s: number;
   vec: number[];
+}
+
+interface FileEntry {
+  /** Content hash — unchanged files are reused instead of re-embedded. */
+  hash: string;
+  chunks: ChunkEntry[];
+}
+
+/** v2 index: per-file hash + ~60-line chunk vectors (v1 was one vector per file). */
+interface IndexFileFormat {
+  root: string;
+  version?: number;
+  files?: Record<string, FileEntry>;
+  /** Legacy v1 entries — migrated to single-chunk files with a stale hash. */
+  entries?: Array<{ path: string; vec: number[] }>;
 }
 
 // tsc would downlevel a normal `import()` to require() (which can't load this ESM-only
@@ -41,7 +61,7 @@ const dynamicImport = new Function('m', 'return import(m)') as (m: string) => Pr
 
 export class EmbeddingIndex {
   private embedder?: Embedder;
-  private entries: IndexEntry[] = [];
+  private files = new Map<string, FileEntry>();
   private loadedRoot = '';
 
   public constructor(
@@ -96,9 +116,7 @@ export class EmbeddingIndex {
           child.stderr?.on('data', (d) => {
             stderr += d.toString();
           });
-          child.on('error', (err) =>
-            reject(new Error(`Could not run npm (is it on your PATH?): ${err.message}`))
-          );
+          child.on('error', (err) => reject(new Error(`Could not run npm (is it on your PATH?): ${err.message}`)));
           child.on('close', (code) => {
             if (code === 0) {
               resolve();
@@ -152,54 +170,139 @@ export class EmbeddingIndex {
     return this.embedder;
   }
 
-  /** Build (and persist) the index from the given files. Returns the number indexed. */
-  public async build(root: string, docs: ReadonlyArray<{ path: string; text: string }>): Promise<number> {
-    const embed = await this.getEmbedder(true);
-    const entries: IndexEntry[] = [];
-    const BATCH = 16;
-    for (let i = 0; i < docs.length; i += BATCH) {
-      const batch = docs.slice(i, i + BATCH);
-      const vecs = await embed(batch.map((d) => d.text.slice(0, MAX_CHARS_PER_FILE)));
-      batch.forEach((d, j) => entries.push({ path: d.path, vec: vecs[j] }));
-    }
-    this.entries = entries;
-    this.loadedRoot = root;
-    try {
-      const file = this.indexFile(root);
-      await fsp.mkdir(path.dirname(file.fsPath), { recursive: true });
-      await fsp.writeFile(file.fsPath, JSON.stringify({ root, entries }), 'utf8');
-    } catch (error) {
-      this.logger.warn(`Could not persist codebase index: ${error instanceof Error ? error.message : 'error'}`);
-    }
-    dbg('codebase', 'index built', { files: entries.length });
-    return entries.length;
+  private static hash(text: string): string {
+    return createHash('sha1').update(text).digest('hex');
   }
 
-  private async ensureLoaded(root: string): Promise<void> {
-    if (this.loadedRoot === root && this.entries.length > 0) {
+  private async embedFile(embed: Embedder, text: string): Promise<ChunkEntry[]> {
+    const chunks = chunkText(text);
+    const out: ChunkEntry[] = [];
+    const BATCH = 16;
+    for (let i = 0; i < chunks.length; i += BATCH) {
+      const batch = chunks.slice(i, i + BATCH);
+      const vecs = await embed(batch.map((c) => c.text));
+      batch.forEach((c, j) => out.push({ s: c.startLine, vec: vecs[j] }));
+    }
+    return out;
+  }
+
+  /**
+   * Build (and persist) the index. Incremental: files whose content hash matches
+   * the existing index are reused, so a rebuild after small changes only embeds
+   * what changed. Returns the number of files indexed.
+   */
+  public async build(root: string, docs: ReadonlyArray<{ path: string; text: string }>): Promise<number> {
+    await this.ensureLoaded(root);
+    const embed = await this.getEmbedder(true);
+    const next = new Map<string, FileEntry>();
+    let reused = 0;
+    for (const doc of docs) {
+      const hash = EmbeddingIndex.hash(doc.text);
+      const existing = this.files.get(doc.path);
+      if (existing && existing.hash === hash && existing.chunks.length > 0) {
+        next.set(doc.path, existing);
+        reused += 1;
+        continue;
+      }
+      const chunks = await this.embedFile(embed, doc.text);
+      if (chunks.length > 0) {
+        next.set(doc.path, { hash, chunks });
+      }
+    }
+    this.files = next;
+    this.loadedRoot = root;
+    await this.persist(root);
+    dbg('codebase', 'index built', { files: next.size, reused });
+    return next.size;
+  }
+
+  /**
+   * Incrementally re-embed one file (on save). Only runs when the index for this
+   * root is loaded AND the embedder is already in memory — a save never triggers
+   * the heavy runtime/model load by itself.
+   */
+  public async updateFile(root: string, relPath: string, text: string): Promise<void> {
+    if (!this.embedder || this.loadedRoot !== root || this.files.size === 0) {
       return;
     }
     try {
-      const raw = await fsp.readFile(this.indexFile(root).fsPath, 'utf8');
-      const parsed = JSON.parse(raw) as { entries?: IndexEntry[] };
-      this.entries = Array.isArray(parsed.entries) ? parsed.entries : [];
-      this.loadedRoot = root;
-    } catch {
-      this.entries = [];
+      const hash = EmbeddingIndex.hash(text);
+      if (this.files.get(relPath)?.hash === hash) {
+        return;
+      }
+      const chunks = await this.embedFile(this.embedder, text);
+      if (chunks.length > 0) {
+        this.files.set(relPath, { hash, chunks });
+      } else {
+        this.files.delete(relPath);
+      }
+      await this.persist(root);
+      dbg('codebase', 'index updated on save', { file: relPath, chunks: chunks.length });
+    } catch (error) {
+      this.logger.debug(`Incremental index update failed: ${error instanceof Error ? error.message : 'error'}`);
     }
   }
 
-  /** Semantic search → top-N file paths, or `undefined` if no index exists / it fails. */
+  private async persist(root: string): Promise<void> {
+    try {
+      const file = this.indexFile(root);
+      await fsp.mkdir(path.dirname(file.fsPath), { recursive: true });
+      const payload: IndexFileFormat = { root, version: 2, files: Object.fromEntries(this.files) };
+      await fsp.writeFile(file.fsPath, JSON.stringify(payload), 'utf8');
+    } catch (error) {
+      this.logger.warn(`Could not persist codebase index: ${error instanceof Error ? error.message : 'error'}`);
+    }
+  }
+
+  private async ensureLoaded(root: string): Promise<void> {
+    if (this.loadedRoot === root && this.files.size > 0) {
+      return;
+    }
+    this.files = new Map();
+    this.loadedRoot = root;
+    try {
+      const raw = await fsp.readFile(this.indexFile(root).fsPath, 'utf8');
+      const parsed = JSON.parse(raw) as IndexFileFormat;
+      if (parsed.files) {
+        this.files = new Map(Object.entries(parsed.files));
+      } else if (Array.isArray(parsed.entries)) {
+        // v1 migration: one whole-file vector becomes a single chunk with a stale
+        // hash, so the next build re-embeds it chunked but search works meanwhile.
+        for (const e of parsed.entries) {
+          this.files.set(e.path, { hash: '', chunks: [{ s: 1, vec: e.vec }] });
+        }
+      }
+    } catch {
+      // No index on disk yet.
+    }
+  }
+
+  /** Semantic search → top-N file paths (best chunk per file), or `undefined` on failure. */
   public async search(root: string, query: string, topN: number): Promise<string[] | undefined> {
     try {
       await this.ensureLoaded(root);
-      if (this.entries.length === 0) {
+      if (this.files.size === 0) {
         return undefined; // not indexed yet
       }
       const embed = await this.getEmbedder(false);
       const [q] = await embed([query]);
-      const scored = this.entries.map((e) => ({ path: e.path, score: dot(q, e.vec) }));
-      return scored.sort((a, b) => b.score - a.score).slice(0, topN).map((s) => s.path);
+      const scored: Array<{ path: string; score: number }> = [];
+      for (const [p, entry] of this.files) {
+        let best = -Infinity;
+        for (const chunk of entry.chunks) {
+          const score = dot(q, chunk.vec);
+          if (score > best) {
+            best = score;
+          }
+        }
+        if (best > -Infinity) {
+          scored.push({ path: p, score: best });
+        }
+      }
+      return scored
+        .sort((a, b) => b.score - a.score)
+        .slice(0, topN)
+        .map((s) => s.path);
     } catch (error) {
       this.logger.warn(`Semantic codebase search failed: ${error instanceof Error ? error.message : 'error'}`);
       return undefined;

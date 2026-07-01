@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.49.0
+
+### Changed — smarter ghost-text completions
+- The completion prompt now includes **your last ~5 edit locations elsewhere in the workspace** (`file:line: text` — what you just changed is a strong hint for what you're typing) and the **names of other open tabs**.
+- **Prefix-extension cache:** while you type exactly what the last suggestion proposed, the remainder is served locally — zero latency, zero API calls.
+- Suggestions now **stop at the first blank line**, so the model completes one coherent block instead of free-running into the next function.
+
+### Changed — semantic `@codebase` index: chunked + incremental
+- The local index now embeds **~60-line chunks with overlap** instead of one 4,000-char vector per file — matches deep inside big files are actually found, and a file is ranked by its **best chunk**.
+- **Rebuilds are incremental:** files whose content hash is unchanged are reused, so re-running `Parley: Rebuild Codebase Index` after small changes only embeds what changed.
+- **Saves update the index automatically** when the local provider is active and the embedder is already loaded (a save never triggers the heavy runtime/model load by itself). Old v1 indexes are migrated in place and refine to chunks on the next rebuild.
+
 ## 0.48.0
 
 ### Added — `@terminal` mention

@@ -16,6 +16,7 @@ import { registerSignOutCommand } from './commands/signOut';
 import { registerSuggestTerminalCommand } from './commands/suggestTerminalCommand';
 import { registerToggleInlineCompletionCommand } from './commands/toggleInlineCompletion';
 import { ParleyInlineCompletionProvider } from './completion/inlineCompletionProvider';
+import { activateRecentEdits } from './completion/recentEdits';
 import { activateTerminalLog } from './context/terminalLog';
 import { getSettings } from './config/settings';
 import { dbg, debugLogPath, initDebug } from './debug/debug';
@@ -47,6 +48,7 @@ export function activate(context: vscode.ExtensionContext): void {
   });
   context.subscriptions.push(logger);
   activateTerminalLog(context); // for the @terminal mention (feature-detected)
+  activateRecentEdits(context); // recent-edit context for ghost-text completions
   void mcp.start(settings.mcpServers);
 
   const refreshConfiguration = (): void => {

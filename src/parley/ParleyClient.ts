@@ -325,8 +325,12 @@ export class ParleyClient implements ParleyProvider {
   }
 
   public async complete(request: CompletionRequest, signal?: AbortSignal): Promise<string> {
+    const context =
+      (request.openFiles ? `Open files: ${request.openFiles}\n` : '') +
+      (request.recentEdits ? `Recently edited elsewhere (strong hints):\n${request.recentEdits}\n` : '');
     const userPrompt =
       `Language: ${request.languageId}\n` +
+      context +
       `Insert code at <CURSOR>. Reply with only the text to insert.\n\n` +
       `${request.prefix}<CURSOR>${request.suffix}`;
 
