@@ -49,11 +49,17 @@ export function truncateBeforeUserMessage(
   entries: readonly TranscriptEntry[],
   ordinal: number
 ): TranscriptEntry[] | undefined {
+  const idx = indexOfUserMessage(entries, ordinal);
+  return idx === undefined ? undefined : entries.slice(0, idx);
+}
+
+/** Transcript index of the nth user message (0-based ordinal), or undefined. */
+export function indexOfUserMessage(entries: readonly TranscriptEntry[], ordinal: number): number | undefined {
   let seen = 0;
   for (let i = 0; i < entries.length; i += 1) {
     if (entries[i].kind === 'user') {
       if (seen === ordinal) {
-        return entries.slice(0, i);
+        return i;
       }
       seen += 1;
     }

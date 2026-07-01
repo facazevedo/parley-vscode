@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.46.0
+
+### Added — durable checkpoints + per-message rewind (⏪)
+- **Checkpoints now survive window reloads.** Every agent/inline-edit file write is persisted to `<.parley>/checkpoints/<conversationId>.jsonl` (stamped with its conversation position), so **`Parley: Revert Last/All Edits` keeps working after a reload — and even after reopening a past conversation**, which loads that conversation's own checkpoint log. Previously the revert stack lived only in RAM.
+- **Rewind to any message.** Hover one of your messages and click **⏪** to choose:
+  - **Rewind conversation (fork)** — continue from just before that message; files keep their changes and the **original conversation stays complete on disk** (a fork gets a new conversation id, inheriting the checkpoint stack).
+  - **Rewind files** — restore every file edited from that point on to its state before it (conversation unchanged), with a `⏪ Restored N file(s)` note.
+  - **Rewind both** — Claude-Code-style full rewind.
+- **Edit & resend now forks too:** ✏️ no longer rewrites the original transcript's tail — the original is saved in full and the edited prompt continues under a new conversation id.
+
+### Internal
+- `CheckpointStore` rewritten around persisted, marker-stamped records (pure JSONL codec in `src/diff/checkpointCodec.ts`, unit-tested); new `indexOfUserMessage` transcript helper (103 tests total). Checkpoint logs live inside `.parley/` and are covered by its ignore-all `.gitignore`.
+
 ## 0.45.0
 
 ### Added — steer the agent while it works

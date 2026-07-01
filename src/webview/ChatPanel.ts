@@ -35,6 +35,7 @@ import { webSearch } from '../web/webSearch';
 import { lexicalRank, type RankDoc } from '../codebase/lexicalSearch';
 import { EmbeddingIndex } from '../codebase/embeddingIndex';
 import {
+  indexOfUserMessage,
   transcriptToMarkdown,
   transcriptToPlainText,
   truncateBeforeUserMessage,
@@ -82,6 +83,7 @@ interface ChatPanelMessage {
     | 'dismissChange'
     | 'reviewChange'
     | 'unqueue'
+    | 'rewind'
     | 'setApiKey';
   readonly prompt?: string;
   readonly agentId?: string;
@@ -100,6 +102,8 @@ interface ChatPanelMessage {
   readonly index?: number;
   /** For 'send': 0-based ordinal of the user message being edited & resent. */
   readonly editOrdinal?: number;
+  /** For 'rewind': 0-based ordinal of the user message to rewind to. */
+  readonly ordinal?: number;
 }
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp']);
@@ -228,6 +232,10 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     this.sessionTokens = this.state.get<number>('parley.sessionTokens', 0);
     this.sessionCost = this.state.get<number>('parley.sessionCost', 0);
     this.conversationId = this.state.get<string>('parley.conversationId', '') || this.newConversationId();
+    // Checkpoints are stamped with the transcript position (for ⏪ rewind) and
+    // persisted per conversation, so Revert works across window reloads.
+    this.checkpoints.setMarkerProvider(() => this.transcript.length);
+    void this.checkpoints.bind(this.parleyBase(), this.conversationId);
   }
 
   private save(): void {
@@ -354,6 +362,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     this.sessionCost = 0;
     this.conversationId = this.newConversationId();
     this.conversationStartedAt = new Date().toISOString();
+    await this.checkpoints.bind(this.parleyBase(), this.conversationId);
     await this.postState();
   }
 
@@ -429,6 +438,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       case 'unqueue':
         this.queuedSteering = this.queuedSteering.filter((_, i) => i !== (message.index ?? -1));
         this.post({ type: 'queued', items: [...this.queuedSteering] });
+        return;
+      case 'rewind':
+        await this.rewindAtUserMessage(message.ordinal ?? -1);
         return;
       case 'openHistory':
         await this.openPastConversation();
@@ -532,8 +544,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
             return;
           }
           if (message.editOrdinal !== undefined && message.editOrdinal >= 0) {
-            // Edit & resend: rewind the conversation to just before that user message.
-            if (!(await this.rewindToUserMessage(message.editOrdinal))) {
+            // Edit & resend: fork the conversation just before that user message
+            // (the original stays saved on disk in full).
+            if (!(await this.forkAtUserMessage(message.editOrdinal))) {
               return;
             }
           }
@@ -669,22 +682,69 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   }
 
   /**
-   * Edit & resend: drop the nth user message and everything after it (conversation
-   * only — files keep whatever changes were applied), so the edited prompt re-runs
-   * from that point. Returns false when the ordinal can't be resolved.
+   * Fork the conversation just before the nth user message: the ORIGINAL transcript
+   * stays complete on disk (saved + archived), and a new conversation id continues
+   * from the truncated copy. Files keep whatever changes were applied — use the ⏪
+   * file-rewind for those. Returns false when the ordinal can't be resolved.
    */
-  private async rewindToUserMessage(ordinal: number): Promise<boolean> {
+  private async forkAtUserMessage(ordinal: number): Promise<boolean> {
     const truncated = truncateBeforeUserMessage(this.transcript, ordinal);
     if (truncated === undefined) {
       return false;
     }
-    this.transcript = truncated;
+    await this.autosaveConversation();
+    this.archiveCurrent();
+    this.transcript = [...truncated];
     this.history.length = 0;
     this.history.push(...transcriptToHistory(truncated));
     this.pendingChanges.clear();
+    this.conversationId = this.newConversationId();
+    // The fork inherits the checkpoint stack (its files ARE this timeline's files).
+    await this.checkpoints.rebind(this.parleyBase(), this.conversationId);
     this.syncTranscriptFile();
     await this.postState();
     return true;
+  }
+
+  /** ⏪ on a user message: choose to fork the conversation, restore files, or both. */
+  private async rewindAtUserMessage(ordinal: number): Promise<void> {
+    if (this.busy) {
+      await vscode.window.showInformationMessage('Parley is still responding — stop it before rewinding.');
+      return;
+    }
+    const idx = indexOfUserMessage(this.transcript, ordinal);
+    if (idx === undefined) {
+      return;
+    }
+    const CONVO = {
+      label: '$(comment-discussion) Rewind conversation (fork)',
+      detail: 'Continue from before this message — files keep their changes; the original conversation stays saved'
+    };
+    const FILES = {
+      label: '$(files) Rewind files',
+      detail: 'Restore files edited from this point on — the conversation itself is unchanged'
+    };
+    const BOTH = { label: '$(history) Rewind both', detail: 'Fork the conversation AND restore the files' };
+    const pick = await vscode.window.showQuickPick([CONVO, FILES, BOTH], {
+      title: 'Parley: rewind to this message',
+      placeHolder: "Edits are restored from this conversation's checkpoints"
+    });
+    if (!pick) {
+      return;
+    }
+    if (pick !== FILES) {
+      await this.forkAtUserMessage(ordinal);
+    }
+    if (pick !== CONVO) {
+      const files = await this.checkpoints.rewindTo(idx);
+      const note =
+        files.length > 0
+          ? `⏪ Restored ${files.length} file${files.length === 1 ? '' : 's'} to before that message: ${files.join(', ')}`
+          : '⏪ No checkpointed file changes after that message — files were already in that state.';
+      this.history.push({ role: 'assistant', content: note, createdAt: new Date().toISOString() });
+      this.appendTranscript({ kind: 'note', text: note, at: new Date().toISOString() });
+      await this.postState();
+    }
   }
 
   /** Re-run the last user message (drop the responses after it). */
@@ -1528,6 +1588,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     this.fileReadHashes.clear();
     this.sessionTokens = 0;
     this.sessionCost = 0;
+    await this.checkpoints.bind(this.parleyBase(), this.conversationId);
     await vscode.commands.executeCommand('workbench.view.extension.parley');
     await vscode.commands.executeCommand('parley.chatView.focus');
     await this.ready;

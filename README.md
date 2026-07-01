@@ -204,9 +204,15 @@ matching commands then run without asking. Review rules with
 
 **Steering.** The composer stays live while the agent works: send a message mid‑task
 and it's queued (a removable `⏩` chip) and **injected at the agent's next step** —
-redirect it without stopping it. **Edit & resend:** hover any of your earlier messages
-and click **✏️** to edit it; sending rewinds the conversation to that point and re‑runs
-(files keep their changes).
+redirect it without stopping it.
+
+**Rewind & fork (⏪ / ✏️).** Hover any of your messages: **⏪** offers **Rewind
+conversation (fork)** — continue from before that message while the original stays
+saved in full — **Rewind files** (restore everything edited from that point, from the
+conversation's persisted checkpoints), or **both**. **✏️ Edit & resend** loads the
+message into the composer and forks on send. Checkpoints are stored per conversation
+in `.parley/checkpoints/`, so `Parley: Revert Last/All Edits` **survives window
+reloads** and works in reopened conversations.
 
 ---
 

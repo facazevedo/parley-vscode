@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { truncateBeforeUserMessage, type TranscriptEntry } from '../src/transcript/transcript';
+import { indexOfUserMessage, truncateBeforeUserMessage, type TranscriptEntry } from '../src/transcript/transcript';
 
 const AT = '2026-01-01T00:00:00.000Z';
 const entries: TranscriptEntry[] = [
@@ -43,4 +43,11 @@ test('the original array is never mutated', () => {
   const before = entries.length;
   truncateBeforeUserMessage(entries, 1);
   assert.equal(entries.length, before);
+});
+
+test('indexOfUserMessage locates each user entry by ordinal', () => {
+  assert.equal(indexOfUserMessage(entries, 0), 0);
+  assert.equal(indexOfUserMessage(entries, 1), 3);
+  assert.equal(indexOfUserMessage(entries, 2), 5);
+  assert.equal(indexOfUserMessage(entries, 3), undefined);
 });

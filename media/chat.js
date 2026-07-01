@@ -260,7 +260,7 @@ import hljs from 'highlight.js/lib/common';
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'msgedit';
-    btn.title = 'Edit & resend (rewinds the conversation to this message)';
+    btn.title = 'Edit & resend (forks the conversation at this message)';
     btn.setAttribute('aria-label', 'Edit and resend');
     btn.textContent = '✏️';
     btn.addEventListener('click', () => {
@@ -272,6 +272,19 @@ import hljs from 'highlight.js/lib/common';
       prompt.focus();
     });
     messageNode.appendChild(btn);
+    const rw = document.createElement('button');
+    rw.type = 'button';
+    rw.className = 'msgrewind';
+    rw.title = 'Rewind to here (fork conversation / restore files / both)';
+    rw.setAttribute('aria-label', 'Rewind to this message');
+    rw.textContent = '⏪';
+    rw.addEventListener('click', () => {
+      if (busy) {
+        return;
+      }
+      vscode.postMessage({ type: 'rewind', ordinal });
+    });
+    messageNode.appendChild(rw);
   }
 
   // Copy (two overlapping squares) icon used on user prompts.

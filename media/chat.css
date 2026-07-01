@@ -210,6 +210,32 @@ button:disabled {
   opacity: 1;
   background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.25));
 }
+.msgrewind {
+  position: absolute;
+  top: 4px;
+  right: 47px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 3px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-foreground);
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+  opacity: 0;
+  font-size: 0.72em;
+  line-height: 1;
+}
+.message.user:hover .msgrewind {
+  opacity: 0.55;
+}
+.msgrewind:hover {
+  opacity: 1;
+  background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.25));
+}
 .message.assistant {
   align-self: stretch;
 }
