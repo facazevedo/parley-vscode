@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.47.0
+
+### Added — language-server tools for the agent
+- Three new read-only tools give the agent **symbol-level navigation** via VS Code's language providers (available in every agent mode, including Plan):
+  - **`find_symbol`** — where is X defined (workspace symbol index; kind + `path:line`).
+  - **`document_symbols`** — a file's outline (classes/functions/methods with line ranges) without reading all of it.
+  - **`find_references`** — every usage of a symbol across the workspace (point at one occurrence by file + line + symbol text).
+- These answer "where is this defined / who calls this" precisely where grep guesses; the system prompt steers the agent accordingly.
+
+### Added — rules directory with glob scoping (Cursor-compatible)
+- Besides the single rules file, Parley now loads **`.parley/rules/*.md`** and **`.cursor/rules/*.{md,mdc}`** — one rule per file with optional frontmatter (`description`, `globs`, `alwaysApply`). Rules with globs attach **only when the active editor file matches** (e.g. `globs: src/components/**, *.tsx`), so language-specific conventions stop taxing every request. Frontmatter-less rules always apply. Total rules context is capped at 12k chars.
+
+### Internal
+- Pure `src/context/rulesDir.ts` (frontmatter parser + single-pass glob matcher — the naive chained-replace globber mangled its own output and was caught by the new tests). 109 tests total.
+
 ## 0.46.0
 
 ### Added — durable checkpoints + per-message rewind (⏪)

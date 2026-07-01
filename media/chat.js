@@ -162,6 +162,12 @@ import hljs from 'highlight.js/lib/common';
         return 'Searching "' + (a.query || '') + '"';
       case 'grep':
         return 'Grepping /' + (a.pattern || '') + '/';
+      case 'find_symbol':
+        return 'Finding symbol "' + (a.query || '') + '"';
+      case 'document_symbols':
+        return 'Outlining ' + (a.path || '');
+      case 'find_references':
+        return 'Finding references to ' + (a.symbol || '');
       case 'write_file':
         return 'Editing ' + (a.path || '');
       case 'run_command':

@@ -148,6 +148,51 @@ export const AGENT_TOOLS: readonly ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'find_symbol',
+      description:
+        'Find where a symbol (class, function, method, variable…) is DEFINED, using the language server\'s workspace index. Faster and more precise than grep for "where is X defined". Returns kind, name, and path:line.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Symbol name (or prefix) to look up, e.g. "CheckpointStore".' }
+        },
+        required: ['query']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'document_symbols',
+      description:
+        "Outline of a file from the language server: its classes, functions, and methods with line ranges. Use to understand a file's structure without reading all of it.",
+      parameters: {
+        type: 'object',
+        properties: { path: { type: 'string', description: 'Workspace-relative file path.' } },
+        required: ['path']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'find_references',
+      description:
+        'Find every reference to a symbol across the workspace via the language server. Point at one occurrence: give the file, the 1-based line, and the symbol text on that line.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Workspace-relative file containing an occurrence.' },
+          line: { type: 'number', description: '1-based line number of that occurrence.' },
+          symbol: { type: 'string', description: 'The symbol text as it appears on that line.' }
+        },
+        required: ['path', 'line', 'symbol']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'fetch_url',
       description: 'Fetch a public web page over HTTPS and return its text content (HTML stripped, truncated).',
       parameters: {
@@ -242,11 +287,135 @@ export async function runAgentTool(call: ToolCall): Promise<string> {
         caseInsensitive: args.case_insensitive === true,
         contextLines: toNum(args.context_lines)
       });
+    case 'find_symbol':
+      return findSymbol(root, String(args.query ?? ''));
+    case 'document_symbols':
+      return documentSymbols(root, String(args.path ?? ''));
+    case 'find_references':
+      return findReferences(root, String(args.path ?? ''), toNum(args.line), String(args.symbol ?? ''));
     case 'fetch_url':
       return fetchUrl(String(args.url ?? ''));
     default:
       return `Error: unknown tool "${call.name}".`;
   }
+}
+
+// ---------- language-server (LSP) tools ----------
+
+const MAX_SYMBOL_RESULTS = 50;
+const NO_PROVIDER_HINT = '[no results — the file may be plain text, or its language extension is not active]';
+
+function symbolKindName(kind: vscode.SymbolKind): string {
+  return (vscode.SymbolKind[kind] ?? 'symbol').toLowerCase();
+}
+
+async function findSymbol(root: vscode.Uri, query: string): Promise<string> {
+  if (!query.trim()) {
+    return 'Error: query is required.';
+  }
+  let symbols: vscode.SymbolInformation[] | undefined;
+  try {
+    symbols = await vscode.commands.executeCommand<vscode.SymbolInformation[]>(
+      'vscode.executeWorkspaceSymbolProvider',
+      query
+    );
+  } catch (error) {
+    return `Error: symbol search failed (${error instanceof Error ? error.message : 'unknown'}).`;
+  }
+  const rows = (symbols ?? [])
+    .filter((s) => s.location?.uri?.scheme === 'file')
+    .slice(0, MAX_SYMBOL_RESULTS)
+    .map((s) => {
+      const rel = path.relative(root.fsPath, s.location.uri.fsPath).replace(/\\/g, '/');
+      const container = s.containerName ? `${s.containerName}.` : '';
+      return `${symbolKindName(s.kind)} ${container}${s.name} — ${rel}:${s.location.range.start.line + 1}`;
+    });
+  return rows.length > 0 ? rows.join('\n') : NO_PROVIDER_HINT;
+}
+
+async function documentSymbols(root: vscode.Uri, relative: string): Promise<string> {
+  const uri = resolveInWorkspace(root, relative);
+  if (!uri) {
+    return 'Error: path is outside the workspace.';
+  }
+  if (isSensitiveFile(uri.fsPath)) {
+    return 'Error: refusing to read a sensitive file.';
+  }
+  try {
+    await vscode.workspace.openTextDocument(uri); // make sure a language server sees it
+  } catch (error) {
+    return `Error: could not open "${relative}" (${error instanceof Error ? error.message : 'unknown'}).`;
+  }
+  const symbols = await vscode.commands.executeCommand<Array<vscode.DocumentSymbol | vscode.SymbolInformation>>(
+    'vscode.executeDocumentSymbolProvider',
+    uri
+  );
+  if (!symbols || symbols.length === 0) {
+    return NO_PROVIDER_HINT;
+  }
+  const lines: string[] = [];
+  const walk = (items: Array<vscode.DocumentSymbol | vscode.SymbolInformation>, depth: number): void => {
+    for (const s of items) {
+      if (lines.length >= 200) {
+        return;
+      }
+      const range = 'range' in s ? s.range : s.location.range;
+      lines.push(
+        `${'  '.repeat(depth)}${symbolKindName(s.kind)} ${s.name} (L${range.start.line + 1}-L${range.end.line + 1})`
+      );
+      if ('children' in s && s.children?.length) {
+        walk(s.children, depth + 1);
+      }
+    }
+  };
+  walk(symbols, 0);
+  return lines.join('\n');
+}
+
+async function findReferences(
+  root: vscode.Uri,
+  relative: string,
+  line: number | undefined,
+  symbol: string
+): Promise<string> {
+  const uri = resolveInWorkspace(root, relative);
+  if (!uri) {
+    return 'Error: path is outside the workspace.';
+  }
+  if (!line || line < 1 || !symbol.trim()) {
+    return 'Error: line (1-based) and symbol are required.';
+  }
+  let doc: vscode.TextDocument;
+  try {
+    doc = await vscode.workspace.openTextDocument(uri);
+  } catch (error) {
+    return `Error: could not open "${relative}" (${error instanceof Error ? error.message : 'unknown'}).`;
+  }
+  if (line > doc.lineCount) {
+    return `Error: line ${line} is past the end of the file (${doc.lineCount} lines).`;
+  }
+  const text = doc.lineAt(line - 1).text;
+  const col = text.indexOf(symbol);
+  if (col === -1) {
+    return `Error: "${symbol}" does not appear on line ${line}. That line is:\n${text.trim()}`;
+  }
+  const position = new vscode.Position(line - 1, col + Math.floor(symbol.length / 2));
+  const locations = await vscode.commands.executeCommand<vscode.Location[]>(
+    'vscode.executeReferenceProvider',
+    uri,
+    position
+  );
+  if (!locations || locations.length === 0) {
+    return NO_PROVIDER_HINT;
+  }
+  const rows = [
+    ...new Set(
+      locations
+        .filter((l) => l.uri.scheme === 'file')
+        .map((l) => `${path.relative(root.fsPath, l.uri.fsPath).replace(/\\/g, '/')}:${l.range.start.line + 1}`)
+    )
+  ].slice(0, 100);
+  return `${locations.length} reference(s):\n${rows.join('\n')}`;
 }
 
 // ---------- grep (ripgrep) ----------

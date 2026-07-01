@@ -12,6 +12,7 @@ import {
 import { exec } from 'child_process';
 import { createHash } from 'crypto';
 import { totalCharacters } from '../context/contextPreview';
+import { parseRuleFile, ruleApplies } from '../context/rulesDir';
 import { isSensitiveFile } from '../context/sensitiveFileFilter';
 import type { CheckpointStore } from '../diff/checkpoints';
 import { applySnippetEdit } from '../diff/editMatch';
@@ -55,6 +56,8 @@ import type {
 } from '../parley/types';
 
 const PROJECT_RULES_FILES = ['.parleyrules', 'AGENTS.md', '.cursorrules'];
+// Directory rules (one file per rule, optional glob frontmatter — Cursor-compatible).
+const RULES_DIRS = ['.parley/rules', '.cursor/rules'];
 // User-defined slash commands: a `name.md` here becomes `/name` whose body is the prompt
 // (with `$ARGS` replaced by anything typed after the command).
 const CUSTOM_COMMAND_DIRS = ['.parley/commands', '.claude/commands'];
@@ -1122,7 +1125,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     } else if (this.mode !== 'chat') {
       const fullAccess = this.mode === 'full';
       modeNote =
-        "You are an autonomous coding agent in VS Code. Keep working — read files (use read_file start_line/end_line for large files), search (grep for regex/content searches, find_files for names), edit (use edit_file for precise changes to existing files, write_file for new ones), and run commands — until the user's request is FULLY complete. Do not stop to ask whether to continue or wait for confirmation.\n\n" +
+        "You are an autonomous coding agent in VS Code. Keep working — read files (use read_file start_line/end_line for large files), search (grep for regex/content, find_symbol/find_references for definitions and usages via the language server, find_files for names), edit (use edit_file for precise changes to existing files, write_file for new ones), and run commands — until the user's request is FULLY complete. Do not stop to ask whether to continue or wait for confirmation.\n\n" +
         'After an applied edit you may receive a "new problems" report from the editor\'s live diagnostics — fix those problems before moving on. If an edit_file match fails, the error often shows the closest real region of the file: copy old_text exactly from it instead of re-reading the whole file.\n\n' +
         'You are NOT limited to a single interaction or a fixed number of steps — you will be re-invoked automatically to continue, so never apologize about "running out of time", "this interaction/run", or "running out of steps"; just keep going. Your tools (read_file, edit_file, write_file, run_command, etc.) are ALWAYS available — NEVER claim that "the tool interface is unavailable", that tools "stopped responding", or that you "cannot continue in this run". If you want to act, simply call the tool. If earlier tool outputs in the conversation were trimmed to a short placeholder to save context, that is normal — just re-read the file or re-run the search; it does not mean anything is broken.\n\n' +
         'Use run_command to make the environment work for you. If a required dependency, package, or CLI tool is missing (e.g. pytest, numpy, a linter, a formatter, a build tool), INSTALL IT YOURSELF with the appropriate command (`pip install …`, `npm install …`, `npm i -D …`, etc.) and continue — never report a missing dependency as a blocker or ask the user to install it when you can install it yourself. When the user says "install those tools" or similar, they mean install the missing packages/CLIs via the shell — do it. ' +
@@ -1146,7 +1149,15 @@ export class ChatPanel implements vscode.WebviewViewProvider {
 
   /** Short human label for a tool call, used to persist an activity log when the model doesn't narrate. */
   private describeToolEvent(name: string, argsJson: string): string {
-    let a: { path?: string; glob?: string; query?: string; pattern?: string; command?: string; url?: string } = {};
+    let a: {
+      path?: string;
+      glob?: string;
+      query?: string;
+      pattern?: string;
+      symbol?: string;
+      command?: string;
+      url?: string;
+    } = {};
     try {
       a = JSON.parse(argsJson || '{}');
     } catch {
@@ -1163,6 +1174,12 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         return `Search "${a.query ?? ''}"`;
       case 'grep':
         return `Grep /${a.pattern ?? ''}/`;
+      case 'find_symbol':
+        return `Symbol "${a.query ?? ''}"`;
+      case 'document_symbols':
+        return `Outline ${a.path ?? ''}`.trim();
+      case 'find_references':
+        return `Refs of ${a.symbol ?? ''}`.trim();
       case 'write_file':
         return `Write ${a.path ?? ''}`.trim();
       case 'edit_file':
@@ -2496,23 +2513,61 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     this.post({ type: 'mentionResults', items });
   }
 
-  /** Read the first present project-rules file and return its contents for the system prompt. */
+  /**
+   * Project rules for the system prompt: the first single-file rules file
+   * (.parleyrules / AGENTS.md / .cursorrules), plus directory rules from
+   * `.parley/rules/` and `.cursor/rules/` — glob-scoped rules attach only when
+   * the active editor file matches their frontmatter globs (Cursor-compatible).
+   */
   private async readProjectRules(): Promise<string | undefined> {
     const root = vscode.workspace.workspaceFolders?.[0]?.uri;
     if (!root) {
       return undefined;
     }
+    const parts: string[] = [];
     for (const name of PROJECT_RULES_FILES) {
       try {
         const raw = Buffer.from(await vscode.workspace.fs.readFile(vscode.Uri.joinPath(root, name))).toString('utf8');
         if (raw.trim().length > 0) {
-          return raw.slice(0, 8000);
+          parts.push(raw.slice(0, 8000));
+          break;
         }
       } catch {
         // Not present; try the next.
       }
     }
-    return undefined;
+
+    const active = vscode.window.activeTextEditor?.document;
+    const activeRel =
+      active && active.uri.scheme === 'file'
+        ? path.relative(root.fsPath, active.uri.fsPath).replace(/\\/g, '/')
+        : undefined;
+    for (const dir of RULES_DIRS) {
+      let entries: Array<[string, vscode.FileType]>;
+      try {
+        entries = await vscode.workspace.fs.readDirectory(vscode.Uri.joinPath(root, dir));
+      } catch {
+        continue; // Directory absent.
+      }
+      for (const [name, type] of entries.sort((a, b) => a[0].localeCompare(b[0]))) {
+        if (type !== vscode.FileType.File || !/\.(md|mdc)$/i.test(name)) {
+          continue;
+        }
+        try {
+          const raw = Buffer.from(await vscode.workspace.fs.readFile(vscode.Uri.joinPath(root, dir, name))).toString(
+            'utf8'
+          );
+          const rule = parseRuleFile(raw);
+          if (rule.body && ruleApplies(rule, activeRel)) {
+            parts.push(`## Rule: ${rule.description ?? name}\n${rule.body.slice(0, 4000)}`);
+          }
+        } catch {
+          // Unreadable rule — skip.
+        }
+      }
+    }
+    const combined = parts.join('\n\n').trim();
+    return combined ? combined.slice(0, 12000) : undefined;
   }
 
   private async refreshAgents(): Promise<void> {

@@ -150,6 +150,7 @@ In any tool mode the model runs an OpenAI tool‑calling loop. Built‑in tools:
 | `list_directory`, `find_files` | Explore the tree / glob for files |
 | `grep` | **Regex** search of file contents (VS Code's bundled ripgrep; case flag, context lines, glob filter) |
 | `search_text` | Simple substring search of file **contents** |
+| `find_symbol`, `document_symbols`, `find_references` | **Language-server** navigation: where is X defined, a file's outline, all usages of a symbol |
 | `edit_file` | Precise find‑and‑replace edit (reviewed/checkpointed) |
 | `write_file` | Create/overwrite a file (reviewed/checkpointed) |
 | `run_command` | Run a shell command (confirmation required except Full access) |
@@ -436,6 +437,21 @@ folder in your workspace, so it never depends on what's in memory:
 A **`.parleyrules`**, **`AGENTS.md`**, or **`.cursorrules`** file in the workspace
 root is auto‑injected into the system prompt as project rules. Scaffold one with
 **`Parley: Init Project Rules`** (or `/init`).
+
+**Rules directory (glob‑scoped).** Files in **`.parley/rules/`** or
+**`.cursor/rules/`** (`.md`/`.mdc`) are each one rule, with optional frontmatter:
+
+```md
+---
+description: React component conventions
+globs: src/components/**, *.tsx
+alwaysApply: false
+---
+Use function components with hooks; never class components.
+```
+
+Rules with `globs` attach only when the **active editor file** matches;
+frontmatter‑less (or `alwaysApply: true`) rules always apply.
 
 ---
 
