@@ -1,5 +1,7 @@
+import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { execFile, type ExecFileException } from 'child_process';
 import { isSensitiveFile } from '../context/sensitiveFileFilter';
 import type { ToolCall, ToolDefinition } from './types';
 
@@ -37,7 +39,9 @@ export const AGENT_TOOLS: readonly ToolDefinition[] = [
       description: 'List the entries of a directory in the workspace.',
       parameters: {
         type: 'object',
-        properties: { path: { type: 'string', description: 'Workspace-relative directory path. Use "." for the root.' } },
+        properties: {
+          path: { type: 'string', description: 'Workspace-relative directory path. Use "." for the root.' }
+        },
         required: ['path']
       }
     }
@@ -46,7 +50,8 @@ export const AGENT_TOOLS: readonly ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'find_files',
-      description: 'Find files by glob pattern, e.g. "**/*.ts" or "src/**/auth*". Returns matching workspace-relative paths.',
+      description:
+        'Find files by glob pattern, e.g. "**/*.ts" or "src/**/auth*". Returns matching workspace-relative paths.',
       parameters: {
         type: 'object',
         properties: { glob: { type: 'string', description: 'A glob pattern matched against workspace files.' } },
@@ -110,9 +115,33 @@ export const AGENT_TOOLS: readonly ToolDefinition[] = [
         type: 'object',
         properties: {
           query: { type: 'string', description: 'Text to search for in file contents.' },
-          glob: { type: 'string', description: 'Optional glob to limit files, e.g. "src/**/*.ts". Defaults to all files.' }
+          glob: {
+            type: 'string',
+            description: 'Optional glob to limit files, e.g. "src/**/*.ts". Defaults to all files.'
+          }
         },
         required: ['query']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'grep',
+      description:
+        'Search file CONTENTS with a REGULAR EXPRESSION (ripgrep). More powerful than search_text: full regex syntax, optional case-insensitivity, context lines, and a glob filter. Results are "path:line:text". Respects .gitignore.',
+      parameters: {
+        type: 'object',
+        properties: {
+          pattern: {
+            type: 'string',
+            description: 'Regular expression to search for (Rust regex syntax, e.g. "class \\\\w+Provider").'
+          },
+          glob: { type: 'string', description: 'Optional glob to limit files, e.g. "src/**/*.ts".' },
+          case_insensitive: { type: 'boolean', description: 'Case-insensitive matching. Default false.' },
+          context_lines: { type: 'number', description: 'Lines of context around each match (0-5). Default 0.' }
+        },
+        required: ['pattern']
       }
     }
   },
@@ -178,9 +207,11 @@ export const READ_ONLY_TOOLS: readonly ToolDefinition[] = AGENT_TOOLS.filter(
 
 const MAX_FETCH_CHARS = 12000;
 const MAX_READ_LINES = 500;
-const MAX_SEARCH_FILES = 400;
-const MAX_SEARCH_RESULTS = 40;
+const MAX_SEARCH_FILES = 800;
+const MAX_SEARCH_RESULTS = 80;
 const MAX_LINE_LEN = 220;
+const MAX_GREP_LINES = 200;
+const GREP_TIMEOUT_MS = 10000;
 
 /** Execute an agent tool call against the workspace and return a string result. */
 export async function runAgentTool(call: ToolCall): Promise<string> {
@@ -205,11 +236,133 @@ export async function runAgentTool(call: ToolCall): Promise<string> {
       return findFiles(String(args.glob ?? ''));
     case 'search_text':
       return searchText(String(args.query ?? ''), args.glob ? String(args.glob) : undefined);
+    case 'grep':
+      return grepSearch(root, String(args.pattern ?? ''), {
+        glob: args.glob ? String(args.glob) : undefined,
+        caseInsensitive: args.case_insensitive === true,
+        contextLines: toNum(args.context_lines)
+      });
     case 'fetch_url':
       return fetchUrl(String(args.url ?? ''));
     default:
       return `Error: unknown tool "${call.name}".`;
   }
+}
+
+// ---------- grep (ripgrep) ----------
+
+let cachedRgPath: string | undefined;
+
+/** Locate the ripgrep binary VS Code ships with (fall back to `rg` on PATH). */
+function findRipgrep(): string {
+  if (cachedRgPath !== undefined) {
+    return cachedRgPath;
+  }
+  const exe = process.platform === 'win32' ? 'rg.exe' : 'rg';
+  const platformDir = `${process.platform}-${process.arch}`; // e.g. win32-x64, darwin-arm64
+  const candidates: string[] = [];
+  for (const modules of ['node_modules', 'node_modules.asar.unpacked']) {
+    // Newer VS Code builds ship per-platform binaries under @vscode/ripgrep-universal.
+    candidates.push(path.join(vscode.env.appRoot, modules, '@vscode/ripgrep-universal', 'bin', platformDir, exe));
+    candidates.push(path.join(vscode.env.appRoot, modules, '@vscode/ripgrep', 'bin', exe));
+    candidates.push(path.join(vscode.env.appRoot, modules, 'vscode-ripgrep', 'bin', exe));
+  }
+  cachedRgPath = candidates.find((p) => fs.existsSync(p)) ?? 'rg'; // last resort: PATH
+  return cachedRgPath;
+}
+
+function grepSearch(
+  root: vscode.Uri,
+  pattern: string,
+  opts: { glob?: string; caseInsensitive?: boolean; contextLines?: number }
+): Promise<string> {
+  if (!pattern.trim()) {
+    return Promise.resolve('Error: pattern is required.');
+  }
+  const rg = findRipgrep();
+  const args = [
+    '--no-config',
+    '--line-number',
+    '--no-heading',
+    '--color',
+    'never',
+    '--max-columns',
+    '250',
+    '--max-columns-preview',
+    '--max-filesize',
+    '1M',
+    '--max-count',
+    '25'
+  ];
+  if (opts.caseInsensitive) {
+    args.push('-i');
+  }
+  const ctx = Math.max(0, Math.min(5, Math.floor(opts.contextLines ?? 0)));
+  if (ctx > 0) {
+    args.push('-C', String(ctx));
+  }
+  if (opts.glob) {
+    args.push('--glob', opts.glob);
+  }
+  // rg honors .gitignore by default; also exclude build output and credential-like files.
+  for (const ex of [
+    '!**/node_modules/**',
+    '!**/.git/**',
+    '!**/out/**',
+    '!**/dist/**',
+    '!**/.env*',
+    '!**/*.pem',
+    '!**/*.key',
+    '!**/id_rsa*',
+    '!**/.ssh/**',
+    '!**/.aws/**'
+  ]) {
+    args.push('--glob', ex);
+  }
+  args.push('--regexp', pattern, '--', '.');
+
+  return new Promise((resolve) => {
+    execFile(
+      rg,
+      args,
+      { cwd: root.fsPath, timeout: GREP_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024, windowsHide: true, encoding: 'utf8' },
+      (error: ExecFileException | null, stdout: string, stderr: string) => {
+        if (error && (error as { killed?: boolean }).killed) {
+          resolve('Error: grep timed out after 10s — narrow the pattern or add a glob.');
+          return;
+        }
+        // rg exits 1 for "no matches", 2 for a real error (e.g. bad regex).
+        if (error && !stdout) {
+          const code = (error as { code?: number | string }).code;
+          if (code === 1) {
+            resolve('[no matches]');
+            return;
+          }
+          const detail = (stderr || error.message || '').trim().split('\n')[0];
+          resolve(
+            detail && code !== 'ENOENT'
+              ? `Error: grep failed — ${detail.slice(0, 300)}`
+              : 'Error: ripgrep is not available on this machine — use search_text instead.'
+          );
+          return;
+        }
+        const lines = stdout
+          .replace(/\r/g, '')
+          .split('\n')
+          .filter((l) => l.length > 0);
+        if (lines.length === 0) {
+          resolve('[no matches]');
+          return;
+        }
+        const shown = lines.slice(0, MAX_GREP_LINES).map((l) => l.replace(/^\.[\\/]/, '').replace(/\\/g, '/'));
+        const footer =
+          lines.length > MAX_GREP_LINES
+            ? `\n[showing first ${MAX_GREP_LINES} of ${lines.length} lines — narrow the pattern or glob]`
+            : '';
+        resolve(shown.join('\n') + footer);
+      }
+    );
+  });
 }
 
 async function searchText(query: string, glob?: string): Promise<string> {
@@ -220,7 +373,11 @@ async function searchText(query: string, glob?: string): Promise<string> {
   const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '';
   let files: vscode.Uri[];
   try {
-    files = await vscode.workspace.findFiles(glob || '**/*', '{**/node_modules/**,**/.git/**,**/out/**,**/dist/**}', MAX_SEARCH_FILES);
+    files = await vscode.workspace.findFiles(
+      glob || '**/*',
+      '{**/node_modules/**,**/.git/**,**/out/**,**/dist/**}',
+      MAX_SEARCH_FILES
+    );
   } catch (error) {
     return `Error: search failed (${error instanceof Error ? error.message : 'unknown'}).`;
   }
@@ -346,7 +503,8 @@ async function readFile(root: vscode.Uri, relative: string, startLine?: number, 
   }
 
   const header = `${relative} (lines ${start}-${end} of ${total}):\n`;
-  const footer = end < total ? `\n[${total - end} more lines — call read_file with start_line=${end + 1} to continue]` : '';
+  const footer =
+    end < total ? `\n[${total - end} more lines — call read_file with start_line=${end + 1} to continue]` : '';
   return header + body + footer;
 }
 

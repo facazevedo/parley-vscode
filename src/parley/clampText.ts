@@ -14,7 +14,8 @@ const TOOL_RESULT_BUDGETS: Record<string, number> = {
   read_file: 24000, // self-caps at 20k chars / 500 lines with a pagination footer
   run_command: 16000, // build/test output — the failure is usually at the tail
   fetch_url: 13000, // self-caps at 12k
-  search_text: 12000
+  search_text: 12000,
+  grep: 12000
 };
 
 const DEFAULT_TOOL_RESULT_BUDGET = 8000;

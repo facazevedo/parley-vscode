@@ -148,7 +148,8 @@ In any tool mode the model runs an OpenAI tool‑calling loop. Built‑in tools:
 | --- | --- |
 | `read_file` | Read a file (optional `start_line`/`end_line` for big files) |
 | `list_directory`, `find_files` | Explore the tree / glob for files |
-| `search_text` | Grep file **contents** across the workspace |
+| `grep` | **Regex** search of file contents (VS Code's bundled ripgrep; case flag, context lines, glob filter) |
+| `search_text` | Simple substring search of file **contents** |
 | `edit_file` | Precise find‑and‑replace edit (reviewed/checkpointed) |
 | `write_file` | Create/overwrite a file (reviewed/checkpointed) |
 | `run_command` | Run a shell command (confirmation required except Full access) |
@@ -186,6 +187,20 @@ has streamed yet, so output is never duplicated. Long tool output is truncated
 **honestly**: head + tail are kept around an explicit `[… N characters omitted …]`
 marker, so the model sees the end of a command's output (where the error lives) and
 knows exactly what was cut.
+
+**Self‑correction.** After each applied edit, Parley reads the editor's **live
+diagnostics** and reports any *new* errors/warnings back to the agent (`⚠ This edit
+introduced 2 new problem(s)…`), so it fixes its own breakage before declaring victory.
+A failed `edit_file` match returns the **closest real region of the file** (numbered
+lines + similarity) so the model repairs its snippet in one round; matching itself is
+tiered (exact → indentation‑tolerant → whitespace‑tolerant). And Parley hashes every
+file the agent reads: overwriting an existing file **requires a fresh read**, so a
+change you made mid‑conversation can never be silently clobbered.
+
+**Command allowlist.** On the run‑command confirmation, **Always Allow** stores the
+command as a workspace prefix rule (`npm test` also approves `npm test -- --grep foo`);
+matching commands then run without asking. Review rules with
+**`Parley: Manage Allowed Commands`**.
 
 ---
 
@@ -466,6 +481,7 @@ root is auto‑injected into the system prompt as project rules. Scaffold one wi
 | `Parley: Generate Image` | Generate an image with `gpt-image-1` |
 | `Parley: Generate Commit Message` | Commit message from the diff → Source Control |
 | `Parley: Rebuild Codebase Index` | Build the local semantic `@codebase` index |
+| `Parley: Manage Allowed Commands` | Review/remove commands approved via "Always Allow" |
 | `Parley: Reconnect MCP Servers` | Restart MCP servers and show status |
 | `Parley: Show Usage` | Real billed spend for the current month |
 | `Parley: Set Token Limit` | Per‑conversation token budget |
@@ -610,7 +626,8 @@ Marketplace / Open VSX).
 - `src/codebase/` — lexical ranking + the optional local embedding index.
 - `src/web/webSearch.ts` — web‑search providers.
 - `src/video/ffmpeg.ts` — frame/audio extraction.
-- `src/diff/` — line diff, unified‑diff cards, diff‑review‑before‑apply, checkpoints.
+- `src/diff/` — line diff, unified‑diff cards, diff‑review‑before‑apply, checkpoints,
+  and `editMatch.ts` (tiered snippet matching + closest‑match repair hints).
 - `src/transcript/` — the full conversation transcript model, pure md/txt renderers, and
   the `.parley` on‑disk store (append‑only JSONL + index + state).
 - `src/completion/` — inline completion provider.

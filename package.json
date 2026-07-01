@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.43.0",
+  "version": "0.44.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -111,6 +111,11 @@
       {
         "command": "parley.reconnectMcp",
         "title": "Parley: Reconnect MCP Servers",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.manageAllowedCommands",
+        "title": "Parley: Manage Allowed Commands",
         "category": "Parley"
       },
       {

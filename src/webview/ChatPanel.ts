@@ -10,9 +10,11 @@ import {
   type ContextOptions
 } from '../commands/common';
 import { exec } from 'child_process';
+import { createHash } from 'crypto';
 import { totalCharacters } from '../context/contextPreview';
 import { isSensitiveFile } from '../context/sensitiveFileFilter';
 import type { CheckpointStore } from '../diff/checkpoints';
+import { applySnippetEdit } from '../diff/editMatch';
 import { reviewProposedEdit } from '../diff/reviewEdit';
 import { formatUnifiedDiff } from '../diff/lineDiff';
 import { showProposedDiff } from '../diff/showDiff';
@@ -169,6 +171,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private attachments: PendingAttachment[] = [];
   private busy = false;
   private abortController?: AbortController;
+  // Content hashes of files the agent has read this conversation — staleness detection
+  // for write_file (don't clobber unseen changes) and better edit_file errors.
+  private readonly fileReadHashes = new Map<string, string>();
 
   private resolveReady!: () => void;
   private readonly ready = new Promise<void>((resolve) => {
@@ -329,6 +334,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     this.history.length = 0;
     this.transcript = [];
     this.attachments = [];
+    this.fileReadHashes.clear();
     this.sessionTokens = 0;
     this.sessionCost = 0;
     this.conversationId = this.newConversationId();
@@ -956,7 +962,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     } else if (this.mode !== 'chat') {
       const fullAccess = this.mode === 'full';
       modeNote =
-        "You are an autonomous coding agent in VS Code. Keep working — read files (use read_file start_line/end_line for large files), search, edit (use edit_file for precise changes to existing files, write_file for new ones), and run commands — until the user's request is FULLY complete. Do not stop to ask whether to continue or wait for confirmation.\n\n" +
+        "You are an autonomous coding agent in VS Code. Keep working — read files (use read_file start_line/end_line for large files), search (grep for regex/content searches, find_files for names), edit (use edit_file for precise changes to existing files, write_file for new ones), and run commands — until the user's request is FULLY complete. Do not stop to ask whether to continue or wait for confirmation.\n\n" +
+        'After an applied edit you may receive a "new problems" report from the editor\'s live diagnostics — fix those problems before moving on. If an edit_file match fails, the error often shows the closest real region of the file: copy old_text exactly from it instead of re-reading the whole file.\n\n' +
         'You are NOT limited to a single interaction or a fixed number of steps — you will be re-invoked automatically to continue, so never apologize about "running out of time", "this interaction/run", or "running out of steps"; just keep going. Your tools (read_file, edit_file, write_file, run_command, etc.) are ALWAYS available — NEVER claim that "the tool interface is unavailable", that tools "stopped responding", or that you "cannot continue in this run". If you want to act, simply call the tool. If earlier tool outputs in the conversation were trimmed to a short placeholder to save context, that is normal — just re-read the file or re-run the search; it does not mean anything is broken.\n\n' +
         'Use run_command to make the environment work for you. If a required dependency, package, or CLI tool is missing (e.g. pytest, numpy, a linter, a formatter, a build tool), INSTALL IT YOURSELF with the appropriate command (`pip install …`, `npm install …`, `npm i -D …`, etc.) and continue — never report a missing dependency as a blocker or ask the user to install it when you can install it yourself. When the user says "install those tools" or similar, they mean install the missing packages/CLIs via the shell — do it. ' +
         (fullAccess
@@ -979,7 +986,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
 
   /** Short human label for a tool call, used to persist an activity log when the model doesn't narrate. */
   private describeToolEvent(name: string, argsJson: string): string {
-    let a: { path?: string; glob?: string; query?: string; command?: string; url?: string } = {};
+    let a: { path?: string; glob?: string; query?: string; pattern?: string; command?: string; url?: string } = {};
     try {
       a = JSON.parse(argsJson || '{}');
     } catch {
@@ -994,6 +1001,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         return `Find ${a.glob ?? ''}`.trim();
       case 'search_text':
         return `Search "${a.query ?? ''}"`;
+      case 'grep':
+        return `Grep /${a.pattern ?? ''}/`;
       case 'write_file':
         return `Write ${a.path ?? ''}`.trim();
       case 'edit_file':
@@ -1416,6 +1425,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     this.conversationStartedAt = transcript[0]?.at ?? new Date().toISOString();
     this.attachments = [];
     this.pendingChanges.clear();
+    this.fileReadHashes.clear();
     this.sessionTokens = 0;
     this.sessionCost = 0;
     await vscode.commands.executeCommand('workbench.view.extension.parley');
@@ -1483,6 +1493,11 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     if (isMcpTool(call.name)) {
       return this.mcp.callTool(call.name, call.arguments);
     }
+    if (call.name === 'read_file') {
+      const result = await runAgentTool(call);
+      await this.recordReadFromArgs(call.arguments);
+      return result;
+    }
     if (call.name === 'write_file') {
       return this.toolWriteFile(call);
     }
@@ -1540,6 +1555,42 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     return `Plan updated (${done}/${clean.length} done).`;
   }
 
+  // ---------- file staleness tracking ----------
+
+  private static hashContent(text: string): string {
+    return createHash('sha1').update(text).digest('hex');
+  }
+
+  /** Remember the on-disk content of a file the agent has just read (or we just wrote). */
+  private recordFileState(fsPath: string, content: string): void {
+    this.fileReadHashes.set(fsPath, ChatPanel.hashContent(content));
+  }
+
+  /** After a read_file tool call: hash the file so later writes can detect outside changes. */
+  private async recordReadFromArgs(argsJson: string): Promise<void> {
+    try {
+      const rel = String((JSON.parse(argsJson || '{}') as { path?: string }).path ?? '').replace(/^[/\\]+/, '');
+      const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+      if (!rel || !root) {
+        return;
+      }
+      const uri = vscode.Uri.joinPath(root, rel);
+      const content = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
+      this.recordFileState(uri.fsPath, content);
+    } catch {
+      // Unreadable/absent — nothing to record.
+    }
+  }
+
+  /** Note appended to edit errors when the file changed on disk after the agent's last read. */
+  private staleNote(fsPath: string, currentContent: string): string {
+    const recorded = this.fileReadHashes.get(fsPath);
+    if (recorded && recorded !== ChatPanel.hashContent(currentContent)) {
+      return ' Note: the file has CHANGED on disk since you last read it (edited by the user or a tool) — trust the content shown below over your memory.';
+    }
+    return '';
+  }
+
   private async toolWriteFile(call: ToolCall): Promise<string> {
     const root = vscode.workspace.workspaceFolders?.[0]?.uri;
     if (!root) {
@@ -1562,10 +1613,23 @@ export class ChatPanel implements vscode.WebviewViewProvider {
 
     const uri = vscode.Uri.joinPath(root, rel);
     let original = '';
+    let fileExists = true;
     try {
       original = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
     } catch {
       original = '';
+      fileExists = false;
+    }
+    // Overwriting an existing, non-empty file requires a fresh read — otherwise the agent
+    // could clobber content it has never seen (e.g. the user edited it mid-conversation).
+    if (fileExists && original.length > 0) {
+      const recorded = this.fileReadHashes.get(uri.fsPath);
+      if (!recorded) {
+        return `Error: ${rel} already exists but you have not read it in this conversation. Call read_file first (so you don't overwrite unseen content), then re-issue write_file — or use edit_file for a targeted change.`;
+      }
+      if (recorded !== ChatPanel.hashContent(original)) {
+        return `Error: ${rel} has changed on disk since you last read it. Call read_file again to see the current content, then re-issue write_file.`;
+      }
     }
     const proposedText = content.endsWith('\n') ? content : `${content}\n`;
     return this.applyProposedEdit(uri, rel, original, proposedText);
@@ -1603,24 +1667,31 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     } catch {
       return `Error: could not read "${rel}" — does it exist? Use write_file to create new files.`;
     }
-    const idx = original.indexOf(oldText);
-    let proposedText: string | undefined;
-    if (idx !== -1) {
-      if (original.indexOf(oldText, idx + oldText.length) !== -1) {
-        return `Error: old_text appears more than once in ${rel}. Include more surrounding context so it is unique.`;
-      }
-      proposedText = original.slice(0, idx) + newText + original.slice(idx + oldText.length);
-    } else {
-      // Fallback: match by trimmed lines so indentation/trailing-whitespace differences still apply.
-      proposedText = replaceByTrimmedLines(original, oldText, newText);
-      if (proposedText === undefined) {
-        return `Error: old_text was not found in ${rel} (even ignoring indentation). Re-read the file with read_file and copy an exact snippet.`;
-      }
-      if (proposedText === '') {
-        return `Error: old_text matches more than one place in ${rel}. Include more surrounding context so it is unique.`;
-      }
+
+    // Tiered matching: exact → trimmed lines → collapsed whitespace; a failed match
+    // returns the closest real region so the model can repair old_text in one round.
+    const match = applySnippetEdit(original, oldText, newText);
+    if (match.kind === 'ambiguous') {
+      return (
+        `Error: old_text matches ${match.startLines.length} places in ${rel}` +
+        ` (starting at lines ${match.startLines.slice(0, 8).join(', ')}).` +
+        ' Include more surrounding context so it is unique.'
+      );
     }
-    return this.applyProposedEdit(uri, rel, original, proposedText);
+    if (match.kind === 'notfound') {
+      const stale = this.staleNote(uri.fsPath, original);
+      if (match.hint) {
+        return (
+          `Error: old_text was not found in ${rel}.${stale}` +
+          ` Closest match is lines ${match.hint.startLine}-${match.hint.endLine}` +
+          ` (${Math.round(match.hint.similarity * 100)}% of lines match) — the file actually contains:\n` +
+          `${match.hint.excerpt}\n` +
+          'Copy old_text EXACTLY from the lines above (watch punctuation and small wording differences), then retry edit_file.'
+        );
+      }
+      return `Error: old_text was not found in ${rel}.${stale} Re-read the file with read_file and copy an exact snippet.`;
+    }
+    return this.applyProposedEdit(uri, rel, original, match.newText);
   }
 
   /** Apply a proposed file change: auto in edit/auto/full modes, diff-approval otherwise. Always checkpointed. */
@@ -1630,10 +1701,12 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     original: string,
     proposedText: string
   ): Promise<string> {
+    const preDiagnostics = ChatPanel.diagnosticsKeySet(uri);
     if (this.mode === 'edit' || this.mode === 'auto' || this.mode === 'full') {
       await this.checkpoints.applyWithCheckpoint(uri, proposedText, `edit ${rel}`);
+      this.recordFileState(uri.fsPath, proposedText);
       this.postFileEdit(rel, original, proposedText);
-      return `Applied edit to ${rel} (auto).`;
+      return `Applied edit to ${rel} (auto).${await this.newProblemsAfterEdit(uri, preDiagnostics)}`;
     }
 
     await showProposedDiff(
@@ -1645,8 +1718,64 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       return `User rejected the edit to ${rel}.`;
     }
     await this.checkpoints.applyWithCheckpoint(uri, finalText, `edit ${rel}`);
+    this.recordFileState(uri.fsPath, finalText);
     this.postFileEdit(rel, original, finalText);
-    return `Applied edit to ${rel}.`;
+    return `Applied edit to ${rel}.${await this.newProblemsAfterEdit(uri, preDiagnostics)}`;
+  }
+
+  // ---------- post-edit diagnostics feedback (the editor tells the agent what it broke) ----------
+
+  /** Line-independent keys of a file's current diagnostics (errors + warnings). */
+  private static diagnosticsKeySet(uri: vscode.Uri): Set<string> {
+    const keys = new Set<string>();
+    for (const d of vscode.languages.getDiagnostics(uri)) {
+      if (d.severity <= vscode.DiagnosticSeverity.Warning) {
+        keys.add(ChatPanel.diagnosticKey(d));
+      }
+    }
+    return keys;
+  }
+
+  /** Keyed by severity+source+message (not line) so pre-existing problems that merely shift lines don't count as new. */
+  private static diagnosticKey(d: vscode.Diagnostic): string {
+    return `${d.severity}|${d.source ?? ''}|${d.message}`;
+  }
+
+  /**
+   * After an applied edit, give language servers a moment to re-analyze, then report
+   * any NEW errors/warnings back to the model — Claude-Code-style self-correction.
+   * Opening the document (without showing it) makes language servers analyze files
+   * that aren't open in any editor.
+   */
+  private async newProblemsAfterEdit(uri: vscode.Uri, before: Set<string>): Promise<string> {
+    if (this.abortController?.signal.aborted) {
+      return '';
+    }
+    try {
+      await vscode.workspace.openTextDocument(uri);
+    } catch {
+      return '';
+    }
+    await waitMs(1500, this.abortController?.signal);
+    const fresh = vscode.languages
+      .getDiagnostics(uri)
+      .filter((d) => d.severity <= vscode.DiagnosticSeverity.Warning)
+      .filter((d) => !before.has(ChatPanel.diagnosticKey(d)));
+    if (fresh.length === 0) {
+      return '';
+    }
+    fresh.sort((a, b) => a.severity - b.severity || a.range.start.line - b.range.start.line);
+    const label = (d: vscode.Diagnostic): string =>
+      d.severity === vscode.DiagnosticSeverity.Error ? 'error' : 'warning';
+    const shown = fresh
+      .slice(0, 8)
+      .map(
+        (d) =>
+          `- L${d.range.start.line + 1} ${label(d)}: ${d.message.split('\n')[0].slice(0, 200)}${d.source ? ` [${d.source}]` : ''}`
+      );
+    const more = fresh.length > 8 ? `\n(+${fresh.length - 8} more)` : '';
+    dbg('tool', 'post-edit diagnostics', { file: uri.fsPath, fresh: fresh.length });
+    return `\n\n⚠ This edit introduced ${fresh.length} new problem(s) according to the editor's diagnostics:\n${shown.join('\n')}${more}\nFix these before moving on (or explain why they are expected).`;
   }
 
   /** Show a Claude-Code-style inline diff card in the chat for an applied edit. */
@@ -1737,6 +1866,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       // The inline Apply click is the confirmation, so apply directly (still checkpointed/revertible).
       // The card already shows the diff, so we just flip it to "Applied" via changeResolved.
       await this.checkpoints.applyWithCheckpoint(change.uri, change.proposedText, `edit ${change.rel}`);
+      this.recordFileState(change.uri.fsPath, change.proposedText);
       this.post({ type: 'changeResolved', id, status: 'applied' });
       this.resolveTranscriptChange(id, 'applied');
       await this.autosaveConversation();
@@ -1761,15 +1891,27 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       return 'Error: command is required.';
     }
     const folder = vscode.workspace.workspaceFolders?.[0];
-    // Full-access mode runs commands without prompting; every other mode confirms.
-    if (this.mode !== 'full') {
+    // Full-access mode runs commands without prompting; every other mode confirms —
+    // unless the command matches a workspace allowlist rule the user approved earlier.
+    if (this.mode !== 'full' && this.isCommandAllowed(command)) {
+      dbg('tool', 'run_command auto-approved by allowlist', command.slice(0, 120));
+    } else if (this.mode !== 'full') {
+      const ALWAYS = 'Always Allow';
       const answer = await vscode.window.showWarningMessage(
-        `Parley agent wants to run a command in ${folder?.name ?? 'the workspace'}:\n\n${command}`,
+        `Parley agent wants to run a command in ${folder?.name ?? 'the workspace'}:\n\n${command}\n\n` +
+          `"${ALWAYS}" also approves future commands that start with this text (this workspace only; ` +
+          'review with "Parley: Manage Allowed Commands").',
         { modal: true },
         'Run',
+        ALWAYS,
         'Skip'
       );
-      if (answer !== 'Run') {
+      if (answer === ALWAYS) {
+        const rules = this.allowedCommands();
+        if (!rules.includes(command)) {
+          await this.state.update('parley.allowedCommands', [...rules, command]);
+        }
+      } else if (answer !== 'Run') {
         return 'User declined to run the command.';
       }
     }
@@ -1794,6 +1936,49 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       this.commandChannel = vscode.window.createOutputChannel('Parley Agent');
     }
     return this.commandChannel;
+  }
+
+  // ---------- command allowlist (workspace-scoped) ----------
+
+  private allowedCommands(): string[] {
+    const rules = this.state.get<string[]>('parley.allowedCommands', []);
+    return Array.isArray(rules) ? rules.filter((r) => typeof r === 'string' && r.trim().length > 0) : [];
+  }
+
+  /** A rule matches its exact command or any command that extends it with further arguments. */
+  private isCommandAllowed(command: string): boolean {
+    return this.allowedCommands().some((rule) => command === rule || command.startsWith(`${rule} `));
+  }
+
+  /** Review/remove the workspace's approved agent commands ("Parley: Manage Allowed Commands"). */
+  public async manageAllowedCommands(): Promise<void> {
+    const rules = this.allowedCommands();
+    if (rules.length === 0) {
+      await vscode.window.showInformationMessage(
+        'Parley: no allowed commands yet. Approve one with "Always Allow" when the agent asks to run a command.'
+      );
+      return;
+    }
+    const picks = await vscode.window.showQuickPick(
+      rules.map((rule) => ({ label: rule, picked: true })),
+      {
+        canPickMany: true,
+        title: 'Parley: allowed agent commands (uncheck to remove)',
+        placeHolder:
+          'Checked commands (and anything starting with them + more arguments) run without asking in this workspace'
+      }
+    );
+    if (!picks) {
+      return;
+    }
+    const keep = picks.map((p) => p.label);
+    await this.state.update('parley.allowedCommands', keep);
+    const removed = rules.length - keep.length;
+    await vscode.window.showInformationMessage(
+      removed > 0
+        ? `Parley: removed ${removed} allowed command${removed === 1 ? '' : 's'} (${keep.length} kept).`
+        : `Parley: keeping all ${keep.length} allowed command${keep.length === 1 ? '' : 's'}.`
+    );
   }
 
   /** Resolve `@path` mentions in the prompt into file context attachments. */
@@ -2215,57 +2400,25 @@ function isLikelyVisionModel(model: string): boolean {
   return /claude|gemini|gpt-5/i.test(model);
 }
 
-/**
- * Apply an edit by matching trimmed lines (tolerant of indentation / trailing whitespace).
- * Returns the new text, `undefined` if no match, or `''` if the match is ambiguous.
- */
-function replaceByTrimmedLines(original: string, oldText: string, newText: string): string | undefined | '' {
-  const oldLines = oldText
-    .replace(/\r/g, '')
-    .split('\n')
-    .map((l) => l.trim());
-  while (oldLines.length && oldLines[0] === '') {
-    oldLines.shift();
-  }
-  while (oldLines.length && oldLines[oldLines.length - 1] === '') {
-    oldLines.pop();
-  }
-  if (oldLines.length === 0) {
-    return undefined;
-  }
-
-  const fileLines = original.split('\n');
-  const fileTrim = fileLines.map((l) => l.trim());
-  const matches: number[] = [];
-  for (let i = 0; i + oldLines.length <= fileTrim.length; i += 1) {
-    let ok = true;
-    for (let j = 0; j < oldLines.length; j += 1) {
-      if (fileTrim[i + j] !== oldLines[j]) {
-        ok = false;
-        break;
-      }
+/** Abort-aware pause that RESOLVES (never rejects) when the signal fires — for best-effort waits. */
+function waitMs(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve();
+      return;
     }
-    if (ok) {
-      matches.push(i);
-    }
-  }
-  if (matches.length === 0) {
-    return undefined;
-  }
-  if (matches.length > 1) {
-    return '';
-  }
-  const at = matches[0];
-  const replaced = [
-    ...fileLines.slice(0, at),
-    ...newText.replace(/\r/g, '').split('\n'),
-    ...fileLines.slice(at + oldLines.length)
-  ];
-  return replaced.join('\n');
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
 }
 
-/** Run a shell command in cwd, returning combined stdout/stderr (truncated). User-approved per call.
- *  Passing the turn's AbortSignal lets Stop actually kill the child process. */
 /** Short, Claude-style one-line summary of a tool result for the `⎿` line. */
 function summarizeToolResult(name: string, result: string): string {
   const lines = result.split('\n');
@@ -2283,7 +2436,8 @@ function summarizeToolResult(name: string, result: string): string {
       return `${n} file${n === 1 ? '' : 's'}`;
     }
     case 'search_text':
-      return /^no\b/i.test(firstLine) ? 'No matches' : `${lines.filter((l) => l.trim()).length} match line(s)`;
+    case 'grep':
+      return /^\[?no\b/i.test(firstLine) ? 'No matches' : `${lines.filter((l) => l.trim()).length} match line(s)`;
     case 'run_command':
       return clip(firstLine || '(no output)');
     case 'fetch_url':

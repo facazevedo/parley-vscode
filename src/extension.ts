@@ -39,7 +39,11 @@ export function activate(context: vscode.ExtensionContext): void {
   let provider: ParleyProvider = createParleyProvider(settings, auth, logger);
   logger.setLevel(settings.logLevel);
   logger.info(`Activated Parley extension with provider: ${provider.id}`);
-  dbg('activate', 'extension activated', { endpoint: settings.endpoint, defaultAgent: settings.defaultAgent, mode: settings.defaultMode });
+  dbg('activate', 'extension activated', {
+    endpoint: settings.endpoint,
+    defaultAgent: settings.defaultAgent,
+    mode: settings.defaultMode
+  });
   context.subscriptions.push(logger);
   void mcp.start(settings.mcpServers);
 
@@ -91,7 +95,12 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.languages.registerInlineCompletionItemProvider(
       { pattern: '**' },
-      new ParleyInlineCompletionProvider(() => provider, () => settings, auth, logger)
+      new ParleyInlineCompletionProvider(
+        () => provider,
+        () => settings,
+        auth,
+        logger
+      )
     ),
     vscode.commands.registerCommand('parley.openChatWindow', async () => {
       await vscode.commands.executeCommand('workbench.view.extension.parley');
@@ -104,10 +113,13 @@ export function activate(context: vscode.ExtensionContext): void {
       await mcp.start(getSettings().mcpServers);
       const status = mcp.status();
       await vscode.window.showInformationMessage(
-        status.length ? `Parley MCP: ${status.join(', ')}.` : 'Parley: no MCP servers configured (set "parley.mcpServers").'
+        status.length
+          ? `Parley MCP: ${status.join(', ')}.`
+          : 'Parley: no MCP servers configured (set "parley.mcpServers").'
       );
     }),
     vscode.commands.registerCommand('parley.rebuildCodebaseIndex', () => chatPanel.rebuildCodebaseIndex()),
+    vscode.commands.registerCommand('parley.manageAllowedCommands', () => chatPanel.manageAllowedCommands()),
     vscode.commands.registerCommand('parley.newConversation', () => chatPanel.newConversation()),
     vscode.commands.registerCommand('parley.openConversationsFolder', () => chatPanel.openConversationsFolder()),
     vscode.commands.registerCommand('parley.openDebugLog', async () => {
@@ -151,7 +163,9 @@ export function activate(context: vscode.ExtensionContext): void {
       const value = Math.max(0, Math.floor(Number(input.trim())));
       await vscode.workspace.getConfiguration('parley').update('tokenLimit', value, vscode.ConfigurationTarget.Global);
       await vscode.window.showInformationMessage(
-        value === 0 ? 'Parley token limit set to unlimited.' : `Parley token limit set to ${value.toLocaleString()} per conversation.`
+        value === 0
+          ? 'Parley token limit set to unlimited.'
+          : `Parley token limit set to ${value.toLocaleString()} per conversation.`
       );
     })
   );

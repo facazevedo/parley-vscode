@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.44.0
+
+### Added — the editor tells the agent what it broke (post-edit diagnostics)
+- After every applied agent edit, Parley waits ~1.5s for the language servers to re-analyze, then feeds any **new errors/warnings straight back into the tool result**: `⚠ This edit introduced 2 new problem(s): L12 error: … [ts]`. The agent fixes its own breakage instead of finishing "successfully" with red squiggles — the same self-correction loop that makes Claude Code feel reliable. Problems that existed before the edit are not blamed on it (line-shift-proof comparison), and files not open in any editor are analyzed too (the document is loaded in the background).
+
+### Added — `grep`: real regex search for the agent
+- New agent tool `grep` using the **ripgrep binary VS Code ships** (per-platform discovery incl. the new `@vscode/ripgrep-universal` layout, falling back to `rg` on PATH): full regex syntax, `case_insensitive`, `context_lines`, and a `glob` filter, honoring `.gitignore` and excluding credential-like files. Available in every agent mode including Plan. `search_text` stays for simple substrings and its caps were raised (40→80 results, 400→800 files).
+
+### Added — edit_file repairs itself instead of flailing
+- Matching now runs in **three tiers**: exact → indentation-tolerant → whitespace-run-tolerant (new pure `src/diff/editMatch.ts`, fully tested).
+- When a match still fails, the error now includes the **closest real region of the file** — line-numbered content with a similarity score — so the model fixes its `old_text` in one round instead of re-reading blind: `Closest match is lines 40-52 (78% of lines match) — the file actually contains: …`
+- Ambiguous matches now name the **exact line numbers** of each occurrence. Line-tier replacements in CRLF files keep CRLF endings (previously they could produce mixed line endings).
+
+### Added — staleness protection: never clobber unseen changes
+- Parley now tracks a content hash of every file the agent reads. `write_file` on an **existing non-empty file requires a fresh read**: if the file was never read this conversation, or changed on disk since (user edit, formatter), the agent is told to `read_file` again instead of silently overwriting content it has never seen. Failed `edit_file` matches also note when the file changed since the last read. Hashes update automatically after Parley's own applied edits.
+
+### Added — command allowlist ("Always Allow")
+- The run-command confirmation gains an **Always Allow** button: the command is stored as a workspace-scoped prefix rule (`npm test` also approves `npm test -- --grep foo`), and matching commands run without asking from then on — in every mode except Full access, which never asks. Review or remove rules with the new **`Parley: Manage Allowed Commands`** command.
+
+### Internal
+- Agent system prompt updated (grep guidance, react-to-diagnostics, use the closest-match repair hint). 9 new unit tests for the edit matcher (92 total). The exact ripgrep invocation was verified against the real VS Code binary (match, no-match, and bad-regex exit paths).
+
 ## 0.43.0
 
 ### Added — the agent survives transient failures (auto-retry)

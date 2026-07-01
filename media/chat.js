@@ -160,6 +160,8 @@ import hljs from 'highlight.js/lib/common';
         return 'Finding ' + (a.glob || '');
       case 'search_text':
         return 'Searching "' + (a.query || '') + '"';
+      case 'grep':
+        return 'Grepping /' + (a.pattern || '') + '/';
       case 'write_file':
         return 'Editing ' + (a.path || '');
       case 'run_command':
