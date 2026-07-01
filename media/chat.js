@@ -646,6 +646,17 @@ import hljs from 'highlight.js/lib/common';
     for (const e of entries) {
       if (e.kind === 'user') {
         const c = bubble('user', renderMd(e.text));
+        if (e.images && e.images.length) {
+          const wrap = document.createElement('div');
+          wrap.className = 'msgimgs';
+          e.images.forEach((src) => {
+            const img = document.createElement('img');
+            img.className = 'msgimg';
+            img.src = src;
+            wrap.append(img);
+          });
+          c.append(wrap);
+        }
         addCopyButton(c.parentNode, e.text);
         addEditButton(c.parentNode, e.text, userOrdinal);
         userOrdinal += 1;
@@ -1175,7 +1186,11 @@ import hljs from 'highlight.js/lib/common';
 
     stopBtn.style.display = msg.busy ? '' : 'none';
     // Send stays enabled while busy — messages typed now are queued as steering.
+    // Model/mode switches would only apply from the NEXT turn, so lock them during a run.
     busy = !!msg.busy;
+    agent.disabled = busy;
+    modeBtn.disabled = busy;
+    modeBtn.title = busy ? 'Locked while the agent is running (applies from the next turn)' : 'Mode & thinking';
     prompt.placeholder = busy
       ? 'Type to steer the agent — sent at its next step…'
       : 'Ask Parley…  (@file to attach · paste or drop an image/PDF/audio · Enter to send · Shift+Enter for newline)';

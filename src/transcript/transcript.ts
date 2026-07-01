@@ -22,7 +22,7 @@ export interface TranscriptMeta {
 }
 
 export type TranscriptEntry =
-  | { kind: 'user'; text: string; at: string }
+  | { kind: 'user'; text: string; images?: string[]; at: string }
   | { kind: 'assistant'; text: string; model?: string; thinking?: string; tokens?: number; at: string }
   | { kind: 'tool'; action: string; result?: string; at: string }
   | {

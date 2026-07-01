@@ -13,6 +13,7 @@ import { exec } from 'child_process';
 import { createHash } from 'crypto';
 import { totalCharacters } from '../context/contextPreview';
 import { parseRuleFile, ruleApplies } from '../context/rulesDir';
+import { terminalSnapshot } from '../context/terminalLog';
 import { isSensitiveFile } from '../context/sensitiveFileFilter';
 import type { CheckpointStore } from '../diff/checkpoints';
 import { applySnippetEdit } from '../diff/editMatch';
@@ -841,7 +842,13 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     }
 
     this.history.push({ role: 'user', content: prompt, createdAt: new Date().toISOString() });
-    this.appendTranscript({ kind: 'user', text: prompt, at: new Date().toISOString() });
+    this.appendTranscript({
+      kind: 'user',
+      text: prompt,
+      // Attached images render inline in the chat bubble (and persist in the transcript).
+      ...(images.length > 0 ? { images: images.slice(0, 4).map((i) => i.dataUri) } : {}),
+      at: new Date().toISOString()
+    });
     // Surface the OpenAI-reasoning-no-op hint on the first send with that combo, even if the
     // level was carried over from a previous session (no change event would have fired).
     this.maybeWarnOpenAiReasoning();
@@ -2323,6 +2330,20 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         content,
         characterCount: content.length,
         truncated: diff.length > content.length
+      });
+    }
+
+    // @terminal — recent integrated-terminal commands and their output (shell integration).
+    if (/(?:^|\s)@terminal\b/i.test(prompt)) {
+      const snap = terminalSnapshot();
+      const content = snap.slice(0, cap);
+      out.push({
+        id: 'mention-terminal',
+        kind: 'user-file',
+        label: '@terminal (recent output)',
+        content,
+        characterCount: content.length,
+        truncated: snap.length > content.length
       });
     }
 

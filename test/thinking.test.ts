@@ -72,5 +72,15 @@ test('Google/Gemini models also use reasoning_effort (not the thinking block)', 
 });
 
 test('models without a reasoning mode (e.g. Llama) send nothing', () => {
-  assert.equal(buildThinkingRequest('bedrock/llama-4-maverick-17b', { type: 'enabled', budgetTokens: 8192 }), undefined);
+  assert.equal(
+    buildThinkingRequest('bedrock/llama-4-maverick-17b', { type: 'enabled', budgetTokens: 8192 }),
+    undefined
+  );
+});
+
+test('capMaxTokens caps output at half the known context window', async () => {
+  const { capMaxTokens } = await import('../src/parley/thinking');
+  assert.equal(capMaxTokens('bedrock/claude-haiku-4-5', 999999), 100000); // 200K window → 100K cap
+  assert.equal(capMaxTokens('bedrock/claude-haiku-4-5', 24192), 24192); // normal budgets unaffected
+  assert.equal(capMaxTokens('totally/unknown-model', 999999), 999999); // unknown window → uncapped
 });

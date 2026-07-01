@@ -239,6 +239,19 @@ button:disabled {
 .message.assistant {
   align-self: stretch;
 }
+/* Inline thumbnails for images attached to a user message */
+.msgimgs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.msgimg {
+  max-width: 180px;
+  max-height: 140px;
+  border-radius: 8px;
+  border: 1px solid var(--vscode-editorWidget-border, rgba(127, 127, 127, 0.3));
+}
 /* Rendered Markdown (markdown-it) supplies its own block structure — normal whitespace here;
    streamed plain-text segments (.seg), tool lines, and thinking keep pre-wrap below. */
 .content {

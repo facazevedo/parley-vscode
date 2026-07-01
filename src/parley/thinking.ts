@@ -15,6 +15,8 @@
  * model has room for the actual answer after it finishes reasoning.
  */
 
+import { contextWindowFor } from './models';
+
 /** UI-level thinking selection. `off` means "don't send the parameter". */
 export type ThinkingLevel = 'off' | 'adaptive' | 'low' | 'medium' | 'high';
 
@@ -91,12 +93,24 @@ export function buildThinkingRequest(model: string, config: ThinkingConfig | und
     const effective: ThinkingConfig =
       config.type === 'enabled' && /opus-4-7/i.test(model) ? { type: 'adaptive' } : config;
     if (effective.type === 'adaptive') {
-      return { thinking: { type: 'adaptive' }, max_tokens: ADAPTIVE_MAX_TOKENS };
+      return { thinking: { type: 'adaptive' }, max_tokens: capMaxTokens(model, ADAPTIVE_MAX_TOKENS) };
     }
     const budget = effective.budgetTokens ?? BUDGETS.low;
-    return { thinking: { type: 'enabled', budget_tokens: budget }, max_tokens: budget + RESPONSE_HEADROOM };
+    const maxTokens = capMaxTokens(model, budget + RESPONSE_HEADROOM);
+    // budget_tokens must stay BELOW max_tokens (Anthropic requirement) even after capping.
+    const safeBudget = Math.min(budget, Math.max(1024, maxTokens - 1024));
+    return { thinking: { type: 'enabled', budget_tokens: safeBudget }, max_tokens: maxTokens };
   }
 
   // Models without a reasoning mode (e.g. Llama) — send nothing.
   return undefined;
+}
+
+/**
+ * Cap the requested output tokens to half the model's context window (when known),
+ * so a thinking budget can never crowd out the prompt on small-window models.
+ */
+export function capMaxTokens(model: string, desired: number): number {
+  const window = contextWindowFor(model);
+  return window ? Math.min(desired, Math.max(2048, Math.floor(window / 2))) : desired;
 }

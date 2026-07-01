@@ -249,6 +249,7 @@ Type **`@`** in the composer:
 | `@path/to/folder` | Attach a listing of the folder |
 | `@codebase` | Retrieve the most relevant files for your question (see below) |
 | `@git` | Attach the uncommitted diff (vs HEAD) |
+| `@terminal` | Attach recent integrated-terminal commands + output (shell integration) |
 | `@https://…` | Fetch the page and attach its text |
 
 ---

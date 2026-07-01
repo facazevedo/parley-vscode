@@ -16,6 +16,7 @@ import { registerSignOutCommand } from './commands/signOut';
 import { registerSuggestTerminalCommand } from './commands/suggestTerminalCommand';
 import { registerToggleInlineCompletionCommand } from './commands/toggleInlineCompletion';
 import { ParleyInlineCompletionProvider } from './completion/inlineCompletionProvider';
+import { activateTerminalLog } from './context/terminalLog';
 import { getSettings } from './config/settings';
 import { dbg, debugLogPath, initDebug } from './debug/debug';
 import { CheckpointStore } from './diff/checkpoints';
@@ -45,6 +46,7 @@ export function activate(context: vscode.ExtensionContext): void {
     mode: settings.defaultMode
   });
   context.subscriptions.push(logger);
+  activateTerminalLog(context); // for the @terminal mention (feature-detected)
   void mcp.start(settings.mcpServers);
 
   const refreshConfiguration = (): void => {

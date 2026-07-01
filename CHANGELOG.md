@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.48.0
+
+### Added — `@terminal` mention
+- Type **`@terminal`** in the composer to attach the **recent integrated-terminal commands and their output** (captured via VS Code shell integration; last 10 commands, ANSI-stripped, feature-detected — a clear message explains when shell integration isn't available).
+
+### Added — attached images render in the chat
+- Images you paste/attach now show as **inline thumbnails in your message bubble**, persist in the transcript, and survive re-renders and reopened conversations (up to 4 per message).
+
+### Fixed
+- **Thinking budget vs small context windows** (audit bug #8): `max_tokens` for extended thinking is now capped at half the model's known context window, and `budget_tokens` is re-clamped below `max_tokens` — a thinking request can no longer crowd out the prompt on a small-window model.
+- **Model/mode switchers lock while the agent runs** — changes only ever applied from the next turn, so mid-run switching was misleading; the controls now disable with an explanatory tooltip (the composer itself stays live for steering).
+
 ## 0.47.0
 
 ### Added — language-server tools for the agent
