@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.45.0
+
+### Added — steer the agent while it works
+- The composer **stays live during a turn**: type a message and press Enter while the agent is running and it's **queued as steering** (shown as a `⏩` chip you can remove) and **injected as a user message at the agent's next tool-round boundary** — no Stop needed to say "actually, use approach B". Messages queued during a plain chat reply (or after the last round) run as an immediate follow-up turn. The queue clears on Stop and on new-conversation.
+
+### Changed — ask mode approves edits in the chat, not a modal
+- In **Ask before edits** mode, a proposed agent edit now renders as an **in-chat card with Apply / Choose hunks… / Reject** (the native side-by-side diff still opens for full context). The tool call simply waits for your click — no blocking modal dialog, so you can keep scrolling, reading, and even queueing steering while you decide. **Choose hunks…** opens the previous per-hunk selection flow. Stop resolves any pending approval as rejected.
+
+### Added — full-text search across past conversations
+- The **🕘 past-conversations picker** now searches the **on-disk JSONL transcripts** as you type (3+ characters, debounced, cached): matches show a `…context snippet…` of where the term appears — find "that conversation where we discussed retries" by content, not just title.
+
+### Added — edit & resend any earlier message
+- Hover a user message and click **✏️** to load it into the composer; sending **rewinds the conversation to just before that message** (dropping it and everything after, in memory and in the on-disk transcript) and re-runs with your edited text. Files keep whatever changes were applied — this rewinds the *conversation*, not your workspace (use `Parley: Revert…` for files).
+
+### Internal
+- New `SendMessageOptions.getQueuedUserMessages` steering hook drained at each tool-round start; pure `truncateBeforeUserMessage` transcript helper (unit-tested; 97 tests total); new webview messages `queued`, `steerInjected`, `status`; approval cards share the proposed-change card pipeline (`apr…` ids stay interactive across re-renders).
+
 ## 0.44.0
 
 ### Added — the editor tells the agent what it broke (post-edit diagnostics)

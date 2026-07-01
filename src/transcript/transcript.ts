@@ -40,6 +40,27 @@ export type TranscriptEntry =
   | { kind: 'plan'; steps: Array<{ text: string; status: string }>; at: string }
   | { kind: 'note'; text: string; at: string };
 
+/**
+ * Everything before the nth user message (0-based ordinal) — used by "edit & resend"
+ * to rewind the conversation to just before that message. Returns `undefined` when
+ * there is no such user message (nothing to rewind).
+ */
+export function truncateBeforeUserMessage(
+  entries: readonly TranscriptEntry[],
+  ordinal: number
+): TranscriptEntry[] | undefined {
+  let seen = 0;
+  for (let i = 0; i < entries.length; i += 1) {
+    if (entries[i].kind === 'user') {
+      if (seen === ordinal) {
+        return entries.slice(0, i);
+      }
+      seen += 1;
+    }
+  }
+  return undefined;
+}
+
 /** Render diff rows as a plain unified-diff-style text block. */
 export function diffRowsToText(rows: readonly DiffRow[]): string {
   return rows

@@ -39,6 +39,13 @@ export interface SendMessageOptions {
     readonly delayMs: number;
     readonly reason: string;
   }) => void;
+  /**
+   * Steering: drained at the start of every tool round. Any returned strings are
+   * appended to the conversation as user messages, so the user can redirect the
+   * agent mid-task without stopping it. The callback owns recording them in the
+   * visible history/transcript.
+   */
+  readonly getQueuedUserMessages?: () => readonly string[];
   readonly maxToolRounds?: number;
 }
 

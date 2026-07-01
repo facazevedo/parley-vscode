@@ -123,7 +123,7 @@ Open the **`Mode ▾`** popover (or set `parley.defaultMode`):
 | Mode | Behavior |
 | --- | --- |
 | **Chat** | Answer only; no file tools (default). |
-| **Ask before edits** | Agent proposes edits; you approve each one in a diff. |
+| **Ask before edits** | Agent proposes edits; approve each on an in‑chat card (Apply / Choose hunks… / Reject) with the full diff opened beside. |
 | **Edit automatically** | Agent applies edits without asking (checkpointed/revertible). |
 | **Plan** | Agent explores **read‑only** and presents a numbered plan; makes no changes. |
 | **Auto** | Agent decides and applies edits automatically. |
@@ -201,6 +201,12 @@ change you made mid‑conversation can never be silently clobbered.
 command as a workspace prefix rule (`npm test` also approves `npm test -- --grep foo`);
 matching commands then run without asking. Review rules with
 **`Parley: Manage Allowed Commands`**.
+
+**Steering.** The composer stays live while the agent works: send a message mid‑task
+and it's queued (a removable `⏩` chip) and **injected at the agent's next step** —
+redirect it without stopping it. **Edit & resend:** hover any of your earlier messages
+and click **✏️** to edit it; sending rewinds the conversation to that point and re‑runs
+(files keep their changes).
 
 ---
 
@@ -394,6 +400,8 @@ folder in your workspace, so it never depends on what's in memory:
   workspace open it falls back to the extension's global storage.
 - **Past conversations:** **🕘** or `Parley: Open Past Conversation` reloads the **full
   transcript** from disk (diffs, tool calls and all) and keeps appending to the same file.
+  Typing **3+ characters** in the picker also **searches the transcript text** on disk and
+  shows a snippet of each match — find conversations by what was said, not just the title.
 - **Export:** **⤓** or `Parley: Export Conversation` first **completes and saves the
   canonical transcript**, then writes a **copy** in your chosen format — **Markdown, plain
   text, or JSON** — to wherever you pick. The copy contains the entire transcript with a

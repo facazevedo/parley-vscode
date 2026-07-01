@@ -37,6 +37,7 @@ import { EmbeddingIndex } from '../codebase/embeddingIndex';
 import {
   transcriptToMarkdown,
   transcriptToPlainText,
+  truncateBeforeUserMessage,
   type TranscriptEntry,
   type TranscriptMeta
 } from '../transcript/transcript';
@@ -79,6 +80,8 @@ interface ChatPanelMessage {
     | 'mentionQuery'
     | 'applyChange'
     | 'dismissChange'
+    | 'reviewChange'
+    | 'unqueue'
     | 'setApiKey';
   readonly prompt?: string;
   readonly agentId?: string;
@@ -93,6 +96,10 @@ interface ChatPanelMessage {
   readonly dataUri?: string;
   readonly name?: string;
   readonly contextOptions?: ContextOptions;
+  /** Steering-queue index for 'unqueue'. */
+  readonly index?: number;
+  /** For 'send': 0-based ordinal of the user message being edited & resent. */
+  readonly editOrdinal?: number;
 }
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp']);
@@ -174,6 +181,14 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   // Content hashes of files the agent has read this conversation — staleness detection
   // for write_file (don't clobber unseen changes) and better edit_file errors.
   private readonly fileReadHashes = new Map<string, string>();
+  // Steering: messages typed while the agent is busy, injected at the next round boundary.
+  private queuedSteering: string[] = [];
+  // Ask-mode approvals: proposed-change cards whose tool call awaits an Apply/Reject click.
+  private approvalSeq = 0;
+  private readonly pendingApprovals = new Map<
+    string,
+    { resolve: (finalText: string | undefined) => void; rel: string; original: string; proposedText: string }
+  >();
 
   private resolveReady!: () => void;
   private readonly ready = new Promise<void>((resolve) => {
@@ -401,11 +416,19 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         await this.refreshAgents();
         return;
       case 'stop':
+        this.queuedSteering = [];
+        this.post({ type: 'queued', items: [] });
         this.abortController?.abort();
         return;
       case 'newChat':
+        this.queuedSteering = [];
+        this.post({ type: 'queued', items: [] });
         this.abortController?.abort();
         await this.startNewConversation();
+        return;
+      case 'unqueue':
+        this.queuedSteering = this.queuedSteering.filter((_, i) => i !== (message.index ?? -1));
+        this.post({ type: 'queued', items: [...this.queuedSteering] });
         return;
       case 'openHistory':
         await this.openPastConversation();
@@ -458,14 +481,38 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       case 'mentionQuery':
         await this.sendMentionResults(message.query ?? '');
         return;
-      case 'applyChange':
+      case 'applyChange': {
+        const approval = this.pendingApprovals.get(message.id ?? '');
+        if (approval) {
+          this.pendingApprovals.delete(message.id ?? '');
+          approval.resolve(approval.proposedText);
+          return;
+        }
         await this.applyPendingChange(message.id ?? '');
         return;
-      case 'dismissChange':
+      }
+      case 'dismissChange': {
+        const approval = this.pendingApprovals.get(message.id ?? '');
+        if (approval) {
+          this.pendingApprovals.delete(message.id ?? '');
+          approval.resolve(undefined);
+          return;
+        }
         this.pendingChanges.delete(message.id ?? '');
         this.post({ type: 'changeResolved', id: message.id ?? '', status: 'dismissed' });
         this.resolveTranscriptChange(message.id ?? '', 'dismissed');
         return;
+      }
+      case 'reviewChange': {
+        // "Choose hunks…" on an approval card: fall back to the per-hunk review dialog.
+        const approval = this.pendingApprovals.get(message.id ?? '');
+        if (approval) {
+          this.pendingApprovals.delete(message.id ?? '');
+          const finalText = await reviewProposedEdit(approval.rel, approval.original, approval.proposedText);
+          approval.resolve(finalText);
+        }
+        return;
+      }
       case 'removeAttachment':
         this.attachments = this.attachments.filter((item) => item.id !== message.id);
         await this.postState();
@@ -478,6 +525,18 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       case 'send':
         if (message.prompt?.trim()) {
           const text = message.prompt.trim();
+          if (this.busy) {
+            // Steering: don't refuse — queue it for the next round boundary.
+            this.queuedSteering.push(text);
+            this.post({ type: 'queued', items: [...this.queuedSteering] });
+            return;
+          }
+          if (message.editOrdinal !== undefined && message.editOrdinal >= 0) {
+            // Edit & resend: rewind the conversation to just before that user message.
+            if (!(await this.rewindToUserMessage(message.editOrdinal))) {
+              return;
+            }
+          }
           if (text.startsWith('/') && (await this.handleSlash(text))) {
             return;
           }
@@ -607,6 +666,25 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       }
     }
     return false;
+  }
+
+  /**
+   * Edit & resend: drop the nth user message and everything after it (conversation
+   * only — files keep whatever changes were applied), so the edited prompt re-runs
+   * from that point. Returns false when the ordinal can't be resolved.
+   */
+  private async rewindToUserMessage(ordinal: number): Promise<boolean> {
+    const truncated = truncateBeforeUserMessage(this.transcript, ordinal);
+    if (truncated === undefined) {
+      return false;
+    }
+    this.transcript = truncated;
+    this.history.length = 0;
+    this.history.push(...transcriptToHistory(truncated));
+    this.pendingChanges.clear();
+    this.syncTranscriptFile();
+    await this.postState();
+    return true;
   }
 
   /** Re-run the last user message (drop the responses after it). */
@@ -818,6 +896,21 @@ export class ChatPanel implements vscode.WebviewViewProvider {
                 text: `${info.reason} — retrying in ${Math.ceil(info.delayMs / 1000)}s (attempt ${info.attempt}/${info.maxAttempts})…`
               });
             },
+            getQueuedUserMessages: () => {
+              // Steering: drain messages typed while the agent works into the
+              // conversation (history + transcript + a live bubble in the chat).
+              if (this.queuedSteering.length === 0) {
+                return [];
+              }
+              const items = this.queuedSteering.splice(0);
+              for (const text of items) {
+                this.history.push({ role: 'user', content: text, createdAt: new Date().toISOString() });
+                this.appendTranscript({ kind: 'user', text, at: new Date().toISOString() });
+                this.post({ type: 'steerInjected', text });
+              }
+              this.post({ type: 'queued', items: [] });
+              return items;
+            },
             onUsage: (usage) => {
               turnTokens += usage.total;
               this.sessionTokens += usage.total;
@@ -939,6 +1032,13 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       this.abortController = undefined;
       await this.postState();
       await this.autosaveConversation();
+      // Steering queued after the last round boundary (or during a plain chat turn)
+      // runs as an immediate follow-up turn instead of being forgotten.
+      const followUp = this.queuedSteering.shift();
+      if (followUp) {
+        this.post({ type: 'queued', items: [...this.queuedSteering] });
+        void this.runTurn(followUp, this.contextOptions);
+      }
     } catch (error) {
       this.busy = false;
       this.abortController = undefined;
@@ -1398,7 +1498,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       await vscode.window.showInformationMessage('Parley: no saved conversations yet.');
       return;
     }
-    const pick = await vscode.window.showQuickPick(items, { title: 'Open a past Parley conversation' });
+    const pick = await this.pickConversationWithSearch(items, base);
     if (!pick) {
       return;
     }
@@ -1432,6 +1532,97 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     await vscode.commands.executeCommand('parley.chatView.focus');
     await this.ready;
     await this.postState();
+  }
+
+  /**
+   * Conversation picker with full-text search: typing 3+ characters also greps the
+   * on-disk JSONL transcripts (debounced, cached) and shows a match snippet per hit.
+   */
+  private pickConversationWithSearch<T extends vscode.QuickPickItem & { id?: string }>(
+    items: T[],
+    base: string
+  ): Promise<T | undefined> {
+    const qp = vscode.window.createQuickPick<T>();
+    qp.title = 'Open a past Parley conversation';
+    qp.placeholder = 'Filter by title — or type 3+ characters to search the full transcript text';
+    qp.matchOnDescription = true;
+    qp.matchOnDetail = true;
+    qp.items = items;
+    const dir = transcriptStore.conversationsDir(base);
+    const cache = new Map<string, string>(); // id → lowercased transcript text
+    let timer: NodeJS.Timeout | undefined;
+    let generation = 0;
+
+    const loadText = async (id: string): Promise<string> => {
+      const hit = cache.get(id);
+      if (hit !== undefined) {
+        return hit;
+      }
+      let text = '';
+      try {
+        const bytes = await vscode.workspace.fs.readFile(vscode.Uri.file(path.join(dir, `${id}.jsonl`)));
+        text = Buffer.from(bytes).toString('utf8').toLowerCase();
+      } catch {
+        text = '';
+      }
+      cache.set(id, text);
+      return text;
+    };
+
+    qp.onDidChangeValue((value) => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+      const query = value.trim().toLowerCase();
+      if (query.length < 3) {
+        qp.items = items;
+        return;
+      }
+      const gen = ++generation;
+      timer = setTimeout(() => {
+        void (async () => {
+          qp.busy = true;
+          const matched: T[] = [];
+          for (const item of items) {
+            if (gen !== generation) {
+              return; // superseded by newer input
+            }
+            const meta = `${item.label} ${item.description ?? ''} ${item.detail ?? ''}`.toLowerCase();
+            if (meta.includes(query)) {
+              matched.push(item);
+              continue;
+            }
+            if (!item.id) {
+              continue; // in-memory session without an on-disk transcript
+            }
+            const text = await loadText(item.id);
+            const at = text.indexOf(query);
+            if (at !== -1) {
+              // Show the surrounding context so the hit is recognizable. The snippet
+              // contains the query, which also satisfies the QuickPick's own filter.
+              const snippet = text.slice(Math.max(0, at - 40), at + query.length + 40).replace(/\s+/g, ' ');
+              matched.push({ ...item, detail: `…${snippet}…` });
+            }
+          }
+          if (gen === generation) {
+            qp.items = matched;
+            qp.busy = false;
+          }
+        })();
+      }, 250);
+    });
+
+    return new Promise((resolve) => {
+      qp.onDidAccept(() => {
+        resolve(qp.selectedItems[0]);
+        qp.hide();
+      });
+      qp.onDidHide(() => {
+        resolve(undefined);
+        qp.dispose();
+      });
+      qp.show();
+    });
   }
 
   /**
@@ -1709,17 +1900,65 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       return `Applied edit to ${rel} (auto).${await this.newProblemsAfterEdit(uri, preDiagnostics)}`;
     }
 
+    // Ask mode: open the native diff for full context and render an in-chat approval
+    // card (Apply / Choose hunks… / Reject). The tool call awaits the click — no
+    // blocking modal, so the rest of the chat (and steering) stays usable.
     await showProposedDiff(
       { filePath: uri.fsPath, originalText: original, proposedText, title: `Agent edit: ${rel}` },
       this.commandDeps.diffProvider
     );
-    const finalText = await reviewProposedEdit(rel, original, proposedText);
+    const id = `apr${this.approvalSeq++}`;
+    const diff = formatUnifiedDiff(original, proposedText);
+    const MAX_ROWS = 500;
+    const rows = diff.rows.length > MAX_ROWS ? diff.rows.slice(0, MAX_ROWS) : diff.rows;
+    const isNew = original.length === 0;
+    this.post({
+      type: 'proposedChange',
+      id,
+      path: rel,
+      isNew,
+      approval: true,
+      added: diff.added,
+      removed: diff.removed,
+      rows,
+      truncated: diff.rows.length > MAX_ROWS
+    });
+    this.appendTranscript({
+      kind: 'fileEdit',
+      id,
+      path: rel,
+      added: diff.added,
+      removed: diff.removed,
+      rows,
+      truncated: diff.rows.length > MAX_ROWS,
+      status: 'proposed',
+      isNew,
+      at: new Date().toISOString()
+    });
+    this.post({ type: 'status', text: `Waiting for your review of ${rel}…` });
+
+    const finalText = await new Promise<string | undefined>((resolve) => {
+      this.pendingApprovals.set(id, { resolve, rel, original, proposedText });
+      this.abortController?.signal.addEventListener(
+        'abort',
+        () => {
+          if (this.pendingApprovals.delete(id)) {
+            resolve(undefined);
+          }
+        },
+        { once: true }
+      );
+    });
+
     if (finalText === undefined) {
+      this.post({ type: 'changeResolved', id, status: 'dismissed' });
+      this.resolveTranscriptChange(id, 'dismissed');
       return `User rejected the edit to ${rel}.`;
     }
     await this.checkpoints.applyWithCheckpoint(uri, finalText, `edit ${rel}`);
     this.recordFileState(uri.fsPath, finalText);
-    this.postFileEdit(rel, original, finalText);
+    this.post({ type: 'changeResolved', id, status: 'applied' });
+    this.resolveTranscriptChange(id, 'applied');
     return `Applied edit to ${rel}.${await this.newProblemsAfterEdit(uri, preDiagnostics)}`;
   }
 
@@ -2245,7 +2484,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       type: 'state',
       history: this.history,
       transcript: this.transcript,
-      pendingChangeIds: Array.from(this.pendingChanges.keys()),
+      pendingChangeIds: [...this.pendingChanges.keys(), ...this.pendingApprovals.keys()],
       agents: this.agents,
       hasKey,
       busy: this.busy,
@@ -2315,6 +2554,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
           <label><input id="includeUserSelectedFiles" type="checkbox"> Pick files</label>
         </div>
       </details>
+      <div id="editing" class="editing" style="display:none"></div>
+      <div id="queued" class="queued"></div>
       <div id="attachments" class="attachments"></div>
       <div class="inputbox">
         <div id="mentions" class="mentions" style="display:none"></div>

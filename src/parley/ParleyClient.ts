@@ -502,7 +502,13 @@ export class ParleyClient implements ParleyProvider {
     let lastUsage: TokenUsage | undefined;
     let lastResult: CompletionResult | undefined;
     for (let round = 0; round < maxRounds; round += 1) {
-      dbg('toolloop', `round ${round + 1}/${maxRounds}`, { convoMessages: convo.length });
+      // Steering: user messages typed while the agent works join the conversation
+      // at the next round boundary, so the model sees them without a restart.
+      const steering = options.getQueuedUserMessages?.() ?? [];
+      for (const text of steering) {
+        convo.push({ role: 'user', content: text });
+      }
+      dbg('toolloop', `round ${round + 1}/${maxRounds}`, { convoMessages: convo.length, steered: steering.length });
       trimOldToolMessages(convo, 12); // keep the convo from ballooning across many tool rounds
       const roundPayload: Record<string, unknown> = {
         model,

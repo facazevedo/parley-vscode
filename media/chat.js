@@ -216,6 +216,64 @@ import hljs from 'highlight.js/lib/common';
     });
   }
 
+  // ---------- steering queue + edit-and-resend state ----------
+  const queuedEl = $('queued');
+  const editingEl = $('editing');
+  let busy = false;
+  let editingOrdinal = null;
+  function renderQueued(items) {
+    queuedEl.replaceChildren();
+    (items || []).forEach((text, i) => {
+      const chip = document.createElement('span');
+      chip.className = 'chip queuedchip';
+      chip.title = 'Queued — the agent sees this at its next step';
+      chip.textContent = '⏩ ' + (text.length > 60 ? text.slice(0, 60) + '…' : text);
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.className = 'chipx';
+      x.textContent = '×';
+      x.addEventListener('click', () => vscode.postMessage({ type: 'unqueue', index: i }));
+      chip.append(x);
+      queuedEl.append(chip);
+    });
+  }
+  function setEditing(ordinal) {
+    editingOrdinal = ordinal;
+    editingEl.replaceChildren();
+    if (ordinal === null) {
+      editingEl.style.display = 'none';
+      return;
+    }
+    const span = document.createElement('span');
+    span.textContent =
+      '✏️ Editing an earlier message — sending rewinds the conversation to that point (files keep their changes).';
+    const x = document.createElement('button');
+    x.type = 'button';
+    x.className = 'chipx';
+    x.textContent = '×';
+    x.title = 'Cancel editing';
+    x.addEventListener('click', () => setEditing(null));
+    editingEl.append(span, x);
+    editingEl.style.display = 'flex';
+  }
+  function addEditButton(messageNode, text, ordinal) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'msgedit';
+    btn.title = 'Edit & resend (rewinds the conversation to this message)';
+    btn.setAttribute('aria-label', 'Edit and resend');
+    btn.textContent = '✏️';
+    btn.addEventListener('click', () => {
+      if (busy) {
+        return; // can't rewind while the agent is running
+      }
+      prompt.value = text;
+      setEditing(ordinal);
+      prompt.focus();
+    });
+    messageNode.appendChild(btn);
+  }
+
   // Copy (two overlapping squares) icon used on user prompts.
   const COPY_SVG =
     '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round">' +
@@ -456,26 +514,38 @@ import hljs from 'highlight.js/lib/common';
     history.append(card);
     maybeScroll();
   }
-  // Apply/Dismiss buttons for a proposed change. The first click disables BOTH
-  // buttons (the extension resolves the card via changeResolved), so a second
-  // click can't race the in-flight resolution.
+  // Buttons for a proposed change. The first click disables ALL buttons (the
+  // extension resolves the card via changeResolved), so clicks can't race.
+  // Agent-approval cards (ids starting "apr") get Apply / Choose hunks… / Reject;
+  // chat-mode suggestion cards keep Apply / Dismiss.
   function buildCardActions(id, isNew, card) {
+    const approval = /^apr/.test(String(id));
     const actions = document.createElement('div');
     actions.className = 'diffactions';
+    const buttons = [];
+    const act = (type) => {
+      buttons.forEach((b) => (b.disabled = true));
+      vscode.postMessage({ type, id });
+    };
     const applyBtn = document.createElement('button');
     applyBtn.className = 'applybtn';
     applyBtn.textContent = isNew ? 'Create file' : 'Apply';
+    applyBtn.addEventListener('click', () => act('applyChange'));
+    buttons.push(applyBtn);
+    if (approval) {
+      const reviewBtn = document.createElement('button');
+      reviewBtn.className = 'dismissbtn';
+      reviewBtn.textContent = 'Choose hunks…';
+      reviewBtn.title = 'Pick which hunks to apply in a dialog';
+      reviewBtn.addEventListener('click', () => act('reviewChange'));
+      buttons.push(reviewBtn);
+    }
     const dismissBtn = document.createElement('button');
     dismissBtn.className = 'dismissbtn';
-    dismissBtn.textContent = 'Dismiss';
-    const act = (type) => {
-      applyBtn.disabled = true;
-      dismissBtn.disabled = true;
-      vscode.postMessage({ type, id });
-    };
-    applyBtn.addEventListener('click', () => act('applyChange'));
+    dismissBtn.textContent = approval ? 'Reject' : 'Dismiss';
     dismissBtn.addEventListener('click', () => act('dismissChange'));
-    actions.append(applyBtn, dismissBtn);
+    buttons.push(dismissBtn);
+    actions.append(...buttons);
     proposedCards[id] = { card, actions };
     return actions;
   }
@@ -553,10 +623,13 @@ import hljs from 'highlight.js/lib/common';
   function renderTranscript(entries, pendingIds) {
     history.replaceChildren();
     pendingIds = pendingIds || [];
+    let userOrdinal = 0;
     for (const e of entries) {
       if (e.kind === 'user') {
         const c = bubble('user', renderMd(e.text));
         addCopyButton(c.parentNode, e.text);
+        addEditButton(c.parentNode, e.text, userOrdinal);
+        userOrdinal += 1;
       } else if (e.kind === 'assistant') {
         const c = bubble('assistant', renderMd(e.text));
         if (e.thinking) {
@@ -724,7 +797,12 @@ import hljs from 'highlight.js/lib/common';
     if (!value) {
       return;
     }
-    vscode.postMessage({ type: 'send', prompt: value });
+    const msg = { type: 'send', prompt: value };
+    if (editingOrdinal !== null && !busy) {
+      msg.editOrdinal = editingOrdinal;
+    }
+    vscode.postMessage(msg);
+    setEditing(null);
     prompt.value = '';
     hideMentions();
     hideSlash();
@@ -959,9 +1037,28 @@ import hljs from 'highlight.js/lib/common';
       setStatus('Parley is working…');
       return;
     }
-    if (msg.type === 'retry') {
-      // Transient failure being retried by the client — show it on the status line.
-      setStatus(msg.text || 'Retrying…');
+    if (msg.type === 'retry' || msg.type === 'status') {
+      // Transient notices from the extension (retry countdowns, waiting-for-review).
+      setStatus(msg.text || '');
+      return;
+    }
+    if (msg.type === 'queued') {
+      renderQueued(msg.items || []);
+      return;
+    }
+    if (msg.type === 'steerInjected') {
+      // A queued steering message just joined the conversation: close the current
+      // assistant bubble so the reply to it starts fresh underneath.
+      if (streamContent) {
+        streamContent.classList.remove('cursor');
+      }
+      finishThinkingBlock();
+      streamNode = null;
+      streamContent = null;
+      currentSeg = null;
+      planEl = null;
+      const c = bubble('user', renderMd(msg.text || ''));
+      addCopyButton(c.parentNode, msg.text || '');
       return;
     }
     if (msg.type === 'thinkingDelta') {
@@ -1058,7 +1155,11 @@ import hljs from 'highlight.js/lib/common';
     renderAttachments(msg.attachments);
 
     stopBtn.style.display = msg.busy ? '' : 'none';
-    sendBtn.disabled = msg.busy;
+    // Send stays enabled while busy — messages typed now are queued as steering.
+    busy = !!msg.busy;
+    prompt.placeholder = busy
+      ? 'Type to steer the agent — sent at its next step…'
+      : 'Ask Parley…  (@file to attach · paste or drop an image/PDF/audio · Enter to send · Shift+Enter for newline)';
     if (!msg.busy) {
       stopTicker();
       turnStart = 0;
@@ -1100,10 +1201,13 @@ import hljs from 'highlight.js/lib/common';
     } else {
       // Fallback for older saved sessions with no transcript: render plain messages.
       history.replaceChildren();
+      let userOrdinal = 0;
       msg.history.forEach((item) => {
         const content = bubble(item.role, renderMd(item.content));
         if (item.role === 'user') {
           addCopyButton(content.parentNode, item.content);
+          addEditButton(content.parentNode, item.content, userOrdinal);
+          userOrdinal += 1;
         }
         if (item.role === 'assistant' && item.thinking) {
           const det = document.createElement('details');
