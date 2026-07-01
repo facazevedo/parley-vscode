@@ -32,6 +32,13 @@ export interface SendMessageOptions {
   readonly onToolResult?: (name: string, result: string) => void;
   /** Called when token usage for a round becomes known (for live token counters). */
   readonly onUsage?: (usage: TokenUsage) => void;
+  /** Called before an automatic retry of a transient failure (rate limit, 5xx, network), so the UI can show a notice. */
+  readonly onRetry?: (info: {
+    readonly attempt: number;
+    readonly maxAttempts: number;
+    readonly delayMs: number;
+    readonly reason: string;
+  }) => void;
   readonly maxToolRounds?: number;
 }
 

@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.43.0
+
+### Added — the agent survives transient failures (auto-retry)
+- Chat/agent requests now **retry automatically** on rate limits (429), upstream/server errors (5xx), network blips, and mid-stream error events — up to 3 retries with exponential backoff + jitter, honoring the server's `Retry-After`. A status-line notice shows what's happening (e.g. `Rate-limited — retrying in 2s (attempt 2/4)…`). Retries only happen while **nothing has streamed to the chat yet**, so output is never duplicated. Previously a single 429/502 killed the whole agent task mid-flight.
+
+### Added — syntax highlighting + real Markdown in the chat
+- Chat messages are now rendered with **markdown-it + highlight.js** (bundled into `dist/webview.js`, ~250 KB minified): fenced code blocks get **theme-aware syntax highlighting** (colors follow your VS Code theme via the terminal ANSI palette), plus proper nested lists, links (auto-linkified), tables, and blockquotes — replacing the hand-rolled parser. Raw HTML from the model is never rendered.
+
+### Added — scroll lock while streaming
+- The chat no longer yanks you to the bottom on every token. Scrolling up **pauses autoscroll** so you can read earlier messages while the agent works; a floating **↓ jump-to-latest** pill appears and one click (or sending a message) re-pins the view.
+
+### Fixed — thinking-only steps no longer stop the agent
+- With extended thinking enabled, a step where the model only reasoned (no text, no tool calls) was treated as "empty response" and **halted the whole task**. Reasoning now counts as progress, thinking-only steps keep their 💭 panel after the turn re-renders, and a truly empty step gets **one automatic "continue" nudge** before the loop gives up.
+
+### Fixed — tool output is truncated honestly (head + tail)
+- Long tool results were silently cut at 8,000 chars from the **top** — for command output that dropped the actual error at the end, and the model reasoned over the amputated text as if complete. Results are now clamped keeping **head + tail** around an explicit `[… N of M characters omitted from the middle …]` marker, with bigger budgets where they matter (`run_command` 16k, `read_file` 24k so its own pagination footer survives, `fetch_url`/`search_text` 12–13k). The same head+tail treatment applies to shell output capture.
+
+### Fixed
+- **Privacy: local `.parley/` transcripts no longer ship inside the VSIX.** `vsce` was packaging this workspace's own `.parley/conversations/*.jsonl` conversation logs into the extension archive (the in-repo `.gitignore` kept them out of git, but not out of the package). `.parley/**` is now excluded in `.vscodeignore`. If you packaged earlier VSIXes from a workspace where you had used Parley, rebuild them.
+- **Apply/Dismiss race:** clicking either button on a proposed-change card now disables **both** immediately, and an Apply for a change the extension no longer tracks (e.g. after a reload) resolves the card instead of leaving a dead button.
+- **Stop during connection:** pressing Stop while the request was still connecting no longer surfaces a spurious "Could not reach Parley" error.
+- **MCP:** late/unmatched JSON-RPC responses (typically after the 30s timeout) are now logged instead of dropped silently, so slow servers are diagnosable.
+
+### Internal
+- New pure modules `src/parley/retry.ts` (backoff policy, Retry-After parsing, abort-aware sleep) and `src/parley/clampText.ts` (head+tail clamping), each fully unit-tested (82 tests total). The webview script is now a second esbuild bundle (`media/chat.js` → `dist/webview.js`); `media/chat.js` no longer ships in the VSIX. Verified during review: `write_file` and `edit_file` both checkpoint through the same `applyProposedEdit` path (no asymmetry).
+
 ## 0.42.0
 
 ### Fixed — `debug/` folder no longer created unless you use Parley

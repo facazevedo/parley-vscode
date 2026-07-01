@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import Module from 'node:module';
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 /**
@@ -47,4 +48,14 @@ test('bundled dist/extension.js loads and exports activate/deactivate', () => {
   } finally {
     loader._load = original;
   }
+});
+
+test('bundled dist/webview.js exists and carries the chat UI + markdown renderer', () => {
+  // The webview bundle runs in a browser context (no require), so just verify the
+  // build produced it and that the key pieces made it in.
+  const bundlePath = path.resolve(__dirname, '../../dist/webview.js');
+  const src = fs.readFileSync(bundlePath, 'utf8');
+  assert.ok(src.includes('acquireVsCodeApi'), 'webview bundle should wire the VS Code webview API');
+  assert.ok(/markdown-it/i.test(src), 'markdown-it should be bundled');
+  assert.ok(/highlight\.js|hljs/i.test(src), 'highlight.js should be bundled');
 });

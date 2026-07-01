@@ -22,6 +22,7 @@ import { extractMentionPaths } from '../parley/parsing';
 import { AGENT_TOOLS, READ_ONLY_TOOLS, runAgentTool } from '../parley/tools';
 import { normalizeThinkingLevel, resolveThinking, type ThinkingLevel } from '../parley/thinking';
 import { audioFormatFromExt, audioFormatFromMime, modelSupportsAudio } from '../parley/audio';
+import { clampMiddle } from '../parley/clampText';
 import { documentProviderFor } from '../parley/files';
 import { contextWindowFor, modelSupportsThinking } from '../parley/models';
 import { estimateCostUsd, formatUsd } from '../parley/pricing';
@@ -38,13 +39,7 @@ import {
   type TranscriptMeta
 } from '../transcript/transcript';
 import * as transcriptStore from '../transcript/store';
-import {
-  extractAudioMp3,
-  extractFrames,
-  hasFfmpeg,
-  resolveFfprobePath,
-  type FfmpegBinaries
-} from '../video/ffmpeg';
+import { extractAudioMp3, extractFrames, hasFfmpeg, resolveFfprobePath, type FfmpegBinaries } from '../video/ffmpeg';
 import type {
   AgentInfo,
   AudioAttachment,
@@ -166,7 +161,10 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private commandChannel?: vscode.OutputChannel; // visible mirror of agent shell commands
   private embeddingIndex?: EmbeddingIndex; // lazy local semantic index for @codebase
   // Proposed file changes from a chat-mode reply, awaiting an inline Apply click.
-  private readonly pendingChanges = new Map<string, { uri: vscode.Uri; rel: string; original: string; proposedText: string }>();
+  private readonly pendingChanges = new Map<
+    string,
+    { uri: vscode.Uri; rel: string; original: string; proposedText: string }
+  >();
   private changeSeq = 0;
   private attachments: PendingAttachment[] = [];
   private busy = false;
@@ -202,7 +200,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     }
     this.conversationStartedAt = this.state.get<string>('parley.conversationStartedAt', this.conversationStartedAt);
     this.selectedAgentId = this.state.get<string>('parley.selectedAgentId', settings.defaultAgent);
-    this.selectedThinking = normalizeThinkingLevel(this.state.get<string>('parley.selectedThinking', settings.thinking));
+    this.selectedThinking = normalizeThinkingLevel(
+      this.state.get<string>('parley.selectedThinking', settings.thinking)
+    );
     this.selectedSpeed = this.state.get<string>('parley.selectedSpeed', 'standard') === 'fast' ? 'fast' : 'standard';
     this.mode = normalizeMode(this.state.get<string>('parley.mode', settings.defaultMode));
     this.sessionTokens = this.state.get<number>('parley.sessionTokens', 0);
@@ -273,7 +273,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     if (this.getSettings().autoSaveConversations) {
       void transcriptStore
         .appendEvent(this.parleyBase(), this.conversationId, entry)
-        .catch((error) => this.logger.debug(`transcript append failed: ${error instanceof Error ? error.message : 'error'}`));
+        .catch((error) =>
+          this.logger.debug(`transcript append failed: ${error instanceof Error ? error.message : 'error'}`)
+        );
     }
     return entry;
   }
@@ -285,7 +287,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     }
     void transcriptStore
       .writeEvents(this.parleyBase(), this.conversationId, this.transcript)
-      .catch((error) => this.logger.debug(`transcript sync failed: ${error instanceof Error ? error.message : 'error'}`));
+      .catch((error) =>
+        this.logger.debug(`transcript sync failed: ${error instanceof Error ? error.message : 'error'}`)
+      );
   }
 
   /** Write the human-readable .md, update the index, and persist Parley params. Best-effort. */
@@ -731,10 +735,20 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     let turnTokens = 0;
     const cpStart = this.checkpoints.size;
     this.post({ type: 'tokens', total: 0 });
-    dbg('turn', 'start', { agentId, mode: this.mode, toolsEnabled, canAutoContinue, stream: useStream, thinking: this.selectedThinking, speed: this.selectedSpeed, mcpTools: this.mcp.getTools().length });
+    dbg('turn', 'start', {
+      agentId,
+      mode: this.mode,
+      toolsEnabled,
+      canAutoContinue,
+      stream: useStream,
+      thinking: this.selectedThinking,
+      speed: this.selectedSpeed,
+      mcpTools: this.mcp.getTools().length
+    });
 
     try {
       let auto = 0;
+      let nudged = false; // one free "your reply was empty" retry before declaring a stall
       let continuation: string | null = null; // null = first send (real prompt + context)
       for (;;) {
         const stepActions: string[] = []; // tool activity for this step (persisted if the model doesn't narrate)
@@ -782,10 +796,22 @@ export class ChatPanel implements vscode.WebviewViewProvider {
                     const text = summarizeToolResult(name, result);
                     this.post({ type: 'toolResult', text });
                     // Record the ⏺ action + ⎿ result together in the persisted transcript.
-                    this.appendTranscript({ kind: 'tool', action: this.lastToolAction || name, result: text, at: new Date().toISOString() });
+                    this.appendTranscript({
+                      kind: 'tool',
+                      action: this.lastToolAction || name,
+                      result: text,
+                      at: new Date().toISOString()
+                    });
                   }
                 }
               : undefined,
+            onRetry: (info) => {
+              // Transient failure being retried — show it on the status line instead of dying.
+              this.post({
+                type: 'retry',
+                text: `${info.reason} — retrying in ${Math.ceil(info.delayMs / 1000)}s (attempt ${info.attempt}/${info.maxAttempts})…`
+              });
+            },
             onUsage: (usage) => {
               turnTokens += usage.total;
               this.sessionTokens += usage.total;
@@ -807,10 +833,14 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         const rawContent = response.message.content;
         const done = /<DONE>/i.test(rawContent);
         let cleaned = rawContent.replace(/<DONE>/gi, '').trimEnd();
-        const madeProgress = cleaned.trim().length > 0 || stepActions.length > 0;
+        // Reasoning counts as progress: with extended thinking on, a step can be
+        // thinking-only — that is the model working, not a stall.
+        const thinkingLen = response.message.thinking?.trim().length ?? 0;
+        const madeProgress = cleaned.trim().length > 0 || stepActions.length > 0 || thinkingLen > 0;
         dbg('turn', 'send complete', {
           auto,
           contentChars: cleaned.length,
+          thinkingChars: thinkingLen,
           toolActions: stepActions.length,
           madeProgress,
           done,
@@ -818,6 +848,15 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         });
 
         if (!madeProgress) {
+          // A truly empty step is often a transient hiccup, not completion — nudge once
+          // before giving up (the model keeps its tools; see the agent system prompt).
+          if (canAutoContinue && !nudged && !this.abortController.signal.aborted) {
+            nudged = true;
+            auto += 1;
+            continuation =
+              'Your previous reply was empty. Continue with the task — call a tool or reply with text. If it is already fully complete, reply with <DONE>.';
+            continue;
+          }
           // Empty response with no tool actions: don't render a blank bubble or keep looping.
           const note = canAutoContinue
             ? '⏸ Stopped: the model returned an empty response and took no actions. Try rephrasing, switching models, or another mode.'
@@ -832,13 +871,16 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         // If the model worked through tools but didn't narrate, persist a summary of what it did
         // so the conversation and exports aren't blank (Claude-Code-style activity log).
         const hadNarration = cleaned.trim().length > 0;
+        const thinkingOnly = !hadNarration && stepActions.length === 0 && thinkingLen > 0;
         if (!cleaned.trim()) {
           cleaned = stepActions.map((a) => `⏺ ${a}`).join('\n');
         }
         this.history.push({ ...response.message, content: cleaned, model: agentId });
-        // Only record an assistant entry when there was real prose. With no narration the
-        // tool/fileEdit entries already represent this step in the transcript (no duplication).
-        if (hadNarration) {
+        // Record an assistant entry when there was real prose — or when the step was
+        // thinking-only, so the streamed 💭 panel survives the post-turn re-render.
+        // With tool actions and no narration, the tool/fileEdit entries already
+        // represent this step in the transcript (no duplication).
+        if (hadNarration || thinkingOnly) {
           this.appendTranscript({
             kind: 'assistant',
             text: cleaned,
@@ -914,7 +956,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     } else if (this.mode !== 'chat') {
       const fullAccess = this.mode === 'full';
       modeNote =
-        'You are an autonomous coding agent in VS Code. Keep working — read files (use read_file start_line/end_line for large files), search, edit (use edit_file for precise changes to existing files, write_file for new ones), and run commands — until the user\'s request is FULLY complete. Do not stop to ask whether to continue or wait for confirmation.\n\n' +
+        "You are an autonomous coding agent in VS Code. Keep working — read files (use read_file start_line/end_line for large files), search, edit (use edit_file for precise changes to existing files, write_file for new ones), and run commands — until the user's request is FULLY complete. Do not stop to ask whether to continue or wait for confirmation.\n\n" +
         'You are NOT limited to a single interaction or a fixed number of steps — you will be re-invoked automatically to continue, so never apologize about "running out of time", "this interaction/run", or "running out of steps"; just keep going. Your tools (read_file, edit_file, write_file, run_command, etc.) are ALWAYS available — NEVER claim that "the tool interface is unavailable", that tools "stopped responding", or that you "cannot continue in this run". If you want to act, simply call the tool. If earlier tool outputs in the conversation were trimmed to a short placeholder to save context, that is normal — just re-read the file or re-run the search; it does not mean anything is broken.\n\n' +
         'Use run_command to make the environment work for you. If a required dependency, package, or CLI tool is missing (e.g. pytest, numpy, a linter, a formatter, a build tool), INSTALL IT YOURSELF with the appropriate command (`pip install …`, `npm install …`, `npm i -D …`, etc.) and continue — never report a missing dependency as a blocker or ask the user to install it when you can install it yourself. When the user says "install those tools" or similar, they mean install the missing packages/CLIs via the shell — do it. ' +
         (fullAccess
@@ -1085,8 +1127,14 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       return;
     }
 
-    const FRAMES = { label: 'Sample frames (visual)', detail: 'Extract frames and send them as images to a vision model' };
-    const AUDIO = { label: 'Extract audio (spoken)', detail: 'Send the audio track for transcription/understanding (OpenAI/Google)' };
+    const FRAMES = {
+      label: 'Sample frames (visual)',
+      detail: 'Extract frames and send them as images to a vision model'
+    };
+    const AUDIO = {
+      label: 'Extract audio (spoken)',
+      detail: 'Send the audio track for transcription/understanding (OpenAI/Google)'
+    };
     const BOTH = { label: 'Both frames and audio', detail: 'Visual frames plus the audio track' };
     const pick = await vscode.window.showQuickPick([FRAMES, AUDIO, BOTH], {
       title: `Attach "${label}" as…`,
@@ -1162,7 +1210,12 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       this.attachments.push({ id, label, kind: 'image', image: { label, dataUri } });
     } else if (mime === 'application/pdf') {
       const label = name && name.trim() ? name.trim() : `pasted-${this.attachments.length + 1}.pdf`;
-      this.attachments.push({ id, label, kind: 'document', document: { filename: label, mimeType: 'application/pdf', base64 } });
+      this.attachments.push({
+        id,
+        label,
+        kind: 'document',
+        document: { filename: label, mimeType: 'application/pdf', base64 }
+      });
     } else if (audioFormat) {
       const label = name && name.trim() ? name.trim() : `pasted-${this.attachments.length + 1}.${audioFormat}`;
       this.attachments.push({ id, label, kind: 'audio', audio: { label, format: audioFormat, base64 } });
@@ -1203,7 +1256,10 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       return;
     }
     const ALL = { label: 'Summarize everything', detail: 'Replace the whole conversation with one summary' };
-    const KEEP = { label: 'Summarize older, keep recent', detail: 'Summarize all but the last few messages (kept verbatim)' };
+    const KEEP = {
+      label: 'Summarize older, keep recent',
+      detail: 'Summarize all but the last few messages (kept verbatim)'
+    };
     const pick = await vscode.window.showQuickPick([KEEP, ALL], {
       title: 'Parley: compact conversation',
       placeHolder: 'Compaction is lossy — it replaces history with a summary'
@@ -1323,7 +1379,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       }
       items.push({
         label: s.title || 'Conversation',
-        description: `${new Date(s.savedAt).toLocaleString()} · ${(s.transcript?.length ?? s.history.length)} events (memory)`,
+        description: `${new Date(s.savedAt).toLocaleString()} · ${s.transcript?.length ?? s.history.length} events (memory)`,
         source: 'session',
         index
       });
@@ -1417,7 +1473,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
           : transcriptToMarkdown(meta, this.transcript);
     await vscode.workspace.fs.writeFile(uri, Buffer.from(content, 'utf8'));
     await vscode.commands.executeCommand('vscode.open', uri);
-    void vscode.window.showInformationMessage(`Parley conversation exported to ${vscode.workspace.asRelativePath(uri)}.`);
+    void vscode.window.showInformationMessage(
+      `Parley conversation exported to ${vscode.workspace.asRelativePath(uri)}.`
+    );
   }
 
   /** Tool runner for agent mode: read tools delegate to the read-only runner; writes/commands need UI + checkpoints. */
@@ -1451,7 +1509,11 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       return 'Error: arguments were not valid JSON.';
     }
     const s = this.getSettings();
-    return webSearch(query, { provider: s.webSearchProvider, apiKey: s.webSearchApiKey, googleCx: s.webSearchGoogleCx });
+    return webSearch(query, {
+      provider: s.webSearchProvider,
+      apiKey: s.webSearchApiKey,
+      googleCx: s.webSearchGoogleCx
+    });
   }
 
   /** Render the agent's task checklist in the chat (Claude-Code / Codex style). */
@@ -1562,7 +1624,12 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   }
 
   /** Apply a proposed file change: auto in edit/auto/full modes, diff-approval otherwise. Always checkpointed. */
-  private async applyProposedEdit(uri: vscode.Uri, rel: string, original: string, proposedText: string): Promise<string> {
+  private async applyProposedEdit(
+    uri: vscode.Uri,
+    rel: string,
+    original: string,
+    proposedText: string
+  ): Promise<string> {
     if (this.mode === 'edit' || this.mode === 'auto' || this.mode === 'full') {
       await this.checkpoints.applyWithCheckpoint(uri, proposedText, `edit ${rel}`);
       this.postFileEdit(rel, original, proposedText);
@@ -1617,7 +1684,16 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     const rows = diff.rows.length > MAX_ROWS ? diff.rows.slice(0, MAX_ROWS) : diff.rows;
     const truncated = diff.rows.length > MAX_ROWS;
     const isNew = change.originalText.length === 0;
-    this.post({ type: 'proposedChange', id, path: rel, isNew, added: diff.added, removed: diff.removed, rows, truncated });
+    this.post({
+      type: 'proposedChange',
+      id,
+      path: rel,
+      isNew,
+      added: diff.added,
+      removed: diff.removed,
+      rows,
+      truncated
+    });
     this.appendTranscript({
       kind: 'fileEdit',
       id,
@@ -1645,6 +1721,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private async applyPendingChange(id: string): Promise<void> {
     const change = this.pendingChanges.get(id);
     if (!change) {
+      // No longer pending (already resolved, or the extension reloaded and lost it) —
+      // resolve the card anyway so no dead Apply button lingers in the webview.
+      this.post({ type: 'changeResolved', id, status: 'dismissed' });
       return;
     }
     this.pendingChanges.delete(id);
@@ -1735,7 +1814,14 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     if (/(?:^|\s)@git\b/i.test(prompt)) {
       const diff = await runShellCommand('git --no-pager diff HEAD', root.fsPath, 15000);
       const content = (diff && diff !== '(no output)' ? diff : 'No uncommitted changes.').slice(0, cap);
-      out.push({ id: 'mention-git', kind: 'user-file', label: '@git (uncommitted diff)', content, characterCount: content.length, truncated: diff.length > content.length });
+      out.push({
+        id: 'mention-git',
+        kind: 'user-file',
+        label: '@git (uncommitted diff)',
+        content,
+        characterCount: content.length,
+        truncated: diff.length > content.length
+      });
     }
 
     // @<url> — fetch the page text.
@@ -1743,7 +1829,14 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       const url = m[1].replace(/[)\].,;]+$/, '');
       const text = await runAgentTool({ id: '', name: 'fetch_url', arguments: JSON.stringify({ url }) });
       const content = text.slice(0, cap);
-      out.push({ id: `mention-url-${url}`, kind: 'user-file', label: `@${url}`, content, characterCount: content.length, truncated: text.length > content.length });
+      out.push({
+        id: `mention-url-${url}`,
+        kind: 'user-file',
+        label: `@${url}`,
+        content,
+        characterCount: content.length,
+        truncated: text.length > content.length
+      });
     }
 
     // @path — a file's contents, or a folder's listing.
@@ -1766,7 +1859,14 @@ export class ChatPanel implements vscode.WebviewViewProvider {
               .filter((r) => !isSensitiveFile(r))
               .join('\n') || '(empty)';
           const content = listing.slice(0, cap);
-          out.push({ id: `mention-dir-${rel}`, kind: 'user-file', label: `@${rel}/ (folder)`, content, characterCount: content.length, truncated: listing.length > content.length });
+          out.push({
+            id: `mention-dir-${rel}`,
+            kind: 'user-file',
+            label: `@${rel}/ (folder)`,
+            content,
+            characterCount: content.length,
+            truncated: listing.length > content.length
+          });
           continue;
         }
         const raw = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
@@ -1936,7 +2036,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       const ids = new Set(this.agents.map((agent) => agent.id));
       if (!this.selectedAgentId || !ids.has(this.selectedAgentId)) {
         const preferred = this.getSettings().defaultAgent;
-        this.selectedAgentId = ids.has(preferred) ? preferred : this.agents[0]?.id ?? preferred;
+        this.selectedAgentId = ids.has(preferred) ? preferred : (this.agents[0]?.id ?? preferred);
       }
     } catch (error) {
       this.logger.warn(error instanceof Error ? error.message : 'Failed to list Parley agents.');
@@ -1980,7 +2080,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private getHtml(webview: vscode.Webview): string {
     const nonce = getNonce();
     const mediaRoot = vscode.Uri.joinPath(this.extensionUri, 'media');
-    const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot, 'chat.js'));
+    // The webview script is bundled (media/chat.js + markdown-it + highlight.js → dist/webview.js).
+    const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'dist', 'webview.js'));
     const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot, 'chat.css'));
     const csp = [
       "default-src 'none'",
@@ -2013,7 +2114,10 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       <button id="refresh" title="Refresh model list" aria-label="Refresh model list">↻</button>
     </div>
     <div id="banner" class="banner"></div>
-    <div id="history" class="history"><div class="empty">Ask Parley about your code.</div></div>
+    <div class="histwrap">
+      <div id="history" class="history"><div class="empty">Ask Parley about your code.</div></div>
+      <button id="jump" type="button" title="Jump to latest" aria-label="Jump to latest">↓</button>
+    </div>
     <div id="status" class="status" style="display:none"></div>
     <form id="composer" class="composer">
       <details class="ctx-wrap">
@@ -2101,7 +2205,9 @@ function historyToTranscript(history: readonly ChatMessage[]): TranscriptEntry[]
 }
 
 function normalizeMode(value: string | undefined): ChatMode {
-  return value === 'ask' || value === 'edit' || value === 'plan' || value === 'auto' || value === 'full' ? value : 'chat';
+  return value === 'ask' || value === 'edit' || value === 'plan' || value === 'auto' || value === 'full'
+    ? value
+    : 'chat';
 }
 
 /** Heuristic: model families on Parley that accept image input. */
@@ -2114,7 +2220,10 @@ function isLikelyVisionModel(model: string): boolean {
  * Returns the new text, `undefined` if no match, or `''` if the match is ambiguous.
  */
 function replaceByTrimmedLines(original: string, oldText: string, newText: string): string | undefined | '' {
-  const oldLines = oldText.replace(/\r/g, '').split('\n').map((l) => l.trim());
+  const oldLines = oldText
+    .replace(/\r/g, '')
+    .split('\n')
+    .map((l) => l.trim());
   while (oldLines.length && oldLines[0] === '') {
     oldLines.shift();
   }
@@ -2147,7 +2256,11 @@ function replaceByTrimmedLines(original: string, oldText: string, newText: strin
     return '';
   }
   const at = matches[0];
-  const replaced = [...fileLines.slice(0, at), ...newText.replace(/\r/g, '').split('\n'), ...fileLines.slice(at + oldLines.length)];
+  const replaced = [
+    ...fileLines.slice(0, at),
+    ...newText.replace(/\r/g, '').split('\n'),
+    ...fileLines.slice(at + oldLines.length)
+  ];
   return replaced.join('\n');
 }
 
@@ -2187,28 +2300,34 @@ function runShellCommand(
   signal?: AbortSignal
 ): Promise<string> {
   return new Promise((resolve) => {
-    exec(command, { cwd, timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024, windowsHide: true, signal }, (error, stdout, stderr) => {
-      if (error && (error as { name?: string }).name === 'AbortError') {
-        resolve('Command was stopped by the user.');
-        return;
+    exec(
+      command,
+      { cwd, timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024, windowsHide: true, signal },
+      (error, stdout, stderr) => {
+        if (error && (error as { name?: string }).name === 'AbortError') {
+          resolve('Command was stopped by the user.');
+          return;
+        }
+        const out = `${stdout ?? ''}${stderr ? `\n[stderr]\n${stderr}` : ''}`.trim();
+        // Keep head + tail with an explicit marker — for command output the tail
+        // (the actual error) matters most, so never cut it off silently.
+        const body = clampMiddle(out, 16000);
+        // exec kills on timeout with SIGTERM and sets error.killed — tell the model so it can retry/split.
+        if (error && (error as { killed?: boolean }).killed && (error as { signal?: string }).signal) {
+          const secs = Math.round(timeoutMs / 1000);
+          resolve(
+            `[Command exceeded the ${secs}s timeout and was terminated. If it legitimately needs longer (e.g. a big install/build), raise "parley.commandTimeoutSeconds" or split it into smaller steps.]` +
+              (body ? `\n\nPartial output:\n${body}` : '')
+          );
+          return;
+        }
+        if (error && !out) {
+          resolve(`Command failed: ${error.message}`);
+        } else {
+          resolve(body || '(no output)');
+        }
       }
-      const out = `${stdout ?? ''}${stderr ? `\n[stderr]\n${stderr}` : ''}`.trim();
-      const body = out.length > 8000 ? `${out.slice(0, 8000)}\n[truncated]` : out;
-      // exec kills on timeout with SIGTERM and sets error.killed — tell the model so it can retry/split.
-      if (error && (error as { killed?: boolean }).killed && (error as { signal?: string }).signal) {
-        const secs = Math.round(timeoutMs / 1000);
-        resolve(
-          `[Command exceeded the ${secs}s timeout and was terminated. If it legitimately needs longer (e.g. a big install/build), raise "parley.commandTimeoutSeconds" or split it into smaller steps.]` +
-            (body ? `\n\nPartial output:\n${body}` : '')
-        );
-        return;
-      }
-      if (error && !out) {
-        resolve(`Command failed: ${error.message}`);
-      } else {
-        resolve(body || '(no output)');
-      }
-    });
+    );
   });
 }
 

@@ -91,7 +91,11 @@ export class McpManager {
     const result = (await this.rpc(name, 'tools/list', {})) as { tools?: McpTool[] };
     server.tools = Array.isArray(result?.tools) ? result.tools : [];
     this.logger.info(`MCP "${name}" ready: ${server.tools.length} tool(s).`);
-    dbg('mcp', `ready ${name}`, server.tools.map((t) => t.name));
+    dbg(
+      'mcp',
+      `ready ${name}`,
+      server.tools.map((t) => t.name)
+    );
   }
 
   private onData(name: string, chunk: string): void {
@@ -122,6 +126,13 @@ export class McpManager {
         } else {
           pending.resolve(msg.result);
         }
+      } else if (typeof msg.id === 'number') {
+        // A response for a request we no longer track — typically one that already
+        // timed out. Log it instead of dropping it silently (helps diagnose slow servers).
+        this.logger.warn(
+          `MCP ${name}: dropped a late/unmatched response (id ${msg.id}) — the call likely timed out earlier.`
+        );
+        dbg('mcp', 'late/unmatched response', { server: name, id: msg.id });
       }
     }
   }

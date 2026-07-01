@@ -109,7 +109,10 @@ past conversations, **⊟** compact, **⤓** export, **↻** refresh model list.
   **📎** attach button.
 
 **While the agent works** a pulsing **status line** shows what it's doing, the
-elapsed time, and a live token count.
+elapsed time, and a live token count. **Scrolling up pauses autoscroll** so you can
+read earlier messages while output streams; a floating **↓** pill jumps back to the
+latest. Replies render as full Markdown with **syntax-highlighted code blocks**
+(colors follow your VS Code theme).
 
 ---
 
@@ -174,6 +177,15 @@ flow; the heavier agent modes apply through tools instead.
 
 After a turn, a **"✏️ Changed N files"** summary lists what was edited. **Stop**
 aborts in‑flight work *and kills a running command*.
+
+**Resilience.** Transient failures — rate limits (429), upstream/server errors (5xx),
+network blips, mid‑stream errors — are **retried automatically** (up to 3 times, with
+backoff and `Retry-After` support) instead of killing the task; the status line shows
+e.g. `Rate-limited — retrying in 2s (attempt 2/4)…`. Retries only happen while nothing
+has streamed yet, so output is never duplicated. Long tool output is truncated
+**honestly**: head + tail are kept around an explicit `[… N characters omitted …]`
+marker, so the model sees the end of a command's output (where the error lives) and
+knows exactly what was cut.
 
 ---
 
@@ -568,12 +580,14 @@ npm run test:integration  # launches VS Code (needs a display; CI uses xvfb)
 npm run package           # @vscode/vsce -> parley-vscode-<version>.vsix
 ```
 
-The extension is **bundled with esbuild** into a single `dist/extension.js`, so the
-VSIX is tiny (~100 KB) and platform‑agnostic — no `node_modules` is shipped. The one
-optional runtime dependency (`@xenova/transformers`, for the local semantic
-`@codebase` index) is **not** in the package; it's installed on demand into global
-storage the first time you build the index. Press **F5** for an Extension Development
-Host (run `npm run watch` alongside to keep `dist/` fresh).
+The extension is **bundled with esbuild** into two files: `dist/extension.js` (the
+extension host code) and `dist/webview.js` (the chat UI — `media/chat.js` plus
+`markdown-it` and `highlight.js`), so the VSIX stays small (~350 KB) and
+platform‑agnostic — no `node_modules` is shipped. The one optional runtime dependency
+(`@xenova/transformers`, for the local semantic `@codebase` index) is **not** in the
+package; it's installed on demand into global storage the first time you build the
+index. Press **F5** for an Extension Development Host (run `npm run watch` alongside
+to keep `dist/` fresh).
 
 CI (GitHub Actions) typechecks, unit‑tests, bundles/packages, and runs VS Code
 integration tests on every push to `main` (Node 22); a `vX.Y.Z` tag publishes a GitHub
@@ -587,8 +601,11 @@ Marketplace / Open VSX).
 - `src/parley/ParleyClient.ts` — the client (chat + streaming + tool loop,
   `/models`, `/chat/completions`, `/images/generations`, `/files`,
   `/messages/count_tokens`, `/accounts/{id}/usage`) behind the `ParleyProvider` interface.
+- `src/parley/retry.ts` / `src/parley/clampText.ts` — transient-failure retry policy
+  and honest head+tail truncation of tool results.
 - `src/parley/tools.ts` — agent tool definitions.
-- `src/webview/ChatPanel.ts` + `media/` — the chat UI, agent loop, attachments, mentions.
+- `src/webview/ChatPanel.ts` + `media/` — the chat UI, agent loop, attachments,
+  mentions (`media/chat.js` is bundled with markdown-it + highlight.js into `dist/webview.js`).
 - `src/mcp/` — MCP stdio client + tool‑name mapping.
 - `src/codebase/` — lexical ranking + the optional local embedding index.
 - `src/web/webSearch.ts` — web‑search providers.

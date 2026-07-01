@@ -167,7 +167,11 @@ export class ParleyAuthRequiredError extends Error {
 export class ParleyApiError extends Error {
   public constructor(
     public readonly status: number,
-    message: string
+    message: string,
+    /** Whether the failure is transient (rate limit, 5xx, network blip) and safe to retry. */
+    public readonly retryable: boolean = false,
+    /** Server-requested wait (`Retry-After`) in seconds, when provided. */
+    public readonly retryAfterSeconds?: number
   ) {
     super(message);
     this.name = 'ParleyApiError';

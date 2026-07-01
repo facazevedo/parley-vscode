@@ -21,7 +21,12 @@ button:disabled { opacity: 0.5; cursor: default; }
 .banner button { margin-top: 6px; color: var(--vscode-button-foreground); background: var(--vscode-button-background); border: 0; padding: 4px 9px; border-radius: 4px; cursor: pointer; }
 
 /* Conversation */
+.histwrap { position: relative; flex: 1; display: flex; min-height: 0; }
 .history { flex: 1; overflow: auto; padding: 16px 12px 8px; display: flex; flex-direction: column; gap: 16px; }
+/* "Jump to latest" pill, shown when the user scrolls up while output streams */
+#jump { position: absolute; right: 16px; bottom: 10px; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--vscode-editorWidget-border, rgba(127, 127, 127, 0.4)); background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background)); color: var(--vscode-foreground); cursor: pointer; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); display: none; align-items: center; justify-content: center; padding: 0; line-height: 1; }
+#jump.show { display: inline-flex; }
+#jump:hover { background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.2)); }
 .message { overflow-wrap: anywhere; max-width: 100%; }
 .message.user {
   position: relative;
@@ -55,7 +60,11 @@ button:disabled { opacity: 0.5; cursor: default; }
 .msgcopy:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.25)); }
 .msgcopy.copied { opacity: 1; color: var(--vscode-charts-green, #3fb950); }
 .message.assistant { align-self: stretch; }
-.content { line-height: 1.55; white-space: pre-wrap; }
+/* Rendered Markdown (markdown-it) supplies its own block structure — normal whitespace here;
+   streamed plain-text segments (.seg), tool lines, and thinking keep pre-wrap below. */
+.content { line-height: 1.55; }
+.content p { margin: 0 0 8px; }
+.content p:last-child { margin-bottom: 0; }
 .content pre { position: relative; background: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.15)); padding: 10px 12px; border-radius: 8px; overflow-x: auto; white-space: pre; margin: 8px 0; }
 .content code { font-family: var(--vscode-editor-font-family, monospace); font-size: 0.9em; background: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.18)); padding: 1px 5px; border-radius: 5px; }
 .content pre code { background: none; padding: 0; font-size: 0.86em; }
@@ -76,6 +85,18 @@ button:disabled { opacity: 0.5; cursor: default; }
 .content pre:hover .copy { opacity: 0.9; }
 .content pre .copy:hover { opacity: 1; }
 .meta { font-size: 0.78em; color: var(--vscode-descriptionForeground); opacity: 0.75; margin-top: 6px; }
+
+/* Syntax highlighting (highlight.js) — terminal ANSI palette so colors track the theme */
+.hljs-comment, .hljs-quote { color: var(--vscode-descriptionForeground); font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-doctag, .hljs-template-tag { color: var(--vscode-terminal-ansiMagenta, #c678dd); }
+.hljs-string, .hljs-regexp, .hljs-addition, .hljs-char.escape_ { color: var(--vscode-terminal-ansiGreen, #98c379); }
+.hljs-number, .hljs-symbol, .hljs-bullet, .hljs-meta, .hljs-link { color: var(--vscode-terminal-ansiYellow, #d19a66); }
+.hljs-title, .hljs-title.function_, .hljs-section, .hljs-name { color: var(--vscode-terminal-ansiBlue, #61afef); }
+.hljs-title.class_, .hljs-type, .hljs-built_in { color: var(--vscode-terminal-ansiCyan, #56b6c2); }
+.hljs-attr, .hljs-attribute, .hljs-variable, .hljs-template-variable, .hljs-selector-attr, .hljs-selector-class, .hljs-selector-id { color: var(--vscode-terminal-ansiRed, #e06c75); }
+.hljs-deletion { color: var(--vscode-errorForeground, #f85149); }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 600; }
 .toollog { margin-bottom: 6px; }
 .content .seg { white-space: pre-wrap; }
 .content .seg:empty { display: none; }

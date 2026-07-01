@@ -1,6 +1,16 @@
 import type { Logger } from '../logging/logger';
 import { renderPromptWithContext } from '../context/renderPromptWithContext';
 import { extractProposedChanges } from '../diff/extractChanges';
+import { clampToolResult } from './clampText';
+import {
+  MAX_ATTEMPTS,
+  isRetryableError,
+  isRetryableStatus,
+  parseRetryAfter,
+  retryDelayMs,
+  retryReason,
+  sleepWithAbort
+} from './retry';
 import { cleanCompletion, isContextLengthError, parseUsage } from './parsing';
 import { buildThinkingRequest, type ThinkingConfig } from './thinking';
 import { documentProviderFor } from './files';
@@ -42,7 +52,6 @@ const COMPLETION_SYSTEM =
   '<CURSOR> marker so it continues naturally and stays syntactically valid. No explanations, no ' +
   'Markdown fences, no repetition of the surrounding code.';
 
-const MAX_TOOL_RESULT_CHARS = 8000;
 const DEFAULT_MAX_TOOL_ROUNDS = 50;
 
 interface OpenAiMessage {
@@ -117,8 +126,10 @@ export class ParleyClient implements ParleyProvider {
     const payload = (await response.json()) as OpenAiModelList;
 
     const agents: AgentInfo[] = (payload.data ?? [])
-      .filter((model): model is { id: string; name?: string; owned_by?: string } =>
-        typeof model.id === 'string' && model.id.length > 0)
+      .filter(
+        (model): model is { id: string; name?: string; owned_by?: string } =>
+          typeof model.id === 'string' && model.id.length > 0
+      )
       .map((model) => ({
         id: model.id,
         label: model.name ?? model.id,
@@ -272,7 +283,9 @@ export class ParleyClient implements ParleyProvider {
           uploadedIds.push(fileId);
           continue;
         } catch (error) {
-          this.logger.warn(`File upload failed for ${doc.filename}: ${error instanceof Error ? error.message : 'error'}`);
+          this.logger.warn(
+            `File upload failed for ${doc.filename}: ${error instanceof Error ? error.message : 'error'}`
+          );
         }
       }
       parts.push({ type: 'document', source: { type: 'base64', media_type: doc.mimeType, data: doc.base64 } });
@@ -292,7 +305,11 @@ export class ParleyClient implements ParleyProvider {
   }
 
   /** Upload a document to `/v1/files` for the given provider and return its Parley file id. */
-  private async uploadFile(doc: DocumentAttachment, provider: 'openai' | 'google', signal?: AbortSignal): Promise<string> {
+  private async uploadFile(
+    doc: DocumentAttachment,
+    provider: 'openai' | 'google',
+    signal?: AbortSignal
+  ): Promise<string> {
     const bytes = Buffer.from(doc.base64, 'base64');
     const form = new FormData();
     form.append('file', new Blob([bytes], { type: doc.mimeType }), doc.filename);
@@ -385,6 +402,40 @@ export class ParleyClient implements ParleyProvider {
     await this.auth.clear();
   }
 
+  /**
+   * Run one streaming attempt, automatically retrying transient failures
+   * (rate limit, upstream 5xx, network blip, mid-stream error event) with
+   * exponential backoff — but only while `markEmitted` has not been called,
+   * i.e. nothing has reached the UI yet, so a retry can never duplicate output.
+   */
+  private async withRetry<T>(
+    options: SendMessageOptions | undefined,
+    attemptFn: (markEmitted: () => void) => Promise<T>
+  ): Promise<T> {
+    for (let attempt = 1; ; attempt += 1) {
+      let emitted = false;
+      try {
+        return await attemptFn(() => {
+          emitted = true;
+        });
+      } catch (error) {
+        const canRetry = isRetryableError(error) && !emitted && attempt < MAX_ATTEMPTS && !options?.signal?.aborted;
+        if (!canRetry) {
+          throw error;
+        }
+        const retryAfter = error instanceof ParleyApiError ? error.retryAfterSeconds : undefined;
+        const delayMs = retryDelayMs(attempt, retryAfter);
+        const reason = retryReason(error);
+        this.logger.warn(
+          `${reason} — retrying in ${(delayMs / 1000).toFixed(1)}s (attempt ${attempt + 1}/${MAX_ATTEMPTS}).`
+        );
+        dbg('retry', reason, { attempt: attempt + 1, maxAttempts: MAX_ATTEMPTS, delayMs });
+        options?.onRetry?.({ attempt: attempt + 1, maxAttempts: MAX_ATTEMPTS, delayMs, reason });
+        await sleepWithAbort(delayMs, options?.signal);
+      }
+    }
+  }
+
   private async singleCompletion(
     messages: OpenAiMessage[],
     model: string,
@@ -399,35 +450,41 @@ export class ParleyClient implements ParleyProvider {
     if (stream) {
       payload.stream_options = { include_usage: true };
     }
-    const response = await this.request('/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      signal: options?.signal
-    });
+    return this.withRetry(options, async (markEmitted) => {
+      const response = await this.request('/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: options?.signal
+      });
 
-    if (stream) {
-      const streamed = await this.readStream(response, options?.onToken, options?.onThinking);
-      if (streamed.usage) {
-        options?.onUsage?.(streamed.usage);
+      if (stream) {
+        const streamed = await this.readStream(
+          response,
+          options?.onToken ? (delta) => (markEmitted(), options.onToken!(delta)) : undefined,
+          options?.onThinking ? (delta) => (markEmitted(), options.onThinking!(delta)) : undefined
+        );
+        if (streamed.usage) {
+          options?.onUsage?.(streamed.usage);
+        }
+        return streamed;
       }
-      return streamed;
-    }
-    const json = await response.json();
-    const usage = parseUsage(json);
-    if (usage) {
-      options?.onUsage?.(usage);
-    }
-    const message = (json as { choices?: Array<{ message?: ChatCompletionMessage }> }).choices?.[0]?.message;
-    if (message?.thinking) {
-      options?.onThinking?.(message.thinking);
-    }
-    return {
-      content: this.extractContent(json),
-      usage,
-      thinking: message?.thinking,
-      thinkingSignature: message?.thinking_signature
-    };
+      const json = await response.json();
+      const usage = parseUsage(json);
+      if (usage) {
+        options?.onUsage?.(usage);
+      }
+      const message = (json as { choices?: Array<{ message?: ChatCompletionMessage }> }).choices?.[0]?.message;
+      if (message?.thinking) {
+        options?.onThinking?.(message.thinking);
+      }
+      return {
+        content: this.extractContent(json),
+        usage,
+        thinking: message?.thinking,
+        thinkingSignature: message?.thinking_signature
+      };
+    });
   }
 
   /** Run the OpenAI tool-calling loop until the model answers or rounds run out. */
@@ -455,17 +512,26 @@ export class ParleyClient implements ParleyProvider {
         stream_options: { include_usage: true }
       };
       this.applyExtras(roundPayload, model, thinking, responseFormat, serviceTier);
-      const response = await this.request('/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(roundPayload),
-        signal: options.signal
-      });
 
       // Stream this round live: narration tokens go to onToken; tool calls are
       // reassembled from the streamed deltas. This is what makes the agent's
-      // activity appear token-by-token (Claude-Code style).
-      const result = await this.streamRound(response, options.onToken, options.onUsage, options.onThinking);
+      // activity appear token-by-token (Claude-Code style). Transient failures
+      // are retried as long as nothing from this round reached the UI or the
+      // token counters (tools only run after the round streams cleanly).
+      const result = await this.withRetry(options, async (markEmitted) => {
+        const response = await this.request('/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(roundPayload),
+          signal: options.signal
+        });
+        return this.streamRound(
+          response,
+          options.onToken ? (delta) => (markEmitted(), options.onToken!(delta)) : undefined,
+          options.onUsage ? (usage) => (markEmitted(), options.onUsage!(usage)) : undefined,
+          options.onThinking ? (delta) => (markEmitted(), options.onThinking!(delta)) : undefined
+        );
+      });
       lastResult = result;
       if (result.usage) {
         lastUsage = result.usage;
@@ -502,7 +568,9 @@ export class ParleyClient implements ParleyProvider {
         }
         dbg('tool', `result ${tc.name}`, { chars: toolResult.length });
         options.onToolResult?.(tc.name, toolResult);
-        convo.push({ role: 'tool', tool_call_id: tc.id, content: toolResult.slice(0, MAX_TOOL_RESULT_CHARS) });
+        // Clamp long results keeping head + tail with an explicit omission marker,
+        // so the model knows output was cut instead of reasoning over a silent gap.
+        convo.push({ role: 'tool', tool_call_id: tc.id, content: clampToolResult(tc.name, toolResult) });
       }
     }
 
@@ -605,11 +673,12 @@ export class ParleyClient implements ParleyProvider {
             continue;
           }
           // Parley reports mid-stream failures as an SSE error event before [DONE].
-          // Surface it instead of silently finishing with empty content.
+          // Surface it instead of silently finishing with empty content. Marked
+          // retryable — withRetry only re-attempts if nothing was emitted yet.
           if (parsed.error) {
-            const detail = typeof parsed.error === 'string' ? parsed.error : parsed.error.message ?? 'unknown error';
+            const detail = typeof parsed.error === 'string' ? parsed.error : (parsed.error.message ?? 'unknown error');
             dbg('stream', 'error event', detail);
-            throw new ParleyApiError(0, `Parley stream error: ${detail}`);
+            throw new ParleyApiError(0, `Parley stream error: ${detail}`, true);
           }
           const finish = parsed.choices?.[0]?.finish_reason;
           if (finish) {
@@ -770,7 +839,7 @@ export class ParleyClient implements ParleyProvider {
           const parsed = this.parseChunk(data);
           if (parsed.error) {
             dbg('stream', 'error event', parsed.error);
-            throw new ParleyApiError(0, `Parley stream error: ${parsed.error}`);
+            throw new ParleyApiError(0, `Parley stream error: ${parsed.error}`, true);
           }
           if (parsed.usage) {
             usage = parsed.usage;
@@ -813,7 +882,10 @@ export class ParleyClient implements ParleyProvider {
         error?: { message?: string } | string;
       };
       if (parsed.error) {
-        return { delta: '', error: typeof parsed.error === 'string' ? parsed.error : parsed.error.message ?? 'unknown error' };
+        return {
+          delta: '',
+          error: typeof parsed.error === 'string' ? parsed.error : (parsed.error.message ?? 'unknown error')
+        };
       }
       const delta = parsed.choices?.[0]?.delta;
       return {
@@ -847,9 +919,16 @@ export class ParleyClient implements ParleyProvider {
         }
       });
     } catch (error) {
+      if ((error as { name?: string })?.name === 'AbortError') {
+        throw error; // user pressed Stop — never retried, never reported as a network failure
+      }
       const message = error instanceof Error ? error.message : 'network error';
       dbg('request', `network error for ${pathSuffix}`, message);
-      throw new ParleyApiError(0, `Could not reach Parley at ${this.baseUrl} (${message}). Check your network or VPN.`);
+      throw new ParleyApiError(
+        0,
+        `Could not reach Parley at ${this.baseUrl} (${message}). Check your network or VPN.`,
+        true
+      );
     }
 
     // Response metadata is invaluable for diagnosing which provider/model actually handled a request.
@@ -861,7 +940,12 @@ export class ParleyClient implements ParleyProvider {
     });
 
     if (!response.ok) {
-      throw new ParleyApiError(response.status, await this.describeError(response));
+      throw new ParleyApiError(
+        response.status,
+        await this.describeError(response),
+        isRetryableStatus(response.status),
+        parseRetryAfter(response.headers.get('retry-after'))
+      );
     }
 
     return response;
@@ -873,7 +957,7 @@ export class ParleyClient implements ParleyProvider {
       const text = await response.text();
       try {
         const parsed = JSON.parse(text) as { error?: { message?: string } | string };
-        detail = typeof parsed.error === 'string' ? parsed.error : parsed.error?.message ?? text;
+        detail = typeof parsed.error === 'string' ? parsed.error : (parsed.error?.message ?? text);
       } catch {
         detail = text;
       }
@@ -899,4 +983,3 @@ export class ParleyClient implements ParleyProvider {
     return `Parley request failed (HTTP ${response.status})${detail ? `: ${detail.slice(0, 300)}` : ''}.`;
   }
 }
-

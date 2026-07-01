@@ -3,6 +3,8 @@
 node_modules/**
 src/**
 test/**
+media/chat.js
+.parley/**
 out/**
 dist/**/*.map
 docs/**
