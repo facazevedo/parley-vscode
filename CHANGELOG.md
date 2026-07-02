@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.66.0
+
+### Docs
+
+- Added a **four-way comparison table** (Parley vs Cursor, Codex, Claude Code) to the README, grouped by form/backend, agent, context, editor UX, and ecosystem/safety — with a best-effort disclaimer that competitor columns reflect early-2026 documented capabilities. No code changes.
+
 ## 0.65.0
 
 ### Added — outbound secret scanning
