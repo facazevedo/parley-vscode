@@ -806,6 +806,29 @@ button:disabled {
   border-radius: 6px;
   padding: 4px 8px;
 }
+/* Selection-context pill: which editor selection rides along with the next prompt */
+.selinfo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82em;
+  color: var(--vscode-descriptionForeground);
+}
+.selinfo.off {
+  opacity: 0.65;
+}
+.selinfo .seleye {
+  background: transparent;
+  color: inherit;
+  border: 0;
+  padding: 0 2px;
+  line-height: 1;
+  cursor: pointer;
+}
+.selinfo .seleye:hover {
+  background: rgba(127, 127, 127, 0.25);
+  border-radius: 4px;
+}
 .chip {
   display: inline-flex;
   align-items: center;

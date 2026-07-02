@@ -61,6 +61,7 @@ export function buildChatHtml(webview: vscode.Webview, extensionUri: vscode.Uri)
       <div id="editing" class="editing" style="display:none"></div>
       <div id="queued" class="queued"></div>
       <div id="attachments" class="attachments"></div>
+      <div id="selinfo" class="selinfo" style="display:none"></div>
       <div class="inputbox">
         <div id="mentions" class="mentions" style="display:none"></div>
         <div id="slashMenu" class="mentions" style="display:none"></div>
@@ -89,7 +90,7 @@ export function buildChatHtml(webview: vscode.Webview, extensionUri: vscode.Uri)
           </div>
           <div class="mp-foot">Thinking shows the model's reasoning (uses more output tokens). Verified live: it works on <strong>Claude</strong> &amp; <strong>Gemini</strong>; <strong>OpenAI</strong> accepts a reasoning level but Parley doesn't currently apply it. <strong>Fast</strong> requests OpenAI's priority tier (accepted by the gateway; actual ≈1.5× speed depends on your account). Shell commands ask before running — except in <strong>Full access</strong> mode.</div>
         </div>
-        <textarea id="prompt" placeholder="Ask Parley…  (@file to attach · paste or drop an image/PDF/audio · Enter to send · Shift+Enter for newline)"></textarea>
+        <textarea id="prompt" placeholder="Ask Parley…  (@file to attach · paste or drop files · Enter to send · Shift+Enter for newline)"></textarea>
         <div class="actions">
           <select id="agent" class="model" aria-label="Parley model"></select>
           <button type="button" id="modeBtn" class="modebtn" title="Mode &amp; thinking" aria-label="Mode">Chat ▾</button>

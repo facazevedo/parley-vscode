@@ -19,7 +19,8 @@ import type { CheckpointStore } from '../diff/checkpoints';
 import type { Logger } from '../logging/logger';
 import { SYSTEM_PROMPT } from '../parley/ParleyClient';
 import type { ParleyProvider } from '../parley/ParleyProvider';
-import { extractMentionPaths } from '../parley/parsing';
+import { extractMentionPaths, parseMentionRange } from '../parley/parsing';
+import { rankMentionPaths } from '../context/fuzzyScore';
 import { AGENT_TOOLS, READ_ONLY_TOOLS, resolveAcrossRoots, runAgentTool, toolRelPath } from '../parley/tools';
 import { normalizeThinkingLevel, type ThinkingLevel } from '../parley/thinking';
 import { buildChatHtml } from './webviewHtml';
@@ -61,6 +62,14 @@ const RULES_DIRS = ['.parley/rules', '.cursor/rules'];
 // User-defined slash commands: a `name.md` here becomes `/name` whose body is the prompt
 // (with `$ARGS` replaced by anything typed after the command).
 const CUSTOM_COMMAND_DIRS = ['.parley/commands', '.claude/commands'];
+// Non-file mentions surfaced by the @ autocomplete so they are discoverable in the UI
+// (they resolve in resolveMentions, not from the file list).
+const SPECIAL_MENTIONS: ReadonlyArray<{ path: string; hint: string }> = [
+  { path: 'codebase', hint: 'most relevant files for your question' },
+  { path: 'git', hint: 'uncommitted diff vs HEAD' },
+  { path: 'terminal', hint: 'recent terminal commands + output' },
+  { path: 'browser', hint: 'open a URL and attach the rendered page (add the URL after)' }
+];
 
 interface ChatPanelMessage {
   readonly type:
@@ -87,6 +96,10 @@ interface ChatPanelMessage {
     | 'reviewChange'
     | 'unqueue'
     | 'rewind'
+    | 'dropPaths'
+    | 'dropText'
+    | 'dropUnsupported'
+    | 'webviewReady'
     | 'setApiKey';
   readonly prompt?: string;
   readonly agentId?: string;
@@ -101,6 +114,12 @@ interface ChatPanelMessage {
   readonly dataUri?: string;
   readonly name?: string;
   readonly contextOptions?: ContextOptions;
+  /** For 'mentionQuery': echo token so the webview can drop stale results. */
+  readonly seq?: number;
+  /** For 'dropPaths': `text/uri-list` entries from a drag-and-drop. */
+  readonly uris?: string[];
+  /** For 'dropUnsupported': names of files that could not be attached. */
+  readonly names?: string[];
   /** Steering-queue index for 'unqueue'. */
   readonly index?: number;
   /** For 'send': 0-based ordinal of the user message being edited & resent. */
@@ -196,6 +215,13 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private customCommandNames: string[] = []; // user-defined /commands from .parley|.claude/commands
   private embeddingIndex?: EmbeddingIndex; // lazy local semantic index for @codebase
   private attachments: PendingAttachment[] = [];
+  // Workspace file/folder candidates for the @-mention autocomplete (short TTL so
+  // per-keystroke queries don't re-walk the workspace).
+  private mentionCache?: { at: number; files: string[]; dirs: string[] };
+  // Window-global listeners registered by this panel — disposed with a tab chat so
+  // closed tabs don't keep reacting to every selection change for the session.
+  private readonly disposables: vscode.Disposable[] = [];
+  private disposedFlag = false;
   // The chat the user interacted with last (sidebar or a tab) — palette commands target it.
   private static activeInstance?: ChatPanel;
   public static get current(): ChatPanel | undefined {
@@ -217,6 +243,12 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private resolveReady!: () => void;
   private readonly ready = new Promise<void>((resolve) => {
     this.resolveReady = resolve;
+  });
+  // Resolved when the webview PAGE has loaded its script (`ready` only means the
+  // webview was attached — messages posted before the page loads can be dropped).
+  private resolvePageReady!: () => void;
+  private readonly pageReady = new Promise<void>((resolve) => {
+    this.resolvePageReady = resolve;
   });
 
   public constructor(
@@ -305,6 +337,10 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     this.sessionTokens = this.state.get<number>('parley.sessionTokens', 0);
     this.sessionCost = this.state.get<number>('parley.sessionCost', 0);
     this.conversationId = this.state.get<string>('parley.conversationId', '') || this.newConversationId();
+    this.contextOptions = {
+      ...DEFAULT_CONTEXT_OPTIONS,
+      ...this.state.get<ContextOptions>('parley.contextOptions', {})
+    };
     this.recorder.customTitle = this.state.get<string>('parley.title') || undefined;
     // Checkpoints are stamped with the transcript position (for ⏪ rewind) and
     // persisted per conversation, so Revert works across window reloads.
@@ -326,6 +362,45 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       }
       void this.embeddingIndex.updateFile(root.fsPath, rel, doc.getText());
     });
+    // Selection pill: tell the webview what editor selection would ride along with
+    // the next prompt (includeSelection is on by default and otherwise invisible).
+    let selectionTimer: NodeJS.Timeout | undefined;
+    const postSelection = (): void => this.post({ type: 'selectionInfo', info: this.currentSelectionInfo() });
+    this.disposables.push(
+      vscode.window.onDidChangeTextEditorSelection(() => {
+        if (selectionTimer) {
+          clearTimeout(selectionTimer);
+        }
+        selectionTimer = setTimeout(postSelection, 150);
+      }),
+      vscode.window.onDidChangeActiveTextEditor((editor) => {
+        // `undefined` also fires transiently when focus moves to a webview — keep the
+        // last known selection then instead of flickering the pill away.
+        if (editor) {
+          postSelection();
+        }
+      }),
+      // New/renamed/deleted files should show up in the @-mention dropdown right away.
+      vscode.workspace.onDidCreateFiles(() => (this.mentionCache = undefined)),
+      vscode.workspace.onDidRenameFiles(() => (this.mentionCache = undefined)),
+      vscode.workspace.onDidDeleteFiles(() => (this.mentionCache = undefined))
+    );
+  }
+
+  /**
+   * The active editor selection shown in the composer's selection pill (`null` =
+   * none). Any editor scheme counts — collectSelectionContext sends untitled and
+   * virtual-document selections too, and the pill must not claim otherwise.
+   */
+  private currentSelectionInfo(): { file: string; startLine: number; endLine: number } | null {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor || editor.selection.isEmpty) {
+      return null;
+    }
+    const sel = editor.selection;
+    // A selection ending at column 0 doesn't visually include that line.
+    const endLine = sel.end.character === 0 && sel.end.line > sel.start.line ? sel.end.line : sel.end.line + 1;
+    return { file: path.basename(editor.document.fileName || 'selection'), startLine: sel.start.line + 1, endLine };
   }
 
   private save(): void {
@@ -339,6 +414,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     void this.state.update('parley.sessionTokens', this.sessionTokens);
     void this.state.update('parley.sessionCost', this.sessionCost);
     void this.state.update('parley.conversationId', this.conversationId);
+    void this.state.update('parley.contextOptions', this.contextOptions);
     void this.state.update('parley.title', this.recorder.customTitle);
   }
 
@@ -451,8 +527,15 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       void this.handleMessage(message);
     });
     panel.onDidDispose(() => {
+      this.disposedFlag = true;
       this.turns.abort();
       void this.autosaveConversation();
+      for (const d of this.disposables) {
+        d.dispose();
+      }
+      if (ChatPanel.activeInstance === this) {
+        ChatPanel.activeInstance = undefined; // palette commands fall back to the sidebar chat
+      }
     });
     this.resolveReady();
     void this.refreshAgents();
@@ -545,7 +628,25 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         return;
       }
       case 'mentionQuery':
-        await this.sendMentionResults(message.query ?? '');
+        await this.sendMentionResults(message.query ?? '', message.seq);
+        return;
+      case 'dropPaths':
+        await this.handleDroppedPaths(message.uris ?? []);
+        return;
+      case 'dropText':
+        await this.addDroppedText(message.name ?? '', message.text ?? '');
+        return;
+      case 'dropUnsupported':
+        if ((message.names ?? []).length > 0) {
+          void vscode.window.showWarningMessage(
+            `Parley: could not attach ${(message.names ?? []).join(', ')} — too large to drop as text. Use the 📎 button instead.`
+          );
+        }
+        return;
+      case 'webviewReady':
+        // The page (re)loaded its script; state posted before this can have been dropped.
+        this.resolvePageReady();
+        await this.postState();
         return;
       case 'applyChange': {
         if (this.executor.approveApproval(message.id ?? '')) {
@@ -572,6 +673,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       case 'contextOptionsChanged':
         if (message.contextOptions) {
           this.contextOptions = { ...DEFAULT_CONTEXT_OPTIONS, ...message.contextOptions };
+          this.save();
         }
         return;
       case 'send':
@@ -969,10 +1071,14 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         continue;
       }
       if (a.text.truncated && uploadProvider && a.rawText) {
+        // The upload path must get the same secret redaction as inline context.
+        const [redacted] = this.redactContextSecrets([
+          { ...a.text, content: a.rawText, characterCount: a.rawText.length, truncated: false }
+        ]);
         uploadedTextDocs.push({
           filename: a.label,
           mimeType: a.mimeType ?? 'text/plain',
-          base64: Buffer.from(a.rawText, 'utf8').toString('base64')
+          base64: Buffer.from(redacted.content, 'utf8').toString('base64')
         });
       } else {
         inlineText.push(a.text);
@@ -1289,65 +1395,235 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     if (!uris || uris.length === 0) {
       return;
     }
+    await this.attachUris(uris);
+  }
 
-    const maxChars = this.getSettings().contextMaxCharacters;
+  /**
+   * Attach files to the pending-attachment chips (📎 picker, right-click "Add File
+   * to Chat", drag-and-drop). Files that look like credentials are skipped — the
+   * same guard mentions and the agent's read tool apply. Folders inside the
+   * workspace become `@folder/` mentions instead.
+   */
+  public async attachUris(uris: readonly vscode.Uri[]): Promise<void> {
+    await this.reveal();
+    const skipped: string[] = [];
+    const mentionInserts: string[] = [];
     for (const uri of uris) {
+      if (isSensitiveFile(uri.fsPath)) {
+        skipped.push(path.basename(uri.fsPath));
+        continue;
+      }
+      let isDirectory = false;
       try {
-        const label = path.basename(uri.fsPath);
-        const ext = path.extname(uri.fsPath).toLowerCase();
-
-        if (VIDEO_EXTENSIONS.has(ext)) {
-          await this.attachVideo(uri, label);
-          continue;
-        }
-
-        const bytes = await vscode.workspace.fs.readFile(uri);
-        const id = `att-${Date.now()}-${this.attachments.length}`;
-
-        if (IMAGE_EXTENSIONS.has(ext)) {
-          const mime = ext === '.jpg' ? 'image/jpeg' : `image/${ext.slice(1)}`;
-          const dataUri = `data:${mime};base64,${Buffer.from(bytes).toString('base64')}`;
-          this.attachments.push({ id, label, kind: 'image', image: { label, dataUri } });
-        } else if (DOCUMENT_MIME[ext]) {
-          const base64 = Buffer.from(bytes).toString('base64');
-          this.attachments.push({
-            id,
-            label,
-            kind: 'document',
-            document: { filename: label, mimeType: DOCUMENT_MIME[ext], base64 }
-          });
-        } else if (audioFormatFromExt(ext)) {
-          const base64 = Buffer.from(bytes).toString('base64');
-          this.attachments.push({
-            id,
-            label,
-            kind: 'audio',
-            audio: { label, format: audioFormatFromExt(ext)!, base64 }
-          });
+        isDirectory = ((await vscode.workspace.fs.stat(uri)).type & vscode.FileType.Directory) !== 0;
+      } catch {
+        continue; // unreadable — skip silently, matching the old per-file behavior
+      }
+      if (isDirectory) {
+        const rel = toolRelPath(uri).replace(/\/+$/, '');
+        // A workspace ROOT folder yields its absolute path from asRelativePath — no
+        // valid mention exists for it, so it lands in `skipped` with the others.
+        if (vscode.workspace.getWorkspaceFolder(uri) && rel && !path.isAbsolute(rel) && !/\s/.test(rel)) {
+          mentionInserts.push(`@${rel}/ `);
         } else {
-          const raw = Buffer.from(bytes).toString('utf8');
-          const content = raw.length > maxChars ? raw.slice(0, maxChars) : raw;
-          this.attachments.push({
-            id,
-            label,
-            kind: 'text',
-            rawText: raw,
-            mimeType: TEXT_UPLOAD_MIME[ext] ?? 'text/plain',
-            text: {
-              id,
-              kind: 'user-file',
-              label,
-              filePath: uri.fsPath,
-              content,
-              characterCount: content.length,
-              truncated: raw.length > maxChars
-            }
-          });
+          skipped.push(path.basename(uri.fsPath));
         }
-      } catch (error) {
-        this.logger.warn(`Could not attach ${uri.fsPath}: ${error instanceof Error ? error.message : 'unknown'}`);
+        continue;
+      }
+      await this.attachUri(uri);
+    }
+    if (mentionInserts.length > 0) {
+      await this.postToComposer({ type: 'insertText', text: mentionInserts.join('') });
+    }
+    if (skipped.length > 0) {
+      void vscode.window.showWarningMessage(
+        `Parley: skipped ${skipped.join(', ')} — looks like credentials/secrets or can't be attached.`
+      );
+    }
+    await this.postState();
+  }
+
+  /** Attach one file as a pending attachment, classified by extension. */
+  private async attachUri(uri: vscode.Uri): Promise<void> {
+    const maxChars = this.getSettings().contextMaxCharacters;
+    try {
+      const label = path.basename(uri.fsPath);
+      const ext = path.extname(uri.fsPath).toLowerCase();
+
+      if (VIDEO_EXTENSIONS.has(ext)) {
+        await this.attachVideo(uri, label);
+        return;
+      }
+
+      const bytes = await vscode.workspace.fs.readFile(uri);
+      const id = `att-${Date.now()}-${this.attachments.length}`;
+
+      if (IMAGE_EXTENSIONS.has(ext)) {
+        const mime = ext === '.jpg' ? 'image/jpeg' : `image/${ext.slice(1)}`;
+        const dataUri = `data:${mime};base64,${Buffer.from(bytes).toString('base64')}`;
+        this.attachments.push({ id, label, kind: 'image', image: { label, dataUri } });
+      } else if (DOCUMENT_MIME[ext]) {
+        const base64 = Buffer.from(bytes).toString('base64');
+        this.attachments.push({
+          id,
+          label,
+          kind: 'document',
+          document: { filename: label, mimeType: DOCUMENT_MIME[ext], base64 }
+        });
+      } else if (audioFormatFromExt(ext)) {
+        const base64 = Buffer.from(bytes).toString('base64');
+        this.attachments.push({
+          id,
+          label,
+          kind: 'audio',
+          audio: { label, format: audioFormatFromExt(ext)!, base64 }
+        });
+      } else {
+        const raw = Buffer.from(bytes).toString('utf8');
+        const content = raw.length > maxChars ? raw.slice(0, maxChars) : raw;
+        this.attachments.push({
+          id,
+          label,
+          kind: 'text',
+          rawText: raw,
+          mimeType: TEXT_UPLOAD_MIME[ext] ?? 'text/plain',
+          text: {
+            id,
+            kind: 'user-file',
+            label,
+            filePath: uri.fsPath,
+            content,
+            characterCount: content.length,
+            truncated: raw.length > maxChars
+          }
+        });
+      }
+    } catch (error) {
+      this.logger.warn(`Could not attach ${uri.fsPath}: ${error instanceof Error ? error.message : 'unknown'}`);
+    }
+  }
+
+  /** Bring this chat's webview to front (sidebar view or editor tab) and wait for it. */
+  private async reveal(): Promise<void> {
+    if (this.hostPanel) {
+      if (!this.disposedFlag) {
+        this.hostPanel.reveal(undefined, false);
+      }
+    } else {
+      await vscode.commands.executeCommand('workbench.view.extension.parley');
+      await vscode.commands.executeCommand('parley.chatView.focus');
+    }
+    await this.ready;
+  }
+
+  /**
+   * Post once the webview page has loaded its script — a message posted right
+   * after a first-time reveal races the page load and can be dropped. The timeout
+   * keeps us from hanging if the page never reports in.
+   */
+  private async postToComposer(message: Record<string, unknown>): Promise<void> {
+    await Promise.race([this.pageReady, new Promise((resolve) => setTimeout(resolve, 1500))]);
+    this.post(message);
+  }
+
+  /** Reveal this chat and insert text into the composer at the caret (e.g. an @-mention). */
+  public async insertComposerText(text: string): Promise<void> {
+    await this.reveal();
+    await this.postToComposer({ type: 'insertText', text });
+  }
+
+  /**
+   * Files dropped onto the composer as URIs (VS Code Explorer drags provide
+   * `text/uri-list`): text workspace files become `@path` mentions in the input;
+   * media and out-of-workspace files attach like the 📎 picker; dropped web links
+   * become `@https://…` mentions.
+   */
+  private async handleDroppedPaths(uriStrings: readonly string[]): Promise<void> {
+    const CAP = 20;
+    const mentions: string[] = [];
+    const attaches: vscode.Uri[] = [];
+    const skipped: string[] = [];
+    for (const raw of uriStrings.slice(0, CAP)) {
+      let uri: vscode.Uri;
+      try {
+        uri = vscode.Uri.parse(raw, true);
+      } catch {
+        continue;
+      }
+      if (uri.scheme === 'http' || uri.scheme === 'https') {
+        mentions.push(`@${raw.trim()} `); // a dropped link becomes a fetch-the-page mention
+        continue;
+      }
+      if (uri.scheme !== 'file') {
+        continue;
+      }
+      if (isSensitiveFile(uri.fsPath)) {
+        skipped.push(path.basename(uri.fsPath));
+        continue;
+      }
+      let isDirectory = false;
+      try {
+        isDirectory = ((await vscode.workspace.fs.stat(uri)).type & vscode.FileType.Directory) !== 0;
+      } catch {
+        continue;
+      }
+      // Mentions resolve by reading the file as UTF-8 — media must attach instead.
+      const ext = path.extname(uri.fsPath).toLowerCase();
+      const isMedia =
+        IMAGE_EXTENSIONS.has(ext) || !!DOCUMENT_MIME[ext] || !!audioFormatFromExt(ext) || VIDEO_EXTENSIONS.has(ext);
+      const rel = vscode.workspace.getWorkspaceFolder(uri) ? toolRelPath(uri) : '';
+      if (rel && !path.isAbsolute(rel) && !/\s/.test(rel) && (isDirectory || !isMedia)) {
+        mentions.push(isDirectory ? `@${rel.replace(/\/+$/, '')}/ ` : `@${rel} `);
+      } else if (!isDirectory) {
+        attaches.push(uri);
+      } else {
+        skipped.push(path.basename(uri.fsPath));
       }
     }
+    if (mentions.length > 0) {
+      await this.postToComposer({ type: 'insertText', text: mentions.join('') });
+    }
+    if (attaches.length > 0) {
+      await this.attachUris(attaches);
+    }
+    if (skipped.length > 0) {
+      void vscode.window.showWarningMessage(
+        `Parley: skipped ${skipped.join(', ')} — looks like credentials/secrets or can't be attached.`
+      );
+    }
+    if (uriStrings.length > CAP) {
+      void vscode.window.showWarningMessage(`Parley: only the first ${CAP} dropped files were added.`);
+    }
+  }
+
+  /** A code/text file dropped from the OS shell: attach its text like the 📎 text branch. */
+  private async addDroppedText(name: string, text: string): Promise<void> {
+    if (!text) {
+      return;
+    }
+    const label = name && name.trim() ? name.trim() : `dropped-${this.attachments.length + 1}.txt`;
+    if (isSensitiveFile(label)) {
+      void vscode.window.showWarningMessage(`Parley: skipped ${label} — looks like credentials/secrets.`);
+      return;
+    }
+    if (text.includes('\u0000')) {
+      void vscode.window.showWarningMessage(
+        `Parley: ${label} looks like a binary file — drop images/PDF/audio, or use the 📎 button.`
+      );
+      return;
+    }
+    const maxChars = this.getSettings().contextMaxCharacters;
+    const id = `att-${Date.now()}-${this.attachments.length}`;
+    const content = text.length > maxChars ? text.slice(0, maxChars) : text;
+    const ext = path.extname(label).toLowerCase();
+    this.attachments.push({
+      id,
+      label,
+      kind: 'text',
+      rawText: text,
+      mimeType: TEXT_UPLOAD_MIME[ext] ?? 'text/plain',
+      text: { id, kind: 'user-file', label, content, characterCount: content.length, truncated: text.length > maxChars }
+    });
     await this.postState();
   }
 
@@ -1909,23 +2185,35 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       });
     }
 
-    // @path — a file's contents, or a folder's listing.
-    for (const rel of extractMentionPaths(prompt)) {
-      if (rel === 'git' || rel === 'codebase' || /^https?:/i.test(rel) || isSensitiveFile(rel)) {
+    // @path — a file's contents (optionally a #12-40 line range), or a folder's listing.
+    for (const token of extractMentionPaths(prompt)) {
+      if (
+        token === 'git' ||
+        token === 'codebase' ||
+        token === 'terminal' ||
+        token === 'browser' ||
+        /^https?:/i.test(token)
+      ) {
+        continue;
+      }
+      const { path: rel, startLine, endLine } = parseMentionRange(token);
+      if (isSensitiveFile(rel)) {
         continue;
       }
       try {
         const uri = (await resolveAcrossRoots(rel)) ?? vscode.Uri.joinPath(root, rel);
         const stat = await vscode.workspace.fs.stat(uri);
         if (stat.type === vscode.FileType.Directory) {
+          // RelativePattern anchors the glob to the resolved folder, which also makes
+          // folder-name-prefixed mentions work in multi-root workspaces.
           const files = await vscode.workspace.findFiles(
-            `${rel.replace(/[/\\]+$/, '')}/**/*`,
+            new vscode.RelativePattern(uri, '**/*'),
             '{**/node_modules/**,**/.git/**,**/out/**,**/dist/**}',
             60
           );
           const listing =
             files
-              .map((u) => path.relative(root.fsPath, u.fsPath).replace(/\\/g, '/'))
+              .map((u) => toolRelPath(u))
               .filter((r) => !isSensitiveFile(r))
               .join('\n') || '(empty)';
           const content = listing.slice(0, cap);
@@ -1940,15 +2228,24 @@ export class ChatPanel implements vscode.WebviewViewProvider {
           continue;
         }
         const raw = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
-        const content = raw.length > cap ? raw.slice(0, cap) : raw;
+        let text = raw;
+        let label = `@${rel}`;
+        if (startLine !== undefined) {
+          const lines = raw.split('\n');
+          const from = Math.min(startLine, lines.length);
+          const to = Math.min(endLine ?? startLine, lines.length);
+          text = lines.slice(from - 1, to).join('\n');
+          label = `@${rel} (lines ${from}-${to})`;
+        }
+        const content = text.length > cap ? text.slice(0, cap) : text;
         out.push({
-          id: `mention-${rel}`,
+          id: `mention-${token}`,
           kind: 'user-file',
-          label: `@${rel}`,
+          label,
           filePath: uri.fsPath,
           content,
           characterCount: content.length,
-          truncated: raw.length > content.length
+          truncated: text.length > content.length
         });
       } catch {
         // Not a readable file/dir (probably a normal "@mention" word) — ignore.
@@ -2058,27 +2355,83 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     }
   }
 
-  /** Answer an @-mention autocomplete query with matching workspace file paths. */
-  private async sendMentionResults(query: string): Promise<void> {
+  /**
+   * Workspace files + folders offered by the @-mention autocomplete, cached for a
+   * few seconds so per-keystroke queries don't re-walk the workspace.
+   */
+  private async mentionCandidates(): Promise<{ files: string[]; dirs: string[] }> {
+    const TTL_MS = 15000;
+    if (this.mentionCache && Date.now() - this.mentionCache.at < TTL_MS) {
+      return this.mentionCache;
+    }
+    let files: string[] = [];
+    try {
+      const uris = await vscode.workspace.findFiles(
+        '**/*',
+        '{**/node_modules/**,**/.git/**,**/out/**,**/dist/**}',
+        2000
+      );
+      files = uris
+        .map((uri) => toolRelPath(uri)) // folder-prefixed in multi-root workspaces
+        // Paths with spaces can't be @-mentioned (mentions are space-delimited),
+        // so offering them would only produce dead mentions.
+        .filter((rel) => !isSensitiveFile(rel) && !/\s/.test(rel));
+    } catch {
+      files = [];
+    }
+    // Folders derived from the file list, offered with a trailing '/'.
+    const dirSet = new Set<string>();
+    for (const rel of files) {
+      let at = rel.indexOf('/');
+      while (at > 0 && dirSet.size < 400) {
+        dirSet.add(rel.slice(0, at + 1));
+        at = rel.indexOf('/', at + 1);
+      }
+    }
+    this.mentionCache = { at: Date.now(), files, dirs: [...dirSet] };
+    return this.mentionCache;
+  }
+
+  /** Answer an @-mention autocomplete query with fuzzy-ranked workspace paths. */
+  private async sendMentionResults(query: string, seq?: number): Promise<void> {
     const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!root) {
-      this.post({ type: 'mentionResults', items: [] });
+      this.post({ type: 'mentionResults', items: [], seq });
       return;
     }
-    const cleaned = query.replace(/[^\w./-]/g, '');
-    const glob = cleaned ? `**/*${cleaned}*` : '**/*';
-    let items: string[] = [];
-    try {
-      const files = await vscode.workspace.findFiles(glob, '{**/node_modules/**,**/.git/**,**/out/**,**/dist/**}', 30);
-      items = files
-        .map((uri) => toolRelPath(uri)) // folder-prefixed in multi-root workspaces
-        .filter((rel) => !isSensitiveFile(rel))
-        .sort((a, b) => a.length - b.length)
-        .slice(0, 8);
-    } catch {
-      items = [];
+    // Match on the path part only — a typed '#12-40' range isn't part of the name.
+    const cleaned = query
+      .split('#')[0]
+      .replace(/\\/g, '/')
+      .replace(/[^\w ./-]/g, '');
+    const q = cleaned.toLowerCase();
+    const special = SPECIAL_MENTIONS.filter((s) => s.path.startsWith(q)).map((s) => ({ ...s }));
+    const { files, dirs } = await this.mentionCandidates();
+    // Files open in the editor rank above cold ones.
+    const open = new Set(
+      vscode.workspace.textDocuments.filter((d) => d.uri.scheme === 'file').map((d) => toolRelPath(d.uri))
+    );
+    let ranked = rankMentionPaths(cleaned, [...files, ...dirs], { limit: 8, boost: open });
+    if (ranked.length === 0 && cleaned) {
+      // Very large workspaces can exceed the cached candidate cap — fall back to a
+      // directed substring glob so those files are still reachable.
+      try {
+        const extra = await vscode.workspace.findFiles(
+          `**/*${cleaned}*`,
+          '{**/node_modules/**,**/.git/**,**/out/**,**/dist/**}',
+          30
+        );
+        ranked = rankMentionPaths(
+          cleaned,
+          extra.map((u) => toolRelPath(u)).filter((rel) => !isSensitiveFile(rel) && !/\s/.test(rel)),
+          { limit: 8, boost: open }
+        );
+      } catch {
+        // Keep the empty result.
+      }
     }
-    this.post({ type: 'mentionResults', items });
+    const items = [...special, ...ranked.map((p) => ({ path: p }))].slice(0, 8);
+    this.post({ type: 'mentionResults', items, seq });
   }
 
   /**
@@ -2167,7 +2520,11 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   }
 
   private post(message: Record<string, unknown>): void {
-    void this.view?.webview.postMessage(message);
+    try {
+      void this.view?.webview.postMessage(message);
+    } catch {
+      // The hosting webview was disposed (e.g. a closed tab) — nothing to update.
+    }
   }
 
   private async postState(): Promise<void> {
@@ -2193,6 +2550,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       selectedSpeed: this.selectedSpeed,
       customCommands: this.customCommandNames,
       contextOptions: this.contextOptions,
+      selectionInfo: this.currentSelectionInfo(),
       attachments: this.attachments.map((a) => ({ id: a.id, label: a.label, kind: a.kind }))
     });
   }

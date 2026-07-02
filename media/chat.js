@@ -761,9 +761,13 @@ import hljs from 'highlight.js/lib/common';
   }
 
   // ---------- @-mention autocomplete ----------
-  let mentionItems = [];
+  let mentionItems = []; // strings (file paths) or {path, hint} objects (special mentions)
   let mentionIndex = -1;
   let mentionStart = -1;
+  let mentionSeq = 0; // echoed by the extension so stale results can be dropped
+  function mentionPath(item) {
+    return typeof item === 'string' ? item : item.path;
+  }
   function currentMention() {
     const pos = prompt.selectionStart;
     const m = prompt.value.slice(0, pos).match(/(?:^|\s)@([^\s@]*)$/);
@@ -784,7 +788,19 @@ import hljs from 'highlight.js/lib/common';
       ...mentionItems.map((item, i) => {
         const row = document.createElement('div');
         row.className = 'mention-item' + (i === mentionIndex ? ' active' : '');
-        row.textContent = item;
+        const hint = typeof item === 'string' ? '' : item.hint || '';
+        if (hint) {
+          row.classList.add('slash-item');
+          const name = document.createElement('span');
+          name.className = 'slash-cmd';
+          name.textContent = '@' + mentionPath(item);
+          const desc = document.createElement('span');
+          desc.className = 'slash-desc';
+          desc.textContent = hint;
+          row.append(name, desc);
+        } else {
+          row.textContent = mentionPath(item);
+        }
         row.addEventListener('mousedown', (e) => {
           e.preventDefault();
           selectMention(item);
@@ -801,7 +817,7 @@ import hljs from 'highlight.js/lib/common';
     const pos = prompt.selectionStart;
     const before = prompt.value.slice(0, mentionStart);
     const after = prompt.value.slice(pos);
-    const insert = '@' + item + ' ';
+    const insert = '@' + mentionPath(item) + ' ';
     prompt.value = before + insert + after;
     const caret = before.length + insert.length;
     prompt.setSelectionRange(caret, caret);
@@ -898,9 +914,11 @@ import hljs from 'highlight.js/lib/common';
       return;
     }
     const cm = currentMention();
-    if (cm) {
+    // Once a '#line-range' is being typed the mention is already chosen — keep the
+    // dropdown closed so Enter sends instead of re-selecting (and nuking the range).
+    if (cm && cm.query.indexOf('#') === -1) {
       mentionStart = cm.start;
-      vscode.postMessage({ type: 'mentionQuery', query: cm.query });
+      vscode.postMessage({ type: 'mentionQuery', query: cm.query, seq: ++mentionSeq });
     } else {
       hideMentions();
     }
@@ -1008,7 +1026,8 @@ import hljs from 'highlight.js/lib/common';
   if (inputbox) {
     ['dragenter', 'dragover'].forEach((ev) =>
       inputbox.addEventListener(ev, (e) => {
-        if (e.dataTransfer && Array.prototype.some.call(e.dataTransfer.types || [], (t) => t === 'Files')) {
+        const types = (e.dataTransfer && e.dataTransfer.types) || [];
+        if (Array.prototype.some.call(types, (t) => t === 'Files' || t === 'text/uri-list')) {
           e.preventDefault();
           inputbox.classList.add('dragover');
         }
@@ -1016,9 +1035,42 @@ import hljs from 'highlight.js/lib/common';
     );
     ['dragleave', 'drop'].forEach((ev) => inputbox.addEventListener(ev, () => inputbox.classList.remove('dragover')));
     inputbox.addEventListener('drop', (e) => {
-      const files = (e.dataTransfer && e.dataTransfer.files) || [];
-      if (files.length && sendFiles(files)) {
+      const dt = e.dataTransfer;
+      if (!dt) {
+        return;
+      }
+      // VS Code Explorer drags carry URIs: workspace files become @-mentions host-side.
+      const uriList = dt.getData('text/uri-list') || '';
+      const uris = uriList
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .filter((s) => s && s[0] !== '#');
+      if (uris.length) {
         e.preventDefault();
+        vscode.postMessage({ type: 'dropPaths', uris });
+        return;
+      }
+      // OS-shell drops: media attaches as-is; code/text files attach as text context.
+      const files = Array.prototype.slice.call(dt.files || []);
+      if (!files.length) {
+        return;
+      }
+      e.preventDefault();
+      const tooBig = [];
+      for (const file of files) {
+        if (isAttachable(file.type)) {
+          sendFiles([file]);
+        } else if (file.size <= 4 * 1024 * 1024) {
+          const reader = new FileReader();
+          reader.onload = () =>
+            vscode.postMessage({ type: 'dropText', name: file.name || '', text: String(reader.result || '') });
+          reader.readAsText(file);
+        } else {
+          tooBig.push(file.name || 'file');
+        }
+      }
+      if (tooBig.length) {
+        vscode.postMessage({ type: 'dropUnsupported', names: tooBig });
       }
     });
   }
@@ -1054,6 +1106,7 @@ import hljs from 'highlight.js/lib/common';
         type: 'contextOptionsChanged',
         contextOptions: Object.fromEntries(Object.entries(boxes).map(([k, i]) => [k, i.checked]))
       });
+      renderSelInfo(); // the pill mirrors the "Selection" checkbox
     })
   );
 
@@ -1065,6 +1118,39 @@ import hljs from 'highlight.js/lib/common';
       vscode.postMessage({ type: 'openLink', url: a.dataset.href });
     }
   });
+
+  // ---------- selection-context pill ----------
+  // Shows which editor selection rides along with the next prompt (the
+  // "Selection" checkbox is on by default but hidden in the Context disclosure).
+  const selinfoEl = $('selinfo');
+  let selInfo = null;
+  function renderSelInfo() {
+    if (!selInfo) {
+      selinfoEl.style.display = 'none';
+      selinfoEl.replaceChildren();
+      return;
+    }
+    const on = boxes.includeSelection.checked;
+    selinfoEl.replaceChildren();
+    selinfoEl.classList.toggle('off', !on);
+    const eye = document.createElement('button');
+    eye.type = 'button';
+    eye.className = 'seleye';
+    eye.textContent = on ? '👁' : '🚫';
+    eye.title = on
+      ? 'This selection is sent as context with your next message — click to exclude it'
+      : 'Selection is NOT sent as context — click to include it';
+    eye.addEventListener('click', () => {
+      boxes.includeSelection.checked = !boxes.includeSelection.checked;
+      boxes.includeSelection.dispatchEvent(new Event('change'));
+    });
+    const text = document.createElement('span');
+    const range =
+      selInfo.endLine > selInfo.startLine ? selInfo.startLine + '-' + selInfo.endLine : String(selInfo.startLine);
+    text.textContent = selInfo.file + ':' + range + ' selected' + (on ? '' : ' (not sent)');
+    selinfoEl.append(eye, text);
+    selinfoEl.style.display = 'flex';
+  }
 
   function renderAttachments(items) {
     attachmentsEl.replaceChildren();
@@ -1089,9 +1175,30 @@ import hljs from 'highlight.js/lib/common';
       if (mentionStart < 0) {
         return;
       }
+      if (msg.seq !== undefined && msg.seq !== mentionSeq) {
+        return; // out-of-order response for an older query
+      }
       mentionItems = msg.items || [];
       mentionIndex = 0;
       renderMentions();
+      return;
+    }
+    if (msg.type === 'insertText') {
+      // Splice text (an @-mention from Alt+K / right-click / drop) in at the caret.
+      const start = prompt.selectionStart != null ? prompt.selectionStart : prompt.value.length;
+      const end = prompt.selectionEnd != null ? prompt.selectionEnd : start;
+      const before = prompt.value.slice(0, start);
+      const after = prompt.value.slice(end);
+      const pad = before && !/\s$/.test(before) ? ' ' : '';
+      prompt.value = before + pad + (msg.text || '') + after;
+      const caret = (before + pad + (msg.text || '')).length;
+      prompt.setSelectionRange(caret, caret);
+      prompt.focus();
+      return;
+    }
+    if (msg.type === 'selectionInfo') {
+      selInfo = msg.info || null;
+      renderSelInfo();
       return;
     }
     if (msg.type === 'tokens') {
@@ -1214,6 +1321,10 @@ import hljs from 'highlight.js/lib/common';
         boxes[k].checked = v;
       }
     });
+    if (msg.selectionInfo !== undefined) {
+      selInfo = msg.selectionInfo;
+    }
+    renderSelInfo();
     const mode = msg.mode || 'chat';
     modeBtn.textContent = (MODE_LABELS[mode] || 'Chat') + ' ▾';
     modeBtn.classList.toggle('caution', mode === 'full');
@@ -1242,7 +1353,7 @@ import hljs from 'highlight.js/lib/common';
     modeBtn.title = busy ? 'Locked while the agent is running (applies from the next turn)' : 'Mode & thinking';
     prompt.placeholder = busy
       ? 'Type to steer the agent — sent at its next step…'
-      : 'Ask Parley…  (@file to attach · paste or drop an image/PDF/audio · Enter to send · Shift+Enter for newline)';
+      : 'Ask Parley…  (@file to attach · paste or drop files · Enter to send · Shift+Enter for newline)';
     if (!msg.busy) {
       stopTicker();
       turnStart = 0;
@@ -1306,4 +1417,8 @@ import hljs from 'highlight.js/lib/common';
       });
     }
   });
+
+  // Tell the extension the page is live — messages posted before the script loads
+  // (e.g. an insertText right after the first reveal) would otherwise be dropped.
+  vscode.postMessage({ type: 'webviewReady' });
 })();

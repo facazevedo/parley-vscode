@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.72.0
+
+### Context UX — fuzzy mentions, selection pill, line ranges, right-click, drop anything
+
+- **Fuzzy @-mention autocomplete** — the dropdown now uses a real fuzzy scorer (`@chpanel` finds `ChatPanel.ts`) with bonuses for basename hits, word-boundary/camelCase alignment, and consecutive runs; files open in the editor rank first. Candidates are cached (~15 s TTL) instead of re-globbing per keystroke, results carry a sequence token so out-of-order responses can't render stale suggestions, and the dropdown now also offers **folders** (`@src/`) and the **special mentions** (`@codebase`, `@git`, `@terminal`, `@browser`) with a one-line hint each.
+- **Selection pill** — the composer shows `file.ts:12-40 selected` with a 👁 toggle whenever an editor selection would ride along with the next prompt (the "Selection" checkbox was previously invisible inside the collapsed Context disclosure). Context checkbox choices now **persist across reloads**.
+- **Line-range mentions** — `@file.ts#12-40` (also `#12`, `#L12-L40`) attaches just those lines, labeled `@file.ts (lines 12-40)`. New **`Alt+K`** in an editor inserts an `@file#start-end` mention of the current selection into the chat composer.
+- **Right-click "Add File to Chat Context"** — in the Explorer (multi-select works), the editor, and editor tabs; editor right-click also offers **Add Selection to Chat** when text is selected. Folders become `@folder/` mentions.
+- **Drop any file onto the composer** — files dragged from the VS Code Explorer become `@path` mentions (folders too); code/text files dragged from the OS attach as text context; media (image/PDF/audio) attaches as before. Previously non-media drops were silently ignored while the dropzone highlighted as if they'd work; unsupported/too-large drops now explain themselves.
+- **Closed an attachment safety gap** — the 📎 picker (and every new attach path: right-click, drops) now refuses credential-looking files (`.env`, keys, `secrets.*`), the same guard @-mentions and the agent's read tool already had. Large text attachments that upload via `/v1/files` now get the **same secret redaction** as inline context (previously the upload path bypassed it).
+- **Review hardening** (an adversarial 29-agent review of this change surfaced and fixed): Explorer-dropped media files attach properly instead of becoming mojibake text mentions; a dropped **web link** becomes an `@https://…` mention; pressing Enter while typing a `#range` no longer re-selects from the dropdown and deletes the range; folder mentions now list correctly in **multi-root** workspaces (`RelativePattern`); the selection pill no longer hides for untitled/virtual editors whose selection IS still sent; out-of-workspace files fall back to attaching (a mention could never resolve); right-click/Alt+K no longer throw after closing a tab chat; per-tab selection listeners are disposed; the mention cache invalidates on file create/rename/delete, with a directed-glob fallback for workspaces beyond the 2000-file candidate cap; composer inserts wait for the webview page to be live.
+
 ## 0.71.0
 
 ### Docs

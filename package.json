@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.71.0",
+  "version": "0.72.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -224,6 +224,16 @@
         "command": "parley.signOut",
         "title": "Parley: Sign Out",
         "category": "Parley"
+      },
+      {
+        "command": "parley.insertSelectionMention",
+        "title": "Parley: Add Selection to Chat (@-mention)",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.addFileToChat",
+        "title": "Parley: Add File to Chat Context",
+        "category": "Parley"
       }
     ],
     "keybindings": [
@@ -232,8 +242,38 @@
         "key": "ctrl+alt+k",
         "mac": "cmd+alt+k",
         "when": "editorTextFocus"
+      },
+      {
+        "command": "parley.insertSelectionMention",
+        "key": "alt+k",
+        "when": "editorTextFocus"
       }
     ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "parley.addFileToChat",
+          "group": "9_parley@1"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "parley.insertSelectionMention",
+          "when": "editorHasSelection",
+          "group": "9_parley@1"
+        },
+        {
+          "command": "parley.addFileToChat",
+          "group": "9_parley@2"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "parley.addFileToChat",
+          "group": "9_parley@1"
+        }
+      ]
+    },
     "configuration": {
       "title": "Parley",
       "properties": {

@@ -169,10 +169,14 @@ past conversations, **⊟** compact, **⤓** export, **↻** refresh model list.
 **Composer (bottom):**
 
 - A **Context** disclosure with checkboxes (Selection, File, Open editors,
-  Diagnostics, Pick files) controlling what's attached to commands.
+  Diagnostics, Pick files) controlling what's attached to commands. Your choices
+  persist across reloads.
+- A **selection pill** — when you have text selected in an editor, the composer
+  shows `file.ts:12-40 selected` with a **👁 toggle**, so you always know whether
+  the selection will ride along with your next message.
 - The **prompt box**. `Enter` sends, `Shift+Enter` is a newline. Type **`@`** for
-  file/`@codebase`/`@git` mentions, **`/`** for the command menu, and **paste or
-  drop** an image / PDF / audio file directly.
+  fuzzy file/`@codebase`/`@git` mentions, **`/`** for the command menu, and
+  **paste or drop** any file directly.
 - The **model dropdown**, a **`Mode ▾`** popover (mode + thinking + speed), and a
   **📎** attach button.
 
@@ -319,17 +323,24 @@ per provider — verified live against the gateway:
 
 ## @-mentions
 
-Type **`@`** in the composer:
+Type **`@`** in the composer — the autocomplete is **fuzzy** (`@chpanel` finds
+`ChatPanel.ts`), ranks files you have open first, and also offers folders and the
+special mentions below:
 
-| Mention           | Effect                                                                              |
-| ----------------- | ----------------------------------------------------------------------------------- |
-| `@path/to/file`   | Attach that file's contents (autocomplete as you type)                              |
-| `@path/to/folder` | Attach a listing of the folder                                                      |
-| `@codebase`       | Retrieve the most relevant files for your question (see below)                      |
-| `@git`            | Attach the uncommitted diff (vs HEAD)                                               |
-| `@terminal`       | Attach recent integrated-terminal commands + output (shell integration)             |
-| `@browser <url>`  | Open the URL in a local browser (runs JS) and attach rendered text + console errors |
-| `@https://…`      | Fetch the page and attach its text                                                  |
+| Mention            | Effect                                                                              |
+| ------------------ | ----------------------------------------------------------------------------------- |
+| `@path/to/file`    | Attach that file's contents (fuzzy autocomplete as you type)                        |
+| `@file.ts#12-40`   | Attach only lines 12–40 of the file (also `#12` or `#L12-L40`)                      |
+| `@path/to/folder/` | Attach a listing of the folder                                                      |
+| `@codebase`        | Retrieve the most relevant files for your question (see below)                      |
+| `@git`             | Attach the uncommitted diff (vs HEAD)                                               |
+| `@terminal`        | Attach recent integrated-terminal commands + output (shell integration)             |
+| `@browser <url>`   | Open the URL in a local browser (runs JS) and attach rendered text + console errors |
+| `@https://…`       | Fetch the page and attach its text                                                  |
+
+**From the editor:** press **`Alt+K`** to drop an `@file#start-end` mention of the
+current selection into the chat, or right-click a file (Explorer, editor, or editor
+tab) → **Parley: Add File to Chat Context**.
 
 ---
 
@@ -385,7 +396,11 @@ appear in the `/` menu.
 
 ## Attachments: image, PDF, audio, video
 
-Use the **📎** button, or **paste** (Ctrl/Cmd+V) / **drag‑and‑drop** onto the composer:
+Use the **📎** button, or **paste** (Ctrl/Cmd+V) / **drag‑and‑drop** onto the
+composer. Dropping works for **any** file: files dragged from the VS Code Explorer
+become `@path` mentions; code/text files dragged from the OS shell attach as text
+context; media attaches as below. Files that look like credentials (`.env`, keys,
+etc.) are refused everywhere — 📎, drops, and right‑click alike:
 
 | Type                                                     | Handling                                                                                                                                                                                                                                                                                                            |
 | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

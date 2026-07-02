@@ -40,6 +40,29 @@ export function extractMentionPaths(prompt: string): string[] {
   return out;
 }
 
+export interface MentionRange {
+  readonly path: string;
+  /** 1-based first line, when the token carried a `#12` / `#12-40` suffix. */
+  readonly startLine?: number;
+  /** 1-based last line (inclusive); equals startLine for a single-line range. */
+  readonly endLine?: number;
+}
+
+/**
+ * Split an `@path` mention token into its path and an optional line-range
+ * suffix: `file.ts#12`, `file.ts#12-40`, or `file.ts#L12-L40` (1-based,
+ * inclusive). Tokens without a numeric suffix come back as just the path.
+ */
+export function parseMentionRange(token: string): MentionRange {
+  const match = token.match(/^(.+)#L?(\d+)(?:-L?(\d+))?$/i);
+  if (!match) {
+    return { path: token };
+  }
+  const startLine = Math.max(1, parseInt(match[2], 10));
+  const endLine = match[3] ? Math.max(startLine, parseInt(match[3], 10)) : startLine;
+  return { path: match[1], startLine, endLine };
+}
+
 /** Recognize API errors that indicate the request/context exceeded the model's token limit. */
 export function isContextLengthError(status: number, detail: string): boolean {
   if (status !== 400 && status !== 413 && status !== 422) {

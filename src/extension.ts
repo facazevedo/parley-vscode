@@ -28,6 +28,7 @@ import { closeSharedBrowser } from './browser/browserManager';
 import { ParleyAuthStore } from './parley/auth';
 import { createParleyProvider } from './parley/providerFactory';
 import type { ParleyProvider } from './parley/ParleyProvider';
+import { toolRelPath } from './parley/tools';
 import { ChatPanel } from './webview/ChatPanel';
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -173,6 +174,42 @@ export function activate(context: vscode.ExtensionContext): void {
       // Same tab conversation, floated into its own OS window.
       openTabConversation();
       await vscode.commands.executeCommand('workbench.action.moveEditorToNewWindow');
+    }),
+    vscode.commands.registerCommand('parley.insertSelectionMention', async () => {
+      // Alt+K (Claude-Code-style): drop an @-mention of the current file — with the
+      // selected line range when there is a selection — into the chat composer.
+      const editor = vscode.window.activeTextEditor;
+      if (!editor || editor.document.uri.scheme !== 'file') {
+        await vscode.window.showInformationMessage('Parley: open a file to mention it in the chat.');
+        return;
+      }
+      const chat = currentChat();
+      const rel = toolRelPath(editor.document.uri);
+      if (!vscode.workspace.getWorkspaceFolder(editor.document.uri) || /\s/.test(rel)) {
+        // Out-of-workspace files can't be resolved from a mention, and mentions are
+        // space-delimited — both attach the whole file instead (range is lost).
+        await chat.attachUris([editor.document.uri]);
+        return;
+      }
+      const sel = editor.selection;
+      const endLine = sel.end.character === 0 && sel.end.line > sel.start.line ? sel.end.line : sel.end.line + 1;
+      const range = sel.isEmpty ? '' : `#${sel.start.line + 1}-${endLine}`;
+      await chat.insertComposerText(`@${rel}${range} `);
+    }),
+    vscode.commands.registerCommand('parley.addFileToChat', async (uri?: vscode.Uri, uris?: vscode.Uri[]) => {
+      // Explorer/editor right-click "Add to Parley Chat" (multi-select supported).
+      const targets = (uris && uris.length > 0 ? uris : uri ? [uri] : []).filter((u) => u instanceof vscode.Uri);
+      if (targets.length === 0) {
+        const active = vscode.window.activeTextEditor?.document.uri;
+        if (active && active.scheme === 'file') {
+          targets.push(active);
+        }
+      }
+      if (targets.length === 0) {
+        await vscode.window.showInformationMessage('Parley: no file selected to add to the chat.');
+        return;
+      }
+      await currentChat().attachUris(targets);
     }),
     vscode.commands.registerCommand('parley.newConversation', () => chatPanel.newConversation()),
     vscode.commands.registerCommand('parley.openConversationsFolder', () => chatPanel.openConversationsFolder()),
