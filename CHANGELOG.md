@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.50.0
+
+### Added — multi-root workspace support (agent layer)
+- The agent can now **reach every folder of a multi-root workspace**. Tool paths resolve across roots: an explicit `folderName/…` prefix targets that root, otherwise the first root where the path exists wins (new files land in the first root). Single-root behavior is unchanged.
+- `find_files`, `search_text`, `grep`, `find_symbol`, and `find_references` return **folder-prefixed paths** in multi-root workspaces; `grep` runs per root and prefixes results; `list_directory "."` lists the roots themselves.
+- `@path` mentions and the `@`-autocomplete are folder-prefixed and resolve across roots too; the read-hash staleness guard follows the same resolution.
+- Scope note: context checkboxes (Selection/File/…), `@codebase` indexing/retrieval, project rules, and `run_command`'s cwd still use the **first** workspace folder — documented, and the agent tools cover the rest.
+
 ## 0.49.0
 
 ### Changed — smarter ghost-text completions

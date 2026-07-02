@@ -23,7 +23,7 @@ import { showProposedDiff } from '../diff/showDiff';
 import type { Logger } from '../logging/logger';
 import type { ParleyProvider } from '../parley/ParleyProvider';
 import { extractMentionPaths } from '../parley/parsing';
-import { AGENT_TOOLS, READ_ONLY_TOOLS, runAgentTool } from '../parley/tools';
+import { AGENT_TOOLS, READ_ONLY_TOOLS, resolveAcrossRoots, runAgentTool, toolRelPath } from '../parley/tools';
 import { normalizeThinkingLevel, resolveThinking, type ThinkingLevel } from '../parley/thinking';
 import { audioFormatFromExt, audioFormatFromMime, modelSupportsAudio } from '../parley/audio';
 import { clampMiddle } from '../parley/clampText';
@@ -1862,11 +1862,13 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private async recordReadFromArgs(argsJson: string): Promise<void> {
     try {
       const rel = String((JSON.parse(argsJson || '{}') as { path?: string }).path ?? '').replace(/^[/\\]+/, '');
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri;
-      if (!rel || !root) {
+      if (!rel) {
         return;
       }
-      const uri = vscode.Uri.joinPath(root, rel);
+      const uri = await resolveAcrossRoots(rel);
+      if (!uri) {
+        return;
+      }
       const content = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
       this.recordFileState(uri.fsPath, content);
     } catch {
@@ -1903,7 +1905,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       return 'Error: refusing to write a sensitive file.';
     }
 
-    const uri = vscode.Uri.joinPath(root, rel);
+    const uri = (await resolveAcrossRoots(rel)) ?? vscode.Uri.joinPath(root, rel);
     let original = '';
     let fileExists = true;
     try {
@@ -1952,7 +1954,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       return 'Error: refusing to edit a sensitive file.';
     }
 
-    const uri = vscode.Uri.joinPath(root, rel);
+    const uri = (await resolveAcrossRoots(rel)) ?? vscode.Uri.joinPath(root, rel);
     let original: string;
     try {
       original = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
@@ -2384,7 +2386,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         continue;
       }
       try {
-        const uri = vscode.Uri.joinPath(root, rel);
+        const uri = (await resolveAcrossRoots(rel)) ?? vscode.Uri.joinPath(root, rel);
         const stat = await vscode.workspace.fs.stat(uri);
         if (stat.type === vscode.FileType.Directory) {
           const files = await vscode.workspace.findFiles(
@@ -2540,7 +2542,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     try {
       const files = await vscode.workspace.findFiles(glob, '{**/node_modules/**,**/.git/**,**/out/**,**/dist/**}', 30);
       items = files
-        .map((uri) => path.relative(root, uri.fsPath).replace(/\\/g, '/'))
+        .map((uri) => toolRelPath(uri)) // folder-prefixed in multi-root workspaces
         .filter((rel) => !isSensitiveFile(rel))
         .sort((a, b) => a.length - b.length)
         .slice(0, 8);

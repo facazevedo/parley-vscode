@@ -326,7 +326,7 @@ async function findSymbol(root: vscode.Uri, query: string): Promise<string> {
     .filter((s) => s.location?.uri?.scheme === 'file')
     .slice(0, MAX_SYMBOL_RESULTS)
     .map((s) => {
-      const rel = path.relative(root.fsPath, s.location.uri.fsPath).replace(/\\/g, '/');
+      const rel = toolRelPath(s.location.uri);
       const container = s.containerName ? `${s.containerName}.` : '';
       return `${symbolKindName(s.kind)} ${container}${s.name} — ${rel}:${s.location.range.start.line + 1}`;
     });
@@ -334,7 +334,7 @@ async function findSymbol(root: vscode.Uri, query: string): Promise<string> {
 }
 
 async function documentSymbols(root: vscode.Uri, relative: string): Promise<string> {
-  const uri = resolveInWorkspace(root, relative);
+  const uri = await resolveAcrossRoots(relative);
   if (!uri) {
     return 'Error: path is outside the workspace.';
   }
@@ -378,7 +378,7 @@ async function findReferences(
   line: number | undefined,
   symbol: string
 ): Promise<string> {
-  const uri = resolveInWorkspace(root, relative);
+  const uri = await resolveAcrossRoots(relative);
   if (!uri) {
     return 'Error: path is outside the workspace.';
   }
@@ -410,9 +410,7 @@ async function findReferences(
   }
   const rows = [
     ...new Set(
-      locations
-        .filter((l) => l.uri.scheme === 'file')
-        .map((l) => `${path.relative(root.fsPath, l.uri.fsPath).replace(/\\/g, '/')}:${l.range.start.line + 1}`)
+      locations.filter((l) => l.uri.scheme === 'file').map((l) => `${toolRelPath(l.uri)}:${l.range.start.line + 1}`)
     )
   ].slice(0, 100);
   return `${locations.length} reference(s):\n${rows.join('\n')}`;
@@ -490,45 +488,68 @@ function grepSearch(
   }
   args.push('--regexp', pattern, '--', '.');
 
+  // Multi-root: run per workspace folder, prefixing results with the folder name.
+  const folders = vscode.workspace.workspaceFolders ?? [{ uri: root, name: '' }];
+  const multi = folders.length > 1;
+  return (async () => {
+    const all: string[] = [];
+    for (const folder of folders) {
+      const result = await runRgInFolder(rg, args, folder.uri.fsPath);
+      if ('error' in result) {
+        return result.error;
+      }
+      for (const line of result.lines) {
+        all.push(multi ? `${folder.name}/${line}` : line);
+      }
+      if (all.length >= MAX_GREP_LINES) {
+        break;
+      }
+    }
+    if (all.length === 0) {
+      return '[no matches]';
+    }
+    const shown = all.slice(0, MAX_GREP_LINES);
+    const footer =
+      all.length > MAX_GREP_LINES
+        ? `\n[showing first ${MAX_GREP_LINES} of ${all.length} lines — narrow the pattern or glob]`
+        : '';
+    return shown.join('\n') + footer;
+  })();
+}
+
+/** One ripgrep run in one folder → matched lines, or a user-facing error string. */
+function runRgInFolder(rg: string, args: string[], cwd: string): Promise<{ lines: string[] } | { error: string }> {
   return new Promise((resolve) => {
     execFile(
       rg,
       args,
-      { cwd: root.fsPath, timeout: GREP_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024, windowsHide: true, encoding: 'utf8' },
+      { cwd, timeout: GREP_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024, windowsHide: true, encoding: 'utf8' },
       (error: ExecFileException | null, stdout: string, stderr: string) => {
         if (error && (error as { killed?: boolean }).killed) {
-          resolve('Error: grep timed out after 10s — narrow the pattern or add a glob.');
+          resolve({ error: 'Error: grep timed out after 10s — narrow the pattern or add a glob.' });
           return;
         }
         // rg exits 1 for "no matches", 2 for a real error (e.g. bad regex).
         if (error && !stdout) {
           const code = (error as { code?: number | string }).code;
           if (code === 1) {
-            resolve('[no matches]');
+            resolve({ lines: [] });
             return;
           }
           const detail = (stderr || error.message || '').trim().split('\n')[0];
-          resolve(
-            detail && code !== 'ENOENT'
-              ? `Error: grep failed — ${detail.slice(0, 300)}`
-              : 'Error: ripgrep is not available on this machine — use search_text instead.'
-          );
+          resolve({
+            error:
+              detail && code !== 'ENOENT'
+                ? `Error: grep failed — ${detail.slice(0, 300)}`
+                : 'Error: ripgrep is not available on this machine — use search_text instead.'
+          });
           return;
         }
         const lines = stdout
           .replace(/\r/g, '')
           .split('\n')
           .filter((l) => l.length > 0);
-        if (lines.length === 0) {
-          resolve('[no matches]');
-          return;
-        }
-        const shown = lines.slice(0, MAX_GREP_LINES).map((l) => l.replace(/^\.[\\/]/, '').replace(/\\/g, '/'));
-        const footer =
-          lines.length > MAX_GREP_LINES
-            ? `\n[showing first ${MAX_GREP_LINES} of ${lines.length} lines — narrow the pattern or glob]`
-            : '';
-        resolve(shown.join('\n') + footer);
+        resolve({ lines: lines.map((l) => l.replace(/^\.[\\/]/, '').replace(/\\/g, '/')) });
       }
     );
   });
@@ -539,7 +560,6 @@ async function searchText(query: string, glob?: string): Promise<string> {
     return 'Error: query is required.';
   }
   const needle = query.toLowerCase();
-  const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '';
   let files: vscode.Uri[];
   try {
     files = await vscode.workspace.findFiles(
@@ -556,7 +576,7 @@ async function searchText(query: string, glob?: string): Promise<string> {
     if (results.length >= MAX_SEARCH_RESULTS) {
       break;
     }
-    const rel = path.relative(root, uri.fsPath).replace(/\\/g, '/');
+    const rel = toolRelPath(uri);
     if (isSensitiveFile(rel)) {
       continue;
     }
@@ -624,13 +644,52 @@ function resolveInWorkspace(root: vscode.Uri, relative: string): vscode.Uri | un
   return target;
 }
 
+/**
+ * Multi-root path resolution for tools. Order: an explicit "folderName/…" prefix
+ * wins; then the first root where the path exists; then the first root (so new
+ * files land there). Single-root workspaces behave exactly as before.
+ */
+export async function resolveAcrossRoots(relative: string): Promise<vscode.Uri | undefined> {
+  const folders = vscode.workspace.workspaceFolders ?? [];
+  if (folders.length === 0) {
+    return undefined;
+  }
+  const normalized = relative.replace(/^[/\\]+/, '');
+  if (folders.length > 1) {
+    const first = normalized.split(/[/\\]/)[0];
+    const named = folders.find((f) => f.name === first);
+    if (named) {
+      const rest = normalized.slice(first.length).replace(/^[/\\]+/, '');
+      return resolveInWorkspace(named.uri, rest || '.');
+    }
+    for (const folder of folders) {
+      const candidate = resolveInWorkspace(folder.uri, normalized);
+      if (candidate) {
+        try {
+          await vscode.workspace.fs.stat(candidate);
+          return candidate;
+        } catch {
+          // Not here — try the next root.
+        }
+      }
+    }
+  }
+  return resolveInWorkspace(folders[0].uri, normalized);
+}
+
+/** Workspace-relative label for results — prefixed with the folder name in multi-root workspaces. */
+export function toolRelPath(uri: vscode.Uri): string {
+  const multi = (vscode.workspace.workspaceFolders?.length ?? 0) > 1;
+  return vscode.workspace.asRelativePath(uri, multi).replace(/\\/g, '/');
+}
+
 function toNum(value: unknown): number | undefined {
   const n = Number(value);
   return Number.isFinite(n) ? n : undefined;
 }
 
 async function readFile(root: vscode.Uri, relative: string, startLine?: number, endLine?: number): Promise<string> {
-  const uri = resolveInWorkspace(root, relative);
+  const uri = await resolveAcrossRoots(relative);
   if (!uri) {
     return 'Error: path is outside the workspace.';
   }
@@ -678,7 +737,12 @@ async function readFile(root: vscode.Uri, relative: string, startLine?: number, 
 }
 
 async function listDirectory(root: vscode.Uri, relative: string): Promise<string> {
-  const uri = resolveInWorkspace(root, relative === '' ? '.' : relative);
+  const folders = vscode.workspace.workspaceFolders ?? [];
+  if ((relative === '' || relative === '.') && folders.length > 1) {
+    // Multi-root: "." lists the roots themselves; use "folderName/…" to descend.
+    return folders.map((f) => `${f.name}/  (workspace root)`).join('\n');
+  }
+  const uri = await resolveAcrossRoots(relative === '' ? '.' : relative);
   if (!uri) {
     return 'Error: path is outside the workspace.';
   }
@@ -705,9 +769,8 @@ async function findFiles(glob: string): Promise<string> {
     if (matches.length === 0) {
       return '[no matches]';
     }
-    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '';
     return matches
-      .map((uri) => path.relative(root, uri.fsPath).replace(/\\/g, '/'))
+      .map((uri) => toolRelPath(uri))
       .filter((rel) => !isSensitiveFile(rel))
       .join('\n');
   } catch (error) {
