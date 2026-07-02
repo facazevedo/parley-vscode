@@ -14,6 +14,7 @@ diff review, and safety controls stay independent of the transport.
 
 ## Contents
 
+- [How Parley compares](#how-parley-compares)
 - [Requirements](#requirements)
 - [Install](#install)
 - [Quick start](#quick-start)
@@ -41,6 +42,48 @@ diff review, and safety controls stay independent of the transport.
 - [Troubleshooting](#troubleshooting)
 - [Development & packaging](#development--packaging)
 - [Architecture](#architecture)
+
+---
+
+## How Parley compares
+
+Parley is a VS Code **extension** over MIT's OpenAI‑compatible **Parley** gateway. The other
+three are a standalone editor (**Cursor**), OpenAI's coding agent (**Codex**), and Anthropic's
+(**Claude Code**). At a glance:
+
+| Capability                              | Parley                                              | Cursor            | Codex             | Claude Code          |
+| --------------------------------------- | --------------------------------------------------- | ----------------- | ----------------- | -------------------- |
+| **Form & backend**                      |                                                     |                   |                   |                      |
+| Delivery                                | VS Code extension                                   | Standalone editor | CLI + IDE + cloud | CLI + IDE + web      |
+| Models                                  | Any on the Parley gateway (Claude · GPT · Gemini …) | Multiple (hosted) | OpenAI            | Anthropic Claude     |
+| Source                                  | Open (MIT)                                          | Proprietary       | CLI open‑source   | Proprietary          |
+| **Agent**                               |                                                     |                   |                   |                      |
+| Agentic edit loop + modes               | ✅ (6 modes)                                        | ✅                | ✅                | ✅                   |
+| Diff‑review + checkpoints / rewind      | ✅                                                  | ✅                | ◐                 | ✅                   |
+| Command execution                       | ✅ allowlist                                        | ✅                | ✅ OS sandbox     | ✅ allowlist/sandbox |
+| Editable plan mode                      | ✅                                                  | ✅                | ◐                 | ✅                   |
+| In‑session subagents                    | ✅ local                                            | ✅                | ✅                | ✅                   |
+| Background / cloud agents               | ✗ (out of scope)                                    | ✅                | ✅                | ✅                   |
+| **Context & retrieval**                 |                                                     |                   |                   |                      |
+| @‑mentions + codebase retrieval         | ✅                                                  | ✅                | ✅                | ✅                   |
+| Semantic index                          | ✅ on‑device                                        | ✅ server‑side    | ◐ agentic grep    | ◐ agentic grep       |
+| Rules files                             | ✅ (+ globs)                                        | ✅ (+ memories)   | ✅ (AGENTS.md)    | ✅ (CLAUDE.md)       |
+| MCP                                     | ✅ stdio · HTTP · SSE                               | ✅                | ✅                | ✅ (+ OAuth)         |
+| **Editor UX**                           |                                                     |                   |                   |                      |
+| Inline "Tab" completion (trained model) | ◐ ghost‑text                                        | ✅                | ✗                 | ✗                    |
+| Multimodal input                        | ✅ image · PDF · audio · **video**                  | ◐ image           | ◐ image           | ◐ image · PDF        |
+| **Ecosystem & safety**                  |                                                     |                   |                   |                      |
+| Hooks                                   | ✅ (4 events)                                       | ✗                 | ◐                 | ✅                   |
+| Browser control                         | ✅ local Chromium                                   | ◐                 | ◐                 | ✅ (companion)       |
+| Outbound secret scanning                | ✅ redact                                           | ◐ file‑level      | ◐ file‑level      | ◐ file‑level         |
+| Full on‑disk event transcripts          | ✅ (JSONL + export)                                 | ◐                 | ◐                 | ◐                    |
+
+**✅ supported · ◐ partial or different approach · ✗ not available.** Parley's column reflects
+the current code (v0.65.0). Competitor columns reflect publicly documented capabilities as of
+early 2026 and are **best‑effort** — these tools move fast, so check their own docs for the
+latest. Parley's deliberate non‑goals (a trained Tab/next‑edit model, background/cloud agents,
+server‑side embeddings) follow from running on a shared gateway rather than dedicated
+infrastructure; see [What Parley can and can't do](#what-parley-can-and-cant-do-gateway-limits).
 
 ---
 
