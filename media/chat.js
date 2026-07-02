@@ -219,19 +219,31 @@ import hljs from 'highlight.js/lib/common';
     return md.render(String(src || ''));
   }
   function enhanceContent(contentEl) {
-    // Copy button on each fenced block.
+    // Copy button on each fenced block. The button lives outside the scrollable <pre>
+    // so it stays pinned while long code lines are scrolled horizontally.
     contentEl.querySelectorAll('pre').forEach((pre) => {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'codeblock';
+      pre.parentNode.insertBefore(wrapper, pre);
+      wrapper.appendChild(pre);
+
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'copy';
-      btn.textContent = 'Copy';
+      btn.title = 'Copy code';
+      btn.setAttribute('aria-label', 'Copy code');
+      btn.innerHTML = COPY_SVG;
       btn.addEventListener('click', () => {
         const code = pre.querySelector('code');
         vscode.postMessage({ type: 'copyText', text: code ? code.textContent : pre.textContent });
-        btn.textContent = 'Copied';
-        setTimeout(() => (btn.textContent = 'Copy'), 1200);
+        btn.classList.add('copied');
+        btn.innerHTML = '✓';
+        setTimeout(() => {
+          btn.classList.remove('copied');
+          btn.innerHTML = COPY_SVG;
+        }, 1200);
       });
-      pre.appendChild(btn);
+      wrapper.appendChild(btn);
     });
     // Route links through the extension (vscode.env.openExternal) instead of navigating the webview.
     contentEl.querySelectorAll('a').forEach((a) => {
