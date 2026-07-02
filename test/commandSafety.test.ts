@@ -67,6 +67,14 @@ test('isCommandAllowed returns false with no rules', () => {
   assert.equal(isCommandAllowed('npm test', []), false);
 });
 
+test('isCommandAllowed rejects a command that starts with a chaining operator', () => {
+  // Malformed bash whose sole segment would otherwise match an approved prefix.
+  assert.equal(isCommandAllowed('&& npm test', ['npm test']), false);
+  assert.equal(isCommandAllowed('| npm test', ['npm test']), false);
+  assert.equal(isCommandAllowed(';npm test', ['npm test']), false);
+  assert.equal(isSimpleCommand('&& npm test'), false);
+});
+
 test('isSimpleCommand gates which commands may be remembered', () => {
   assert.equal(isSimpleCommand('npm run build'), true);
   assert.equal(isSimpleCommand('npm test && rm -rf /'), false);

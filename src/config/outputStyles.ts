@@ -1,5 +1,8 @@
 import * as vscode from 'vscode';
 
+/** Cap a custom style's instruction, matching the per-source cap used for project rules. */
+const MAX_STYLE_CHARS = 8000;
+
 /**
  * Output styles: a user-selectable communication style prepended to the system
  * prompt (Claude-Code-style). Built-ins ship in code; custom styles are read from
@@ -51,6 +54,21 @@ export function resolveStylePrompt(styles: readonly OutputStyle[], id: string | 
   return styles.find((s) => s.id === (id && id.trim() ? id : 'default'))?.prompt ?? '';
 }
 
+/** Build a custom style from a file's id + raw contents (pure — capped like project rules). Undefined if the body is empty. */
+export function styleFromFile(id: string, raw: string): OutputStyle | undefined {
+  const { description, body } = parseStyleFile(raw);
+  const trimmed = body.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  return {
+    id,
+    label: id,
+    description: description || 'Custom output style.',
+    prompt: trimmed.slice(0, MAX_STYLE_CHARS)
+  };
+}
+
 /** Extract an optional `description:` and the body from simple `---` frontmatter. */
 function parseStyleFile(raw: string): { description: string; body: string } {
   const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(raw);
@@ -78,18 +96,11 @@ export async function loadOutputStyles(): Promise<OutputStyle[]> {
       }
       try {
         const raw = Buffer.from(await vscode.workspace.fs.readFile(vscode.Uri.joinPath(dir, name))).toString('utf8');
-        const { description, body } = parseStyleFile(raw);
-        if (!body.trim()) {
+        const style = styleFromFile(name.replace(/\.md$/i, ''), raw);
+        if (!style) {
           continue;
         }
-        const id = name.replace(/\.md$/i, '');
-        const style: OutputStyle = {
-          id,
-          label: id,
-          description: description || 'Custom output style.',
-          prompt: body.trim()
-        };
-        const existing = styles.findIndex((s) => s.id === id);
+        const existing = styles.findIndex((s) => s.id === style.id);
         if (existing >= 0) {
           styles[existing] = style;
         } else {

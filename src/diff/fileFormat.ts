@@ -54,7 +54,8 @@ export function decodeText(bytes: Uint8Array): { text: string; format: FileForma
  * EOLs are normalized first, so it is safe to pass model output that uses LF.
  */
 export function encodeText(text: string, format: FileFormat): Buffer {
-  const normalized = text.replace(/\r\n/g, '\n');
+  // Collapse CRLF and any lone CR (old-Mac) to LF, then apply the target EOL.
+  const normalized = text.replace(/\r\n?/g, '\n');
   const withEol = format.eol === '\r\n' ? normalized.replace(/\n/g, '\r\n') : normalized;
   if (format.encoding === 'utf16le') {
     const body = Buffer.from(withEol, 'utf16le');

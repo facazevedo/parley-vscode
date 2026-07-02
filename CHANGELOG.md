@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.63.0
+
+### Fixed / hardened (from a full recheck of the v0.56–v0.62 code)
+
+- **Custom output styles are now size-capped** (8 000 chars, matching project rules), so an oversized `.parley/output-styles/*.md` can't silently bloat the system prompt on every request.
+- **`/context` now counts the base system prompt** in its total (it was omitting the fixed ~320-token identity/guidance prompt), with a dedicated "Base system prompt" row.
+- **Local browser: concurrent `@browser` / `browser_navigate` calls can no longer launch two Chromium processes** — the launch is now guarded by a shared in-flight promise.
+- **Encoding round-trip: a lone `\r` (old-Mac EOL) is normalized** instead of leaving a stray carriage return when writing a CRLF file.
+- **Command allowlist: a command beginning with a chaining operator** (`&& npm test`, `| foo`, `;bar`) is no longer auto-approved (it's malformed shell and never matches cleanly).
+- **`multi_edit` failure hints** now note when the closest-match excerpt reflects the earlier edits already applied in the batch, so the report isn't mistaken for the on-disk file.
+- **Prompt clarity:** the agent-mode note now states that per-tool-call narration is expected and that the brevity guidance targets whole-response padding, not those step notes.
+
+No behavior changes beyond the above; the review confirmed the rest of the recent code (subagent isolation, Playwright import, EOL pipeline, git detection) is correct as-is.
+
 ## 0.62.0
 
 ### Added — context breakdown (`/context`)

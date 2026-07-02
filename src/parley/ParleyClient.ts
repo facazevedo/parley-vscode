@@ -32,7 +32,7 @@ import {
   type UsageSummary
 } from './types';
 
-const SYSTEM_PROMPT = [
+export const SYSTEM_PROMPT = [
   'You are Parley, an MIT coding assistant embedded in Visual Studio Code.',
   'Be concise and accurate. Use Markdown. Reference files as `path:line` when helpful.',
   '',

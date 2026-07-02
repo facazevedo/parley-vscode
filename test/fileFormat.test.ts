@@ -57,6 +57,15 @@ test('encode/decode round-trips every format byte-faithfully', () => {
   }
 });
 
+test('encodeText normalizes a lone CR (old-Mac EOL) instead of leaving a stray \\r', () => {
+  // Mixed input with a bare \r; CRLF target must not produce \r\r\n or a stray \r.
+  assert.equal(
+    encodeText('a\rb\r\nc\n', { encoding: 'utf8', bom: false, eol: '\r\n' }).toString('utf8'),
+    'a\r\nb\r\nc\r\n'
+  );
+  assert.equal(encodeText('a\rb', { encoding: 'utf8', bom: false, eol: '\n' }).toString('utf8'), 'a\nb');
+});
+
 test('encodeText writes a UTF-16LE BOM file from an edited LF string', () => {
   const format: FileFormat = { encoding: 'utf16le', bom: true, eol: '\r\n' };
   const out = encodeText('changed\n', format);

@@ -21,7 +21,7 @@ loader._load = function (request: string, ...rest: unknown[]): unknown {
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires -- loaded after the vscode stub is installed
 const styles = require('../src/config/outputStyles') as typeof import('../src/config/outputStyles');
-const { BUILT_IN_OUTPUT_STYLES, resolveStylePrompt } = styles;
+const { BUILT_IN_OUTPUT_STYLES, resolveStylePrompt, styleFromFile } = styles;
 
 test('default style contributes no extra instruction', () => {
   assert.equal(resolveStylePrompt(BUILT_IN_OUTPUT_STYLES, 'default'), '');
@@ -48,4 +48,23 @@ test('every built-in has a unique id and a description; only default is empty-pr
       assert.ok(s.prompt.length > 0, `${s.id} has a prompt`);
     }
   }
+});
+
+test('styleFromFile parses frontmatter, and caps the prompt at 8000 chars', () => {
+  const withFm = styleFromFile('terse', '---\ndescription: Very terse\n---\nBe extremely brief.');
+  assert.equal(withFm?.description, 'Very terse');
+  assert.equal(withFm?.prompt, 'Be extremely brief.');
+  assert.equal(withFm?.label, 'terse');
+
+  const noFm = styleFromFile('plain', 'Just a body, no frontmatter.');
+  assert.equal(noFm?.description, 'Custom output style.');
+  assert.equal(noFm?.prompt, 'Just a body, no frontmatter.');
+
+  const huge = styleFromFile('huge', 'x'.repeat(20000));
+  assert.equal(huge?.prompt.length, 8000, 'oversized custom style is capped');
+});
+
+test('styleFromFile returns undefined for an empty body', () => {
+  assert.equal(styleFromFile('empty', ''), undefined);
+  assert.equal(styleFromFile('fm-only', '---\ndescription: x\n---\n   '), undefined);
 });

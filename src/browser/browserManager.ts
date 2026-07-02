@@ -55,6 +55,7 @@ interface ConsoleLine {
 export class BrowserManager {
   private browser?: PwBrowser;
   private page?: PwPage;
+  private launching?: Promise<PwPage>; // in-flight launch, shared so concurrent navigate() can't double-launch
   private readonly consoleLog: ConsoleLine[] = [];
 
   public constructor(
@@ -120,11 +121,26 @@ export class BrowserManager {
     return (await dynamicImport(pathToFileURL(shim).href)) as PlaywrightModule;
   }
 
-  /** Ensure a live page exists, installing/launching on first use. Throws with an actionable message on failure. */
+  /**
+   * Ensure a live page exists, installing/launching on first use. Concurrent
+   * callers share a single in-flight launch (so two navigate() calls can't spin
+   * up two Chromium processes). Throws with an actionable message on failure.
+   */
   private async ensurePage(): Promise<PwPage> {
     if (this.page) {
       return this.page;
     }
+    if (!this.launching) {
+      this.launching = this.launch();
+    }
+    try {
+      return await this.launching;
+    } finally {
+      this.launching = undefined; // cleared so a failed launch can be retried
+    }
+  }
+
+  private async launch(): Promise<PwPage> {
     if (!(await this.isInstalled())) {
       await this.install();
     }

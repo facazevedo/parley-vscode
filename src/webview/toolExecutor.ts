@@ -451,9 +451,12 @@ export class ToolExecutor {
     if (result.kind === 'error') {
       const which = result.index >= 0 ? ` (edit #${result.index + 1} of ${edits.length})` : '';
       const stale = result.index >= 0 ? this.staleNote(uri.fsPath, original) : '';
+      // The hint is scanned against the in-memory text after the earlier edits in the batch
+      // have been applied — say so for edit #2+ so the agent doesn't distrust it vs. the file on disk.
+      const hintBasis = result.index > 0 ? ' (after applying the earlier edits in this batch)' : '';
       const hint = result.hint
-        ? ` Closest match is lines ${result.hint.startLine}-${result.hint.endLine}` +
-          ` (${Math.round(result.hint.similarity * 100)}% of lines match) — the file actually contains:\n${result.hint.excerpt}\n` +
+        ? ` Closest match is lines ${result.hint.startLine}-${result.hint.endLine}${hintBasis}` +
+          ` (${Math.round(result.hint.similarity * 100)}% of lines match) — the text at that point contains:\n${result.hint.excerpt}\n` +
           'Copy old_text EXACTLY from the lines above, then retry.'
         : '';
       return `Error: ${result.message}${which} No edits were applied (this tool is all-or-nothing).${stale}${hint}`;

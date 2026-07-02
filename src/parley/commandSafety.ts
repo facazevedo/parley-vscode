@@ -93,6 +93,11 @@ export function splitCommandSegments(command: string): string[] {
   return segments.map((s) => s.trim()).filter((s) => s.length > 0);
 }
 
+/** A command that begins with a chaining operator is malformed — never auto-approve it. */
+function startsWithOperator(command: string): boolean {
+  return /^\s*(\|\|?|&&?|;)/.test(command);
+}
+
 /** Does one segment match an approved rule (exact, or the rule plus more arguments)? */
 function segmentMatchesRule(segment: string, rules: readonly string[]): boolean {
   return rules.some((rule) => segment === rule || segment.startsWith(`${rule} `));
@@ -103,7 +108,7 @@ function segmentMatchesRule(segment: string, rules: readonly string[]): boolean 
  * command substitution AND every top-level segment matches some approved rule.
  */
 export function isCommandAllowed(command: string, rules: readonly string[]): boolean {
-  if (rules.length === 0 || hasCommandSubstitution(command)) {
+  if (rules.length === 0 || hasCommandSubstitution(command) || startsWithOperator(command)) {
     return false;
   }
   const segments = splitCommandSegments(command);
@@ -120,5 +125,5 @@ export function isCommandAllowed(command: string, rules: readonly string[]): boo
  * offered for simple commands.
  */
 export function isSimpleCommand(command: string): boolean {
-  return !hasCommandSubstitution(command) && splitCommandSegments(command).length === 1;
+  return !hasCommandSubstitution(command) && !startsWithOperator(command) && splitCommandSegments(command).length === 1;
 }

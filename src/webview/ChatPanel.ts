@@ -16,6 +16,7 @@ import { terminalSnapshot } from '../context/terminalLog';
 import { isSensitiveFile } from '../context/sensitiveFileFilter';
 import type { CheckpointStore } from '../diff/checkpoints';
 import type { Logger } from '../logging/logger';
+import { SYSTEM_PROMPT } from '../parley/ParleyClient';
 import type { ParleyProvider } from '../parley/ParleyProvider';
 import { extractMentionPaths } from '../parley/parsing';
 import { AGENT_TOOLS, READ_ONLY_TOOLS, resolveAcrossRoots, runAgentTool, toolRelPath } from '../parley/tools';
@@ -628,6 +629,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     const model = this.selectedAgentId || this.getSettings().defaultAgent;
     const window = contextWindowFor(model);
 
+    const baseTok = est(SYSTEM_PROMPT); // fixed identity/guidance prompt, prepended on every request
     const systemTok = est(await this.buildSystemExtra());
     const toolsEnabled = this.mode !== 'chat';
     const turnTools = toolsEnabled
@@ -654,10 +656,11 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         asstN += 1;
       }
     }
-    const total = systemTok + toolsTok + userTok + asstTok + summaryTok;
+    const total = baseTok + systemTok + toolsTok + userTok + asstTok + summaryTok;
     const pct = window ? ` (${Math.round((total / window) * 100)}% of window)` : '';
 
     const rows: Array<[string, number, string]> = [
+      ['Base system prompt', baseTok, 'fixed; sent every request'],
       ['System (env, output style, mode, project rules)', systemTok, 'dynamic; project rules can dominate'],
       [
         `Tool definitions (${turnTools.length})`,
@@ -1198,7 +1201,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         'If a command is terminated for exceeding its timeout, that is recoverable: re-run it, split it into smaller steps, or proceed — do not give up.\n\n' +
         'For any task with more than a couple of steps, call the `update_plan` tool first with the high-level steps, then update it (one step `in_progress` at a time, mark steps `done` as you finish) so the user can follow your progress.\n\n' +
         'When a task needs broad read-only reconnaissance first — mapping how a subsystem works, finding every usage of a pattern across many files, comparing several implementations — delegate that investigation to `run_subagent` with a SELF-CONTAINED brief (it cannot see this conversation) instead of flooding your own context with dozens of reads; then act on its report.\n\n' +
-        'IMPORTANT — always communicate in plain text as you work: before each tool call, write a short sentence saying what you are about to do and why; after finishing a logical chunk, summarize what changed. Do NOT paste raw reasoning notes-to-self (fragments like "Need to…", "Use python? read __all__.") into your reply — write clear sentences for the user. NEVER reply with only tool calls and no text, and never return an empty message.\n\n' +
+        'IMPORTANT — always communicate in plain text as you work: before each tool call, write a short sentence saying what you are about to do and why; after finishing a logical chunk, summarize what changed. This per-step narration is expected and helpful — the brevity guidance is about not padding the WHOLE response (restating the question, filler intros/outros), not about skipping these. Do NOT paste raw reasoning notes-to-self (fragments like "Need to…", "Use python? read __all__.") into your reply — write clear sentences for the user. NEVER reply with only tool calls and no text, and never return an empty message.\n\n' +
         'When the entire task is genuinely finished, your final message MUST end with a summary section formatted EXACTLY like this:\n' +
         '**SUMMARY**\n' +
         '- <what you did — one bullet per item>\n' +
