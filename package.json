@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.61.0",
+  "version": "0.62.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -126,6 +126,11 @@
       {
         "command": "parley.selectOutputStyle",
         "title": "Parley: Select Output Style",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.showContextBreakdown",
+        "title": "Parley: Show Context Breakdown",
         "category": "Parley"
       },
       {

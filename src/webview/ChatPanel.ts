@@ -617,6 +617,87 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     return this.estimateHistoryTokens();
   }
 
+  /**
+   * "Parley: Show Context Breakdown" (also `/context`) — a per-component estimate
+   * of what is filling the model's context window right now: the system prompt,
+   * the tool schemas sent every request, and the conversation messages. Opens as
+   * a rendered Markdown preview beside the editor. Estimates use ~4 chars/token.
+   */
+  public async showContextBreakdown(): Promise<void> {
+    const est = (s: string | undefined): number => Math.round((s?.length ?? 0) / 4);
+    const model = this.selectedAgentId || this.getSettings().defaultAgent;
+    const window = contextWindowFor(model);
+
+    const systemTok = est(await this.buildSystemExtra());
+    const toolsEnabled = this.mode !== 'chat';
+    const turnTools = toolsEnabled
+      ? this.mode === 'plan'
+        ? READ_ONLY_TOOLS
+        : [...AGENT_TOOLS, ...this.mcp.getTools()]
+      : [];
+    const toolsTok = est(JSON.stringify(turnTools));
+
+    let userTok = 0;
+    let userN = 0;
+    let asstTok = 0;
+    let asstN = 0;
+    let summaryTok = 0;
+    for (const m of this.history) {
+      const t = est(m.content);
+      if (m.content?.startsWith('📦 **Compacted summary')) {
+        summaryTok += t;
+      } else if (m.role === 'user') {
+        userTok += t;
+        userN += 1;
+      } else if (m.role === 'assistant') {
+        asstTok += t;
+        asstN += 1;
+      }
+    }
+    const total = systemTok + toolsTok + userTok + asstTok + summaryTok;
+    const pct = window ? ` (${Math.round((total / window) * 100)}% of window)` : '';
+
+    const rows: Array<[string, number, string]> = [
+      ['System (env, output style, mode, project rules)', systemTok, 'dynamic; project rules can dominate'],
+      [
+        `Tool definitions (${turnTools.length})`,
+        toolsTok,
+        toolsEnabled ? 'sent every request in this mode' : 'none in Chat mode'
+      ],
+      [`Conversation — user (${userN})`, userTok, ''],
+      [`Conversation — assistant (${asstN})`, asstTok, '']
+    ];
+    if (summaryTok > 0) {
+      rows.push(['Compacted summary', summaryTok, 'older turns already condensed']);
+    }
+
+    const md = [
+      '# Parley — context breakdown',
+      '',
+      `**Model:** \`${model}\`  `,
+      window
+        ? `**Context window:** ~${window.toLocaleString()} tokens  `
+        : '**Context window:** unknown for this model  ',
+      `**Estimated in use:** ~${total.toLocaleString()} tokens${pct}`,
+      '',
+      '| Component | Est. tokens | Notes |',
+      '| --- | ---: | --- |',
+      ...rows.map(([label, tok, note]) => `| ${label} | ~${tok.toLocaleString()} | ${note} |`),
+      `| **Total** | **~${total.toLocaleString()}** | |`,
+      '',
+      '_Estimates use ~4 chars/token. Per-turn tool results (file reads, command output) are kept to the last few_',
+      '_**inside** a turn and do not accumulate here — that is why the running window stays lean. If the total_',
+      '_approaches the window, run **⊟ Parley: Compact Conversation** to replace older turns with a summary._'
+    ].join('\n');
+
+    const doc = await vscode.workspace.openTextDocument({ language: 'markdown', content: md });
+    try {
+      await vscode.commands.executeCommand('markdown.showPreviewToSide', doc.uri);
+    } catch {
+      await vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.Beside, preview: true });
+    }
+  }
+
   /** Handle composer slash commands. Returns true if the input was a known command. */
   private async handleSlash(input: string): Promise<boolean> {
     const cmd = input.slice(1).split(/\s+/)[0].toLowerCase();
@@ -627,6 +708,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         return true;
       case 'compact':
         await this.promptCompact();
+        return true;
+      case 'context':
+        await this.showContextBreakdown();
         return true;
       case 'cost': {
         const est = this.sessionCost > 0 ? ` (~${formatUsd(this.sessionCost)} estimated)` : '';
@@ -659,7 +743,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         this.history.push({
           role: 'assistant',
           content:
-            '**Slash commands**\n- `/clear` (or `/new`) — start a new conversation\n- `/compact` — summarize to free up context (choose keep-recent or all)\n- `/cost` — show this conversation\'s token/cost usage\n- `/model` — switch the model\n- `/init` — create a project rules file (AGENTS.md)\n- `/json` — make the next reply a JSON object\n- `/help` — this list\n\n**Custom commands:** add a `name.md` file under `.parley/commands/` (or `.claude/commands/`) and it becomes `/name` — its text is used as the prompt, with `$ARGS` replaced by anything you type after the command.\n\nMost actions also have commands in the Command Palette (search "Parley").',
+            '**Slash commands**\n- `/clear` (or `/new`) — start a new conversation\n- `/compact` — summarize to free up context (choose keep-recent or all)\n- `/context` — breakdown of what is filling the context window\n- `/cost` — show this conversation\'s token/cost usage\n- `/model` — switch the model\n- `/init` — create a project rules file (AGENTS.md)\n- `/json` — make the next reply a JSON object\n- `/help` — this list\n\n**Custom commands:** add a `name.md` file under `.parley/commands/` (or `.claude/commands/`) and it becomes `/name` — its text is used as the prompt, with `$ARGS` replaced by anything you type after the command.\n\nMost actions also have commands in the Command Palette (search "Parley").',
           createdAt: new Date().toISOString()
         });
         await this.postState();

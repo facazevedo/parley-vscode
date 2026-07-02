@@ -161,6 +161,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('parley.rebuildCodebaseIndex', () => chatPanel.rebuildCodebaseIndex()),
     vscode.commands.registerCommand('parley.manageAllowedCommands', () => currentChat().manageAllowedCommands()),
     vscode.commands.registerCommand('parley.selectOutputStyle', () => currentChat().selectOutputStyle()),
+    vscode.commands.registerCommand('parley.showContextBreakdown', () => currentChat().showContextBreakdown()),
     vscode.commands.registerCommand('parley.closeBrowser', async () => {
       const closed = await closeSharedBrowser();
       await vscode.window.showInformationMessage(

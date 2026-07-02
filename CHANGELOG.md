@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.62.0
+
+### Added — context breakdown (`/context`)
+
+- **`Parley: Show Context Breakdown`** (or type `/context`) opens a rendered breakdown of what is filling the model's context window right now, beyond the header gauge: the **system prompt** (env, output style, mode, project rules), the **tool definitions** sent every request (with a count), and the **conversation messages** split into user/assistant (and a **compacted-summary** row if the conversation was compacted) — each with an estimated token cost, plus the total and its percentage of the model's window.
+- Estimates use ~4 chars/token. The report also explains why the window stays lean (per-turn tool results are kept to the last few _inside_ a turn and don't accumulate) and points to **⊟ Compact** when the total approaches the limit.
+
 ## 0.61.0
 
 ### Added — output styles

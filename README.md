@@ -552,6 +552,7 @@ frontmatter‑less (or `alwaysApply: true`) rules always apply.
 | `Parley: Rebuild Codebase Index`                | Build the local semantic `@codebase` index                                     |
 | `Parley: Manage Allowed Commands`               | Review/remove commands approved via "Always Allow"                             |
 | `Parley: Select Output Style`                   | Choose how Parley communicates (Default/Concise/Explanatory/Learning + custom) |
+| `Parley: Show Context Breakdown`                | Per-component estimate of what fills the context window (also `/context`)      |
 | `Parley: Reconnect MCP Servers`                 | Restart MCP servers and show status                                            |
 | `Parley: Show Usage`                            | Real billed spend for the current month                                        |
 | `Parley: Set Token Limit`                       | Per‑conversation token budget                                                  |
