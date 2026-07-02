@@ -125,7 +125,7 @@ Open the **`Mode ▾`** popover (or set `parley.defaultMode`):
 | **Chat** | Answer only; no file tools (default). |
 | **Ask before edits** | Agent proposes edits; approve each on an in‑chat card (Apply / Choose hunks… / Reject) with the full diff opened beside. |
 | **Edit automatically** | Agent applies edits without asking (checkpointed/revertible). |
-| **Plan** | Agent explores **read‑only** and presents a numbered plan; makes no changes. |
+| **Plan** | Agent explores **read‑only** and presents a plan, which then **opens as an editable markdown doc** — edit it, then click **Build**: your edited version is what gets implemented. |
 | **Auto** | Agent decides and applies edits automatically. |
 | **Full access** ⚠ | **CAUTION** — auto‑applies edits **and runs shell commands without asking**. |
 
@@ -347,8 +347,17 @@ Configure **Model Context Protocol** servers in `parley.mcpServers` (stdio trans
 }
 ```
 
-Parley launches each server, runs the handshake, lists its tools, and exposes them to
-the agent as **`mcp__<server>__<tool>`** (available in every agent mode except Plan).
+**Remote servers** work too — streamable HTTP (default for `url`) or legacy SSE:
+
+```jsonc
+"parley.mcpServers": {
+  "github": { "url": "https://api.githubcopilot.com/mcp/", "headers": { "Authorization": "Bearer <PAT>" } },
+  "legacy": { "url": "https://example.com/sse", "type": "sse" }
+}
+```
+
+Parley launches/connects each server, runs the handshake, lists its tools, and exposes
+them to the agent as **`mcp__<server>__<tool>`** (available in every agent mode except Plan).
 Run **`Parley: Reconnect MCP Servers`** after editing the config; it also restarts
 automatically when the setting changes. A server that fails to start is skipped — chat
 keeps working.

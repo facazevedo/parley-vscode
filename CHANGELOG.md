@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.54.0
+
+### Added — editable plan document (Claude-Code style)
+- When a **Plan-mode** turn finishes, the plan opens as an **editable markdown document beside the chat**, with buttons: **Build (ask before edits)** / **Build (edit automatically)** / **Stay in Plan**. Edit the plan freely first — **your edited version is what gets implemented**: approving switches the mode and starts the build turn from the document's current text. This closes the last row of the original comparison panel.
+
+### Added — MCP over HTTP: streamable HTTP + legacy SSE transports
+- `parley.mcpServers` entries can now be **remote servers**: `{ "url": …, "headers"?: … }` for the modern **streamable HTTP** transport (per-message POST, JSON *or* SSE responses, `Mcp-Session-Id` session handshake, best-effort DELETE teardown), or `{ "url": …, "type": "sse" }` for **legacy HTTP+SSE** servers (persistent stream + `endpoint` event). `headers` carries auth (e.g. a GitHub PAT for `https://api.githubcopilot.com/mcp/`). Config keys are Claude-Code-compatible (`type`/`transport`); stdio entries work unchanged.
+- `McpManager` refactored around a transport interface (stdio moved verbatim); a **live local-server test** verifies the HTTP transport end to end — session id echoed on every request, custom headers sent, and an SSE-stream tool response parsed on the wire (128 tests total).
+
 ## 0.53.0
 
 ### Added — the "live scenario" as a permanent test

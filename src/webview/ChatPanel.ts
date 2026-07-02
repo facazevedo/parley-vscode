@@ -920,6 +920,52 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       useStream,
       turnTools
     });
+
+    // Plan mode: open the plan as an editable document and offer to build it
+    // (Claude-Code style — your edited version is what gets implemented).
+    if (this.mode === 'plan') {
+      void this.offerPlanReview();
+    }
+  }
+
+  /** After a plan-mode turn: show the plan as editable markdown beside the chat + Build buttons. */
+  private async offerPlanReview(): Promise<void> {
+    const lastPlan = [...this.transcript].reverse().find((e) => e.kind === 'assistant');
+    if (!lastPlan || lastPlan.kind !== 'assistant' || lastPlan.text.trim().length < 40) {
+      return;
+    }
+    const HEADER = '<!-- Parley plan — edit freely below; the EDITED text is what gets built. -->\n\n';
+    const doc = await vscode.workspace.openTextDocument({
+      language: 'markdown',
+      content: HEADER + lastPlan.text.trim()
+    });
+    await vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.Beside, preview: false });
+
+    const ASK = 'Build (ask before edits)';
+    const AUTO = 'Build (edit automatically)';
+    const choice = await vscode.window.showInformationMessage(
+      'Review the plan in the editor — edit it freely, then choose how to build it.',
+      ASK,
+      AUTO,
+      'Stay in Plan'
+    );
+    if (choice !== ASK && choice !== AUTO) {
+      return;
+    }
+    const planText = doc
+      .getText()
+      .replace(/^<!--[\s\S]*?-->\s*/, '')
+      .trim();
+    if (!planText) {
+      return;
+    }
+    this.mode = choice === ASK ? 'ask' : 'edit';
+    this.save();
+    await this.postState();
+    await this.runTurn(
+      `Implement the following APPROVED plan, step by step. Any edits in it are intentional — follow this version exactly:\n\n${planText}`,
+      this.contextOptions
+    );
   }
 
   /** Compose project rules + the mode-specific system instruction (plan / autonomous agent). */
