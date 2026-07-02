@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.64.0
+
+### Internal — tests for the code that can lose your work (no behavior change)
+
+- Added a real-filesystem `vscode` test double and two suites covering the previously-untested orchestration layer:
+  - **CheckpointStore** end-to-end against a temp dir: apply→revert restores exact bytes, reverting a newly-created file deletes it, `revertAll`/`rewindTo(marker)` unwind newest-first across several files, **format is byte-faithful through revert** (a CRLF file edited from LF output reverts to its original CRLF bytes), checkpoints **persist and reload** (survive a window reload), and the log is removed when the stack empties.
+  - **ToolExecutor** edit lifecycle: Edit-mode auto-apply writes + checkpoints, Ask-mode awaits approval (Apply writes / Reject leaves the file untouched / aborting the turn dismisses it / the approval id goes stale after use), the `write_file` staleness guard refuses to clobber an unseen file then succeeds on re-issue, and read-tracking + `resetConversationState` behave.
+- +14 tests (193 total). No production code changed.
+
 ## 0.63.0
 
 ### Fixed / hardened (from a full recheck of the v0.56–v0.62 code)
