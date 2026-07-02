@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import type { ChatMode, ParleySettings } from '../config/settings';
 import { loadOutputStyles, resolveStylePrompt } from '../config/outputStyles';
-import { redactSecrets, summarizeFindings } from '../context/secretScanner';
+import { redactContextAttachments, summarizeFindings } from '../context/secretScanner';
 import {
   collectCommandContext,
   previewAndConfirmContext,
@@ -1181,32 +1181,16 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   /** Redact (or warn about) secrets in attached context before it leaves the machine (parley.secretScanning). */
   private redactContextSecrets(context: ContextAttachment[]): ContextAttachment[] {
     const mode = this.getSettings().secretScanning;
-    if (mode === 'off') {
-      return context;
-    }
-    const byType = new Map<string, number>();
-    const out = context.map((att) => {
-      if (!att.content) {
-        return att;
-      }
-      const { text, findings } = redactSecrets(att.content);
-      if (findings.length === 0) {
-        return att;
-      }
-      for (const f of findings) {
-        byType.set(f.type, (byType.get(f.type) ?? 0) + f.count);
-      }
-      return mode === 'warn' ? att : { ...att, content: text, characterCount: text.length };
-    });
-    if (byType.size > 0) {
-      const summary = summarizeFindings([...byType].map(([type, count]) => ({ type, count })));
+    const { items, findings } = redactContextAttachments(context, mode);
+    if (findings.length > 0) {
+      const summary = summarizeFindings(findings);
       const note =
         mode === 'warn'
           ? `🔒 Detected ${summary} in the attached context (sent as-is; secretScanning=warn).`
           : `🔒 Redacted ${summary} from the attached context before sending.`;
       this.appendTranscript({ kind: 'note', text: note, at: new Date().toISOString() });
     }
-    return mode === 'warn' ? context : out;
+    return items;
   }
 
   /** Compose the dynamic system prompt: env, output style, mode instruction, and project rules. */

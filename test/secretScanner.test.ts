@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { redactSecrets, scanForSecrets, summarizeFindings } from '../src/context/secretScanner';
+import {
+  redactContextAttachments,
+  redactSecrets,
+  scanForSecrets,
+  summarizeFindings
+} from '../src/context/secretScanner';
 
 // Test fixtures are assembled from parts so this test file itself trips no scanner.
 const AWS = 'AKIA' + 'ABCDEFGHIJKLMNOP';
@@ -40,6 +45,37 @@ test('redactSecrets is a no-op on clean text (same string, no findings)', () => 
   const { text, findings } = redactSecrets(clean);
   assert.equal(text, clean);
   assert.deepEqual(findings, []);
+});
+
+test('redactContextAttachments redacts across items and merges findings by type', () => {
+  const items = [
+    { content: `a ${AWS}`, characterCount: 10 },
+    { content: 'nothing here', characterCount: 12 },
+    { content: `b ${AWS} ${GH}`, characterCount: 20 }
+  ];
+  const { items: out, findings } = redactContextAttachments(items, 'redact');
+  assert.ok(!out[0].content!.includes(AWS) && !out[2].content!.includes(AWS));
+  assert.equal(out[1].content, 'nothing here', 'clean item is untouched');
+  assert.equal(out[0].characterCount, out[0].content!.length, 'characterCount is updated');
+  // Two AWS keys (one per dirty item) merged, plus one GitHub token.
+  assert.deepEqual(
+    findings.sort((a, b) => a.type.localeCompare(b.type)),
+    [
+      { type: 'AWS access key', count: 2 },
+      { type: 'GitHub token', count: 1 }
+    ]
+  );
+});
+
+test('redactContextAttachments: warn reports findings but leaves content unchanged; off is a pass-through', () => {
+  const items = [{ content: `key ${AWS}`, characterCount: 20 }];
+  const warned = redactContextAttachments(items, 'warn');
+  assert.equal(warned.items[0].content, `key ${AWS}`, 'warn does not modify content');
+  assert.equal(warned.findings.length, 1, 'warn still reports');
+
+  const off = redactContextAttachments(items, 'off');
+  assert.equal(off.items[0].content, `key ${AWS}`);
+  assert.deepEqual(off.findings, []);
 });
 
 test('summarizeFindings pluralizes', () => {

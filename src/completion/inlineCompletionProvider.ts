@@ -4,15 +4,10 @@ import type { Logger } from '../logging/logger';
 import type { ParleyAuthStore } from '../parley/auth';
 import type { ParleyProvider } from '../parley/ParleyProvider';
 import { openTabsSummary, recentEditsSummary } from './recentEdits';
+import { clampEnd, clampStart, extendFromCache, stopAtBlankLine, type CachedCompletion } from './completionText';
 
 const MAX_PREFIX_CHARS = 2000;
 const MAX_SUFFIX_CHARS = 1000;
-
-interface CachedCompletion {
-  readonly docKey: string;
-  readonly prefix: string;
-  readonly completion: string;
-}
 
 /**
  * Cursor-style ghost-text completion. On a typing pause VS Code calls this; we
@@ -51,14 +46,9 @@ export class ParleyInlineCompletionProvider implements vscode.InlineCompletionIt
     // suggested, serve the remainder locally — zero latency, zero API calls.
     const docKey = document.uri.toString();
     const fullPrefix = document.getText(new vscode.Range(new vscode.Position(0, 0), position));
-    const cached = this.lastCompletion;
-    if (cached && cached.docKey === docKey && fullPrefix.startsWith(cached.prefix)) {
-      const typed = fullPrefix.slice(cached.prefix.length);
-      if (typed.length > 0 && cached.completion.startsWith(typed) && cached.completion.length > typed.length) {
-        return [
-          new vscode.InlineCompletionItem(cached.completion.slice(typed.length), new vscode.Range(position, position))
-        ];
-      }
+    const remainder = extendFromCache(this.lastCompletion, docKey, fullPrefix);
+    if (remainder !== undefined) {
+      return [new vscode.InlineCompletionItem(remainder, new vscode.Range(position, position))];
     }
 
     // Debounce: a newer keystroke cancels this token, so we simply bail out.
@@ -112,17 +102,4 @@ export class ParleyInlineCompletionProvider implements vscode.InlineCompletionIt
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
-}
-
-function stopAtBlankLine(text: string): string {
-  const at = text.search(/\n[ \t]*\n/);
-  return at === -1 ? text : text.slice(0, at);
-}
-
-function clampStart(text: string, max: number): string {
-  return text.length > max ? text.slice(text.length - max) : text;
-}
-
-function clampEnd(text: string, max: number): string {
-  return text.length > max ? text.slice(0, max) : text;
 }

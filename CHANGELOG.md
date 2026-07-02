@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.67.0
+
+### Internal — production-hardening (no user-facing behavior change)
+
+- **CI now runs `npm run lint`** and, when a `PARLEY_SMOKE_KEY` repo secret is configured, a **live gateway smoke test** (`npm run test:smoke`) — one minimal real round-trip. The smoke test lives outside the default offline suite and skips without the key, so `npm test` stays deterministic and offline.
+- **New coverage for previously-untested surfaces** (+8 tests, 208 total):
+  - **MCP stdio transport** end-to-end against a real subprocess (initialize handshake → tools/list → tools/call → error path), plus tool-name qualify/parse/sanitize.
+  - **Inline-completion** logic — the prefix-extension cache and blank-line/clamp helpers — extracted to a pure module and unit-tested.
+  - **Secret-scanner context path** — the attachment redaction (redact/warn/off, findings merged across items) extracted to a pure function and tested.
+- **Adversarial security review** of the command-execution and edit/write-apply paths. It confirmed the sensitive-file filter, the read-before-write staleness guard, tool-result secret redaction, and encoding/EOL preservation are **sound**. It flagged `#`-comment handling in the allowlist, which I **verified is not exploitable**: `run_command` uses the system shell, where text after `#` is an inert comment (`/bin/sh`) or a literal argument (`cmd.exe`) — never a second command — and where a real operator (`&&`/`|`/`;`) follows, the splitter already over-prompts. No change made (altering that parser would only make it more permissive).
+
 ## 0.66.0
 
 ### Docs

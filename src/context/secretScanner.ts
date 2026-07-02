@@ -68,3 +68,34 @@ export function redactSecrets(text: string): { text: string; findings: SecretFin
 export function summarizeFindings(findings: readonly SecretFinding[]): string {
   return findings.map((f) => `${f.count} ${f.type}${f.count === 1 ? '' : 's'}`).join(', ');
 }
+
+/**
+ * Apply the secret-scanning policy to a list of context attachments. Pure: returns
+ * the (possibly redacted) items and the findings merged by type across all of them.
+ * `redact` rewrites each item's content; `warn` leaves content intact but still
+ * reports findings; `off` is a pass-through. The caller surfaces the notice.
+ */
+export function redactContextAttachments<T extends { content?: string; characterCount?: number }>(
+  items: readonly T[],
+  mode: 'redact' | 'warn' | 'off'
+): { items: T[]; findings: SecretFinding[] } {
+  if (mode === 'off') {
+    return { items: [...items], findings: [] };
+  }
+  const byType = new Map<string, number>();
+  const redactedItems = items.map((item) => {
+    if (!item.content) {
+      return item;
+    }
+    const { text, findings } = redactSecrets(item.content);
+    if (findings.length === 0) {
+      return item;
+    }
+    for (const f of findings) {
+      byType.set(f.type, (byType.get(f.type) ?? 0) + f.count);
+    }
+    return mode === 'warn' ? item : { ...item, content: text, characterCount: text.length };
+  });
+  const findings = [...byType].map(([type, count]) => ({ type, count }));
+  return { items: mode === 'warn' ? [...items] : redactedItems, findings };
+}

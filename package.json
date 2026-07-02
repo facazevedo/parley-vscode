@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.66.0",
+  "version": "0.67.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -639,6 +639,7 @@
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" \"media/*.{js,css}\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\" \"media/*.{js,css}\"",
     "test": "npm run compile && node --test \"out/test/*.test.js\"",
+    "test:smoke": "npm run compile && node --test out/test/gatewaySmoke.js",
     "test:integration": "npm run compile && node ./out/test/integration/runTest.js",
     "package": "vsce package --allow-missing-repository --no-rewrite-relative-links"
   },

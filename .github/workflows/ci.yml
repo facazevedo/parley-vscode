@@ -9,6 +9,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Exposed as env so steps can gate on its presence (secrets can't be used in `if:` directly).
+    env:
+      PARLEY_SMOKE_KEY: ${{ secrets.PARLEY_SMOKE_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -17,8 +20,15 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run compile
+      - run: npm run lint
       - run: npm test
       - run: npm run package
+      # Live smoke test against the real gateway — runs only when the repo secret is configured.
+      - run: npm run test:smoke
+        if: ${{ env.PARLEY_SMOKE_KEY != '' }}
+        env:
+          PARLEY_SMOKE_ENDPOINT: ${{ vars.PARLEY_SMOKE_ENDPOINT }}
+          PARLEY_SMOKE_MODEL: ${{ vars.PARLEY_SMOKE_MODEL }}
       - uses: actions/upload-artifact@v4
         with:
           name: parley-vsix
