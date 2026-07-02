@@ -36,7 +36,14 @@ const entries: TranscriptEntry[] = [
     ],
     at: '2026-06-23T21:00:03.000Z'
   },
-  { kind: 'plan', steps: [{ text: 'edit', status: 'done' }, { text: 'test', status: 'pending' }], at: '2026-06-23T21:00:04.000Z' },
+  {
+    kind: 'plan',
+    steps: [
+      { text: 'edit', status: 'done' },
+      { text: 'test', status: 'pending' }
+    ],
+    at: '2026-06-23T21:00:04.000Z'
+  },
   { kind: 'assistant', text: 'Done improving the gait.', model: 'openai/gpt-5.5', at: '2026-06-23T21:00:05.000Z' },
   { kind: 'note', text: '✏️ Changed 1 file: app.py', at: '2026-06-23T21:00:06.000Z' }
 ];

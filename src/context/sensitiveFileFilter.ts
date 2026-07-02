@@ -33,9 +33,7 @@ export function isSensitiveFile(filePath: string): boolean {
     return true;
   }
 
-  return normalized
-    .split('/')
-    .some((part) => ['.ssh', '.aws', '.azure', '.gnupg'].includes(part.toLowerCase()));
+  return normalized.split('/').some((part) => ['.ssh', '.aws', '.azure', '.gnupg'].includes(part.toLowerCase()));
 }
 
 export function shouldSendFile(filePath: string): boolean {

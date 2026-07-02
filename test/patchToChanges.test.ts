@@ -3,9 +3,7 @@ import test from 'node:test';
 import { applyFilePatch } from '../src/diff/applyFilePatch';
 
 test('applyFilePatch applies matching context hunks', () => {
-  const result = applyFilePatch('a\nb\nc\n', [
-    [' a', '-b', '+B', ' c']
-  ]);
+  const result = applyFilePatch('a\nb\nc\n', [[' a', '-b', '+B', ' c']]);
 
   assert.equal(result, 'a\nB\nc\n');
 });

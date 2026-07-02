@@ -6,6 +6,23 @@
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/facazevedo/parley-vscode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/facazevedo/parley-vscode/issues"
+  },
+  "homepage": "https://github.com/facazevedo/parley-vscode#readme",
+  "qna": "https://github.com/facazevedo/parley-vscode/issues",
+  "keywords": [
+    "ai",
+    "assistant",
+    "agent",
+    "coding",
+    "parley",
+    "mit"
+  ],
   "engines": {
     "vscode": "^1.92.0"
   },
@@ -641,7 +658,7 @@
     "test": "npm run compile && node --test \"out/test/*.test.js\"",
     "test:smoke": "npm run compile && node --test out/test/gatewaySmoke.js",
     "test:integration": "npm run compile && node ./out/test/integration/runTest.js",
-    "package": "vsce package --allow-missing-repository --no-rewrite-relative-links"
+    "package": "vsce package --no-rewrite-relative-links"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
@@ -649,15 +666,19 @@
     "@types/vscode": "^1.92.0",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
-    "@vscode/test-electron": "^2.5.2",
-    "@vscode/vsce": "^2.32.0",
-    "esbuild": "^0.24.2",
+    "@vscode/test-electron": "^3.0.0",
+    "@vscode/vsce": "^3.9.2",
+    "esbuild": "^0.28.1",
     "eslint": "^8.57.1",
     "glob": "^10.5.0",
     "highlight.js": "^11.11.1",
     "markdown-it": "^14.2.0",
-    "mocha": "^10.8.2",
+    "mocha": "^11.7.6",
     "prettier": "^3.8.4",
     "typescript": "^5.5.4"
+  },
+  "overrides": {
+    "diff": "^9.0.0",
+    "serialize-javascript": "^7.0.7"
   }
 }

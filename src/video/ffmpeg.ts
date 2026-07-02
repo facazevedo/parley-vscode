@@ -119,7 +119,21 @@ export async function extractAudioMp3(
     const out = path.join(dir, 'audio.mp3');
     await run(
       bins.ffmpeg,
-      ['-hide_banner', '-loglevel', 'error', '-i', videoPath, '-vn', '-t', String(opts.maxSeconds), '-acodec', 'libmp3lame', '-q:a', '5', out],
+      [
+        '-hide_banner',
+        '-loglevel',
+        'error',
+        '-i',
+        videoPath,
+        '-vn',
+        '-t',
+        String(opts.maxSeconds),
+        '-acodec',
+        'libmp3lame',
+        '-q:a',
+        '5',
+        out
+      ],
       { timeout: 180000, maxBuffer: 1 << 20 }
     );
     const buf = await fs.readFile(out);

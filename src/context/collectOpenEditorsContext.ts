@@ -3,7 +3,10 @@ import type { ContextAttachment } from '../parley/types';
 import { collectFileContext } from './collectFileContext';
 import type { IgnoreMatcher } from './ignoreRules';
 
-export async function collectOpenEditorsContext(maxCharacters: number, ignoreMatcher?: IgnoreMatcher): Promise<ContextAttachment[]> {
+export async function collectOpenEditorsContext(
+  maxCharacters: number,
+  ignoreMatcher?: IgnoreMatcher
+): Promise<ContextAttachment[]> {
   const attachments: ContextAttachment[] = [];
 
   for (const document of vscode.workspace.textDocuments) {

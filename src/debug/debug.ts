@@ -11,7 +11,7 @@ import * as vscode from 'vscode';
  * otherwise the extension's global storage). Secrets (the API key / auth header)
  * are never logged — only request shapes, response metadata, and control flow.
  */
-export const DEBUG = true;
+export const DEBUG = false;
 
 let channel: vscode.OutputChannel | undefined;
 let logFile: string | undefined;

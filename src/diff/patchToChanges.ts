@@ -23,7 +23,10 @@ export async function parseUnifiedDiffToChanges(patchText: string): Promise<Prop
     try {
       const document = await vscode.workspace.openTextDocument(uri);
       const originalText = document.getText();
-      const proposedText = applyFilePatch(originalText, filePatch.hunks.map((hunk) => hunk.lines));
+      const proposedText = applyFilePatch(
+        originalText,
+        filePatch.hunks.map((hunk) => hunk.lines)
+      );
       changes.push({
         filePath,
         originalText,

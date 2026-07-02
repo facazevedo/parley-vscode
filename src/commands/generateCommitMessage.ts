@@ -17,7 +17,10 @@ interface GitApi {
  * tree if nothing is staged) into a Conventional Commits message and drop it into
  * the Source Control input box, like Cursor/Copilot.
  */
-export function registerGenerateCommitMessageCommand(context: vscode.ExtensionContext, deps: CommandDependencies): void {
+export function registerGenerateCommitMessageCommand(
+  context: vscode.ExtensionContext,
+  deps: CommandDependencies
+): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('parley.generateCommitMessage', async () => {
       const gitExt = vscode.extensions.getExtension('vscode.git');
@@ -41,7 +44,9 @@ export function registerGenerateCommitMessageCommand(context: vscode.ExtensionCo
           scope = 'working-tree';
         }
       } catch (error) {
-        await vscode.window.showWarningMessage(`Parley: could not read the git diff (${error instanceof Error ? error.message : 'unknown'}).`);
+        await vscode.window.showWarningMessage(
+          `Parley: could not read the git diff (${error instanceof Error ? error.message : 'unknown'}).`
+        );
         return;
       }
       if (!diff.trim()) {
@@ -64,7 +69,10 @@ export function registerGenerateCommitMessageCommand(context: vscode.ExtensionCo
               context: [],
               agentId: deps.getSettings().defaultAgent
             });
-            return resp.message.content.trim().replace(/^```[a-z]*\n?|\n?```$/g, '').trim();
+            return resp.message.content
+              .trim()
+              .replace(/^```[a-z]*\n?|\n?```$/g, '')
+              .trim();
           }
         );
         if (!text) {
@@ -73,7 +81,9 @@ export function registerGenerateCommitMessageCommand(context: vscode.ExtensionCo
         }
         repo.inputBox.value = text;
         await vscode.commands.executeCommand('workbench.view.scm');
-        void vscode.window.showInformationMessage(`Parley wrote a commit message from your ${scope} changes — review it in Source Control.`);
+        void vscode.window.showInformationMessage(
+          `Parley wrote a commit message from your ${scope} changes — review it in Source Control.`
+        );
       } catch (error) {
         await reportProviderError(deps, error);
       }

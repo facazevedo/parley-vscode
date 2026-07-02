@@ -38,7 +38,14 @@ test('round-trips a realistic multi-edit change', () => {
   const b = lines('import x\nimport y\n\nfunction f() {\n  return 2;\n}\n');
   const hunks = computeHunks(a, b);
   assert.ok(hunks.length >= 1);
-  assert.equal(applyHunks(a, hunks, hunks.map(() => true)).join('\n'), b.join('\n'));
+  assert.equal(
+    applyHunks(
+      a,
+      hunks,
+      hunks.map(() => true)
+    ).join('\n'),
+    b.join('\n')
+  );
 });
 
 test('formatUnifiedDiff counts add/del and tags rows with line numbers', () => {

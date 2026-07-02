@@ -11,7 +11,11 @@ function hunkLabel(hunk: Hunk): string {
  * Apply All / Choose… (per-hunk multi-select) / Reject. Returns the final text to
  * write, or `undefined` if the user rejected/cancelled.
  */
-export async function reviewProposedEdit(label: string, original: string, proposedText: string): Promise<string | undefined> {
+export async function reviewProposedEdit(
+  label: string,
+  original: string,
+  proposedText: string
+): Promise<string | undefined> {
   const originalLines = original.split('\n');
   const hunks = computeHunks(originalLines, proposedText.split('\n'));
 
@@ -40,7 +44,12 @@ export async function reviewProposedEdit(label: string, original: string, propos
   }
 
   const picks = await vscode.window.showQuickPick(
-    hunks.map((hunk, index) => ({ label: hunkLabel(hunk), description: `line ${hunk.origStart + 1}`, picked: true, index })),
+    hunks.map((hunk, index) => ({
+      label: hunkLabel(hunk),
+      description: `line ${hunk.origStart + 1}`,
+      picked: true,
+      index
+    })),
     { canPickMany: true, title: `Select changes to apply to ${label}`, placeHolder: 'Checked changes will be applied' }
   );
   if (!picks) {

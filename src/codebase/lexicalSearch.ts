@@ -4,9 +4,41 @@
  * so the most relevant files can be pulled in without embeddings. Pure + tested.
  */
 const STOPWORDS = new Set([
-  'the', 'and', 'for', 'that', 'with', 'this', 'from', 'have', 'how', 'does', 'where', 'what', 'which',
-  'are', 'was', 'can', 'you', 'your', 'into', 'use', 'using', 'add', 'fix', 'the', 'about', 'when', 'why',
-  'should', 'would', 'could', 'there', 'their', 'then', 'than', 'will'
+  'the',
+  'and',
+  'for',
+  'that',
+  'with',
+  'this',
+  'from',
+  'have',
+  'how',
+  'does',
+  'where',
+  'what',
+  'which',
+  'are',
+  'was',
+  'can',
+  'you',
+  'your',
+  'into',
+  'use',
+  'using',
+  'add',
+  'fix',
+  'the',
+  'about',
+  'when',
+  'why',
+  'should',
+  'would',
+  'could',
+  'there',
+  'their',
+  'then',
+  'than',
+  'will'
 ]);
 
 /** Split a query into distinct lowercase keyword tokens (≥3 chars, no stopwords). */

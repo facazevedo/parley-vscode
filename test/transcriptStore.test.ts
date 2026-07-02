@@ -3,14 +3,7 @@ import { test } from 'node:test';
 import { promises as fsp } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {
-  appendEvent,
-  readEvents,
-  upsertIndex,
-  readIndex,
-  ensureGitignore,
-  jsonlPath
-} from '../src/transcript/store';
+import { appendEvent, readEvents, upsertIndex, readIndex, ensureGitignore, jsonlPath } from '../src/transcript/store';
 import type { TranscriptEntry } from '../src/transcript/transcript';
 
 async function tmpBase(name: string): Promise<string> {

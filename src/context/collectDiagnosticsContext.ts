@@ -9,11 +9,18 @@ export function collectDiagnosticsContext(
   targetUri?: vscode.Uri,
   ignoreMatcher?: IgnoreMatcher
 ): ContextAttachment | undefined {
-  const diagnostics = targetUri ? [[targetUri, vscode.languages.getDiagnostics(targetUri)] as const] : vscode.languages.getDiagnostics();
+  const diagnostics = targetUri
+    ? [[targetUri, vscode.languages.getDiagnostics(targetUri)] as const]
+    : vscode.languages.getDiagnostics();
   const lines: string[] = [];
 
   for (const [uri, items] of diagnostics) {
-    if (uri.scheme !== 'file' || items.length === 0 || !shouldSendFile(uri.fsPath) || ignoreMatcher?.ignores(uri.fsPath)) {
+    if (
+      uri.scheme !== 'file' ||
+      items.length === 0 ||
+      !shouldSendFile(uri.fsPath) ||
+      ignoreMatcher?.ignores(uri.fsPath)
+    ) {
       continue;
     }
 

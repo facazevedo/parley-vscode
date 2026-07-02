@@ -54,7 +54,13 @@ async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Respon
 }
 
 function stripTags(html: string): string {
-  return html.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
+  return html
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&#x27;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 async function ddgSearch(query: string): Promise<string> {
@@ -71,7 +77,9 @@ async function ddgSearch(query: string): Promise<string> {
     results.push({ url: decodeDdgUrl(m[1]), title: stripTags(m[2]), snippet: '' });
   }
   // Attach snippets if present, by order.
-  const snippets = [...html.matchAll(/class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/gi)].map((s) => stripTags(s[1]));
+  const snippets = [...html.matchAll(/class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/gi)].map((s) =>
+    stripTags(s[1])
+  );
   results.forEach((r, i) => {
     if (snippets[i]) {
       r.snippet = snippets[i];
@@ -90,7 +98,11 @@ async function googleSearch(query: string, config: WebSearchConfig): Promise<str
     return `Error: Google search returned HTTP ${resp.status}.`;
   }
   const json = (await resp.json()) as { items?: Array<{ title?: string; link?: string; snippet?: string }> };
-  const results = (json.items ?? []).map((it) => ({ title: it.title ?? '', url: it.link ?? '', snippet: it.snippet ?? '' }));
+  const results = (json.items ?? []).map((it) => ({
+    title: it.title ?? '',
+    url: it.link ?? '',
+    snippet: it.snippet ?? ''
+  }));
   return format(results);
 }
 
@@ -107,7 +119,11 @@ async function tavilySearch(query: string, config: WebSearchConfig): Promise<str
     return `Error: Tavily returned HTTP ${resp.status}.`;
   }
   const json = (await resp.json()) as { results?: Array<{ title?: string; url?: string; content?: string }> };
-  const results = (json.results ?? []).map((r) => ({ title: r.title ?? '', url: r.url ?? '', snippet: r.content ?? '' }));
+  const results = (json.results ?? []).map((r) => ({
+    title: r.title ?? '',
+    url: r.url ?? '',
+    snippet: r.content ?? ''
+  }));
   return format(results);
 }
 

@@ -35,7 +35,7 @@ test('extractMentionPaths finds unique @paths and trims trailing punctuation', (
 });
 
 test('isContextLengthError matches token-limit messages only on relevant statuses', () => {
-  assert.equal(isContextLengthError(400, 'This model\'s maximum context length is 8192 tokens'), true);
+  assert.equal(isContextLengthError(400, "This model's maximum context length is 8192 tokens"), true);
   assert.equal(isContextLengthError(400, 'please reduce the length of the messages'), true);
   assert.equal(isContextLengthError(400, 'invalid model'), false);
   assert.equal(isContextLengthError(500, 'maximum context length'), false);

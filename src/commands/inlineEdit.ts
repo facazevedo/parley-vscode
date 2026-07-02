@@ -24,7 +24,9 @@ export function registerInlineEditCommand(
       }
 
       const selection = editor.selection;
-      const range = selection.isEmpty ? editor.document.lineAt(selection.active.line).range : new vscode.Range(selection.start, selection.end);
+      const range = selection.isEmpty
+        ? editor.document.lineAt(selection.active.line).range
+        : new vscode.Range(selection.start, selection.end);
       const selected = editor.document.getText(range);
       if (selected.trim().length === 0) {
         await vscode.window.showInformationMessage('Select some code first.');
@@ -85,7 +87,12 @@ export function registerInlineEditCommand(
 
       const fileName = path.basename(editor.document.uri.fsPath);
       await showProposedDiff(
-        { filePath: editor.document.uri.fsPath, originalText: original, proposedText, title: `Inline edit: ${fileName}` },
+        {
+          filePath: editor.document.uri.fsPath,
+          originalText: original,
+          proposedText,
+          title: `Inline edit: ${fileName}`
+        },
         deps.diffProvider
       );
       const finalText = await reviewProposedEdit(fileName, original, proposedText);

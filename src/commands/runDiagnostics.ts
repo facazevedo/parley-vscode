@@ -32,7 +32,11 @@ export function registerRunDiagnosticsCommand(context: vscode.ExtensionContext, 
           progress.report({ message: 'models' });
           try {
             const agents = await provider.listAgents();
-            checks.push({ name: 'API key & /v1/models', ok: agents.length > 0, detail: `${agents.length} models available` });
+            checks.push({
+              name: 'API key & /v1/models',
+              ok: agents.length > 0,
+              detail: `${agents.length} models available`
+            });
           } catch (error) {
             checks.push({ name: 'API key & /v1/models', ok: false, detail: msg(error) });
           }
@@ -46,7 +50,11 @@ export function registerRunDiagnosticsCommand(context: vscode.ExtensionContext, 
               agentId: model
             });
             const text = resp.message.content.trim();
-            checks.push({ name: `chat completion (${model})`, ok: text.length > 0, detail: text ? `replied "${text.slice(0, 40)}"` : 'empty reply' });
+            checks.push({
+              name: `chat completion (${model})`,
+              ok: text.length > 0,
+              detail: text ? `replied "${text.slice(0, 40)}"` : 'empty reply'
+            });
           } catch (error) {
             checks.push({ name: `chat completion (${model})`, ok: false, detail: msg(error) });
           }
@@ -90,7 +98,11 @@ export function registerRunDiagnosticsCommand(context: vscode.ExtensionContext, 
             progress.report({ message: 'usage' });
             try {
               const usage = await provider.getUsage(accountId);
-              checks.push({ name: 'account usage', ok: true, detail: `$${usage.costUsd.toFixed(4)} this month, ${usage.interactionsCount} requests` });
+              checks.push({
+                name: 'account usage',
+                ok: true,
+                detail: `$${usage.costUsd.toFixed(4)} this month, ${usage.interactionsCount} requests`
+              });
             } catch (error) {
               checks.push({ name: 'account usage', ok: false, detail: msg(error) });
             }

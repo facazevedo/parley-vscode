@@ -2,7 +2,10 @@ import * as vscode from 'vscode';
 import type { ContextAttachment } from '../parley/types';
 import { createSelectionAttachment } from './selectionAttachment';
 
-export function collectSelectionContext(editor: vscode.TextEditor, maxCharacters: number): ContextAttachment | undefined {
+export function collectSelectionContext(
+  editor: vscode.TextEditor,
+  maxCharacters: number
+): ContextAttachment | undefined {
   const selection = editor.selection;
   if (selection.isEmpty) {
     return undefined;
