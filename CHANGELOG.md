@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.59.0
+
+### Fixed — preserve file encoding & line endings on write (Windows)
+
+- Every edit/write is applied as `Buffer.from(text, "utf8")`, so a **CRLF file rewritten in full flipped to LF**, and a **UTF-16LE/BOM file was corrupted to UTF-8**. Now Parley detects each file's on-disk format (encoding, BOM, dominant EOL) when it reads it and **restores that exact format on write and on revert**:
+  - a CRLF file stays CRLF even when the model emits LF content (full `write_file` rewrites included — `edit_file` already preserved EOL within a snippet);
+  - a UTF-8-BOM or UTF-16LE-BOM file keeps its encoding and BOM;
+  - the checkpoint log records the format (a 3-char code), so **Revert Last/All** restores byte-faithfully too. Legacy checkpoints without it fall back to UTF-8, exactly as before.
+- `read_file` now decodes UTF-16LE/BOM correctly, so the agent can actually read and edit those files end-to-end.
+- Staleness detection is now EOL-insensitive, so our own CRLF round-trip is never misreported as "changed on disk".
+- New pure module `src/diff/fileFormat.ts` (9 tests: detection, byte-faithful round-trips for UTF-8/UTF-8-BOM/UTF-16LE, the CRLF-stays-CRLF case, and checkpoint format persistence).
+
 ## 0.58.0
 
 ### Fixed — command-allowlist bypass (security)

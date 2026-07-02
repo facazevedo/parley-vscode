@@ -7,6 +7,7 @@ import type { CommandDependencies } from '../commands/common';
 import { isSensitiveFile } from '../context/sensitiveFileFilter';
 import type { CheckpointStore } from '../diff/checkpoints';
 import { applySnippetEdit } from '../diff/editMatch';
+import { decodeText } from '../diff/fileFormat';
 import { formatUnifiedDiff } from '../diff/lineDiff';
 import { reviewProposedEdit } from '../diff/reviewEdit';
 import { showProposedDiff } from '../diff/showDiff';
@@ -255,7 +256,14 @@ export class ToolExecutor {
   // ---------- file staleness tracking ----------
 
   private static hashContent(text: string): string {
-    return createHash('sha1').update(text).digest('hex');
+    // EOL-insensitive: normalize CRLF→LF first so our own line-ending round-trip
+    // (writing a CRLF file back as CRLF) never reads back as a "changed on disk".
+    return createHash('sha1').update(text.replace(/\r\n/g, '\n')).digest('hex');
+  }
+
+  /** Read a workspace file as text, honoring its encoding (UTF-8/UTF-16LE + BOM). */
+  private static async readText(uri: vscode.Uri): Promise<string> {
+    return decodeText(await vscode.workspace.fs.readFile(uri)).text;
   }
 
   /** Remember the on-disk content of a file the agent has just read (or we just wrote). */
@@ -274,7 +282,7 @@ export class ToolExecutor {
       if (!uri) {
         return;
       }
-      const content = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
+      const content = await ToolExecutor.readText(uri);
       this.recordFileState(uri.fsPath, content);
     } catch {
       // Unreadable/absent — nothing to record.
@@ -314,7 +322,7 @@ export class ToolExecutor {
     let original = '';
     let fileExists = true;
     try {
-      original = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
+      original = await ToolExecutor.readText(uri);
     } catch {
       original = '';
       fileExists = false;
@@ -370,7 +378,7 @@ export class ToolExecutor {
     const uri = (await resolveAcrossRoots(rel)) ?? vscode.Uri.joinPath(root, rel);
     let original: string;
     try {
-      original = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
+      original = await ToolExecutor.readText(uri);
     } catch {
       return `Error: could not read "${rel}" — does it exist? Use write_file to create new files.`;
     }

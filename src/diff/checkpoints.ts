@@ -1,6 +1,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { parseCheckpointLines, serializeCheckpoint, type CheckpointRecord } from './checkpointCodec';
+import { decodeText, encodeText, inferEol, type FileFormat } from './fileFormat';
 
 /**
  * Tracks file writes made by the agent or Ctrl+K inline edit so they can be
@@ -60,18 +61,25 @@ export class CheckpointStore {
 
   public async applyWithCheckpoint(uri: vscode.Uri, newText: string, label: string): Promise<void> {
     let previous: string | undefined;
+    // New file → UTF-8, no BOM, EOL taken from the content itself. An existing
+    // file keeps its own encoding/BOM/EOL so the write round-trips faithfully
+    // (no CRLF→LF flip, no UTF-16→UTF-8 corruption).
+    let format: FileFormat = { encoding: 'utf8', bom: false, eol: inferEol(newText) };
     try {
-      previous = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
+      const decoded = decodeText(await vscode.workspace.fs.readFile(uri));
+      previous = decoded.text;
+      format = decoded.format;
     } catch {
       previous = undefined;
     }
-    await vscode.workspace.fs.writeFile(uri, Buffer.from(newText, 'utf8'));
+    await vscode.workspace.fs.writeFile(uri, encodeText(newText, format));
     this.stack.push({
       fsPath: uri.fsPath,
       previous,
       label,
       marker: this.markerProvider(),
-      at: new Date().toISOString()
+      at: new Date().toISOString(),
+      format
     });
     await this.flush();
   }
@@ -136,7 +144,9 @@ export class CheckpointStore {
         // File may already be gone.
       }
     } else {
-      await vscode.workspace.fs.writeFile(uri, Buffer.from(cp.previous, 'utf8'));
+      // Re-encode in the file's original format; legacy records (no format) stay UTF-8.
+      const bytes = cp.format ? encodeText(cp.previous, cp.format) : Buffer.from(cp.previous, 'utf8');
+      await vscode.workspace.fs.writeFile(uri, bytes);
     }
   }
 }

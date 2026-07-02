@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { execFile, type ExecFileException } from 'child_process';
 import { isSensitiveFile } from '../context/sensitiveFileFilter';
+import { decodeText } from '../diff/fileFormat';
 import type { ToolCall, ToolDefinition } from './types';
 
 const MAX_FILE_CHARS = 20000;
@@ -889,7 +890,7 @@ async function readFile(root: vscode.Uri, relative: string, startLine?: number, 
 
   let text: string;
   try {
-    text = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
+    text = decodeText(await vscode.workspace.fs.readFile(uri)).text; // honor UTF-8/UTF-16LE + BOM
   } catch (error) {
     return `Error: could not read "${relative}" (${error instanceof Error ? error.message : 'unknown'}).`;
   }

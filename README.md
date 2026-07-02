@@ -133,6 +133,10 @@ Open the **`Mode ▾`** popover (or set `parley.defaultMode`):
 Shell commands require confirmation in **every mode except Full access**. Edits are
 always checkpointed (`Parley: Revert Last Edit` / `Revert All Edits`).
 
+Edits **preserve each file's on-disk format** — a CRLF file stays CRLF (not flipped
+to LF), and a UTF-16/BOM file keeps its encoding instead of being corrupted to UTF-8 —
+on both write and revert.
+
 **Auto‑continue.** In agent modes the agent keeps working on its own until the task
 is complete (`parley.autoContinue`, on by default), up to a safety cap
 (`parley.maxAutoContinue`). It signals completion with a `<DONE>` marker; you can
