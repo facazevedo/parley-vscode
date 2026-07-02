@@ -229,8 +229,15 @@ button:disabled {
   font-size: 0.72em;
   line-height: 1;
 }
-.message.user:hover .msgrewind {
+.message:hover .msgrewind {
   opacity: 0.55;
+}
+.message.assistant {
+  position: relative;
+}
+.message.assistant .msgrewind {
+  right: 5px;
+  background: transparent;
 }
 .msgrewind:hover {
   opacity: 1;

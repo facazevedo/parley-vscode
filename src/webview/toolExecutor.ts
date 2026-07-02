@@ -69,6 +69,11 @@ export class ToolExecutor {
     this.fileReadHashes.clear();
   }
 
+  /** Absolute paths of files the agent has read/edited this conversation (for glob-scoped rules). */
+  public touchedFiles(): string[] {
+    return [...this.fileReadHashes.keys()];
+  }
+
   /** Tool runner for agent mode: read tools delegate to the read-only runner; writes/commands need UI + checkpoints. */
   public async run(call: ToolCall): Promise<string> {
     if (isMcpTool(call.name)) {
@@ -203,15 +208,23 @@ export class ToolExecutor {
       original = '';
       fileExists = false;
     }
-    // Overwriting an existing, non-empty file requires a fresh read — otherwise the agent
-    // could clobber content it has never seen (e.g. the user edited it mid-conversation).
+    // Overwriting an existing, non-empty file requires a fresh view of it — otherwise the
+    // agent could clobber content it has never seen (e.g. the user edited it mid-conversation).
+    // Instead of a bare refusal, the CURRENT content is read into the reply (and its hash
+    // recorded), so the model can re-issue the write in ONE round with full knowledge.
     if (fileExists && original.length > 0) {
       const recorded = this.fileReadHashes.get(uri.fsPath);
-      if (!recorded) {
-        return `Error: ${rel} already exists but you have not read it in this conversation. Call read_file first (so you don't overwrite unseen content), then re-issue write_file — or use edit_file for a targeted change.`;
-      }
-      if (recorded !== ToolExecutor.hashContent(original)) {
-        return `Error: ${rel} has changed on disk since you last read it. Call read_file again to see the current content, then re-issue write_file.`;
+      if (!recorded || recorded !== ToolExecutor.hashContent(original)) {
+        this.recordFileState(uri.fsPath, original);
+        const reason = recorded
+          ? `${rel} has CHANGED on disk since you last read it (edited by the user or a tool)`
+          : `${rel} already exists but you have not read it in this conversation`;
+        return (
+          `Error: ${reason} — the write was NOT applied to avoid clobbering unseen content.\n` +
+          `Here is the CURRENT content (auto-read for you; its state is now recorded, so a corrected re-issue will succeed):\n` +
+          `${numberedExcerpt(original)}\n` +
+          `Re-issue write_file with the full intended contents based on the above — or use edit_file for a targeted change.`
+        );
       }
     }
     const proposedText = content.endsWith('\n') ? content : `${content}\n`;
@@ -654,6 +667,20 @@ export class ToolExecutor {
         : `Parley: keeping all ${keep.length} allowed command${keep.length === 1 ? '' : 's'}.`
     );
   }
+}
+
+/** Line-numbered excerpt of a file for auto-informed staleness replies (capped to stay compact). */
+function numberedExcerpt(text: string, maxLines = 200, maxChars = 8000): string {
+  const lines = text.split('\n');
+  const shown = lines.slice(0, maxLines);
+  const width = String(shown.length).length;
+  let body = shown.map((line, i) => `${String(i + 1).padStart(width)} | ${line}`).join('\n');
+  if (body.length > maxChars) {
+    body = `${body.slice(0, maxChars)}\n[… excerpt truncated — call read_file for the rest]`;
+  } else if (lines.length > maxLines) {
+    body += `\n[… ${lines.length - maxLines} more lines — call read_file with start_line=${maxLines + 1} for the rest]`;
+  }
+  return body;
 }
 
 /** Abort-aware pause that RESOLVES (never rejects) when the signal fires — for best-effort waits. */

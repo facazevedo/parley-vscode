@@ -46,11 +46,12 @@ export function registerGenerateImageCommand(context: vscode.ExtensionContext, d
             const controller = new AbortController();
             token.onCancellationRequested(() => controller.abort());
 
-            const result = await deps.getProvider().generateImage(
-              { prompt: prompt.trim(), size, quality, model: IMAGE_MODEL },
-              controller.signal
-            );
+            const result = await deps
+              .getProvider()
+              .generateImage({ prompt: prompt.trim(), size, quality, model: IMAGE_MODEL }, controller.signal);
             await vscode.workspace.fs.writeFile(uri, Buffer.from(result.base64, 'base64'));
+            // Also show it inline in the chat (alongside the saved file).
+            deps.showImage?.(`data:${result.mimeType};base64,${result.base64}`, vscode.workspace.asRelativePath(uri));
           }
         );
       } catch (error) {
@@ -68,7 +69,12 @@ export function registerGenerateImageCommand(context: vscode.ExtensionContext, d
 }
 
 async function chooseSaveUri(prompt: string): Promise<vscode.Uri | undefined> {
-  const slug = prompt.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'image';
+  const slug =
+    prompt
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40) || 'image';
   const fileName = `parley-${slug}-${Date.now()}.png`;
   const folder = vscode.workspace.workspaceFolders?.[0];
 

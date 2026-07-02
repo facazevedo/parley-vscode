@@ -38,7 +38,7 @@ export type TranscriptEntry =
       at: string;
     }
   | { kind: 'plan'; steps: Array<{ text: string; status: string }>; at: string }
-  | { kind: 'note'; text: string; at: string };
+  | { kind: 'note'; text: string; images?: string[]; at: string };
 
 /**
  * Everything before the nth user message (0-based ordinal) — used by "edit & resend"

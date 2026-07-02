@@ -358,6 +358,8 @@ function describeToolEvent(name: string, argsJson: string): string {
       return `Symbol "${a.query ?? ''}"`;
     case 'document_symbols':
       return `Outline ${a.path ?? ''}`.trim();
+    case 'find_definition':
+      return `Def of ${a.symbol ?? ''}`.trim();
     case 'find_references':
       return `Refs of ${a.symbol ?? ''}`.trim();
     case 'write_file':

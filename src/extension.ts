@@ -92,6 +92,10 @@ export function activate(context: vscode.ExtensionContext): void {
   );
   // Route prompt-style commands into the chat panel so replies stream in-conversation.
   commandDeps.runPrompt = (prompt, options) => chatPanel.submitExternalPrompt(prompt, options);
+  // Generated images render inline in the chat (in whichever chat is active).
+  commandDeps.showImage = (dataUri, label) => (ChatPanel.current ?? chatPanel).showGeneratedImage(dataUri, label);
+  // Palette commands act on the last-focused chat (sidebar or tab).
+  const currentChat = (): ChatPanel => ChatPanel.current ?? chatPanel;
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(ChatPanel.viewType, chatPanel, {
@@ -169,16 +173,16 @@ export function activate(context: vscode.ExtensionContext): void {
         await vscode.window.showInformationMessage(`Parley debug log not created yet: ${file}`);
       }
     }),
-    vscode.commands.registerCommand('parley.exportConversation', () => chatPanel.exportConversation()),
-    vscode.commands.registerCommand('parley.compactConversation', () => chatPanel.compactConversation()),
-    vscode.commands.registerCommand('parley.regenerate', () => chatPanel.regenerateLast()),
-    vscode.commands.registerCommand('parley.openPastConversation', () => chatPanel.openPastConversation()),
+    vscode.commands.registerCommand('parley.exportConversation', () => currentChat().exportConversation()),
+    vscode.commands.registerCommand('parley.compactConversation', () => currentChat().compactConversation()),
+    vscode.commands.registerCommand('parley.regenerate', () => currentChat().regenerateLast()),
+    vscode.commands.registerCommand('parley.openPastConversation', () => currentChat().openPastConversation()),
     vscode.commands.registerCommand('parley.revertLastEdit', async () => {
-      const label = await checkpoints.revertLast();
+      const label = await currentChat().checkpointStore.revertLast();
       await vscode.window.showInformationMessage(label ? `Parley reverted: ${label}.` : 'Parley: nothing to revert.');
     }),
     vscode.commands.registerCommand('parley.revertAll', async () => {
-      const count = await checkpoints.revertAll();
+      const count = await currentChat().checkpointStore.revertAll();
       await vscode.window.showInformationMessage(
         count > 0 ? `Parley reverted ${count} edit${count === 1 ? '' : 's'}.` : 'Parley: nothing to revert.'
       );
@@ -221,13 +225,17 @@ export function activate(context: vscode.ExtensionContext): void {
   registerSignOutCommand(context, commandDeps);
 }
 
+/** Workspace-wide keys every chat shares (the command allowlist must not fragment per tab). */
+const SHARED_MEMENTO_KEYS = new Set(['parley.allowedCommands']);
+
 /** A Memento view whose keys are namespaced, so tab conversations don't share sidebar state. */
 function prefixedMemento(base: vscode.Memento, prefix: string): vscode.Memento {
+  const mapKey = (key: string): string => (SHARED_MEMENTO_KEYS.has(key) ? key : prefix + key);
   return {
-    keys: () => base.keys().filter((k) => k.startsWith(prefix)),
+    keys: () => base.keys().filter((k) => k.startsWith(prefix) || SHARED_MEMENTO_KEYS.has(k)),
     get: (<T>(key: string, defaultValue?: T): T | undefined =>
-      base.get<T>(prefix + key, defaultValue as T)) as vscode.Memento['get'],
-    update: (key: string, value: unknown) => base.update(prefix + key, value)
+      base.get<T>(mapKey(key), defaultValue as T)) as vscode.Memento['get'],
+    update: (key: string, value: unknown) => base.update(mapKey(key), value)
   };
 }
 

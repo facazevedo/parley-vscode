@@ -176,6 +176,23 @@ export const AGENT_TOOLS: readonly ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'find_definition',
+      description:
+        'Jump from a symbol OCCURRENCE to its DEFINITION via the language server. Point at the occurrence: give the file, the 1-based line, and the symbol text on that line; returns the definition site(s) as path:line.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Workspace-relative file containing an occurrence.' },
+          line: { type: 'number', description: '1-based line number of that occurrence.' },
+          symbol: { type: 'string', description: 'The symbol text as it appears on that line.' }
+        },
+        required: ['path', 'line', 'symbol']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'find_references',
       description:
         'Find every reference to a symbol across the workspace via the language server. Point at one occurrence: give the file, the 1-based line, and the symbol text on that line.',
@@ -291,6 +308,8 @@ export async function runAgentTool(call: ToolCall): Promise<string> {
       return findSymbol(root, String(args.query ?? ''));
     case 'document_symbols':
       return documentSymbols(root, String(args.path ?? ''));
+    case 'find_definition':
+      return findDefinition(String(args.path ?? ''), toNum(args.line), String(args.symbol ?? ''));
     case 'find_references':
       return findReferences(root, String(args.path ?? ''), toNum(args.line), String(args.symbol ?? ''));
     case 'fetch_url':
@@ -370,6 +389,61 @@ async function documentSymbols(root: vscode.Uri, relative: string): Promise<stri
   };
   walk(symbols, 0);
   return lines.join('\n');
+}
+
+/** Resolve a (path, line, symbol) occurrence to a document + position, shared by the LSP lookups. */
+async function locateSymbolOccurrence(
+  relative: string,
+  line: number | undefined,
+  symbol: string
+): Promise<{ doc: vscode.TextDocument; position: vscode.Position } | { error: string }> {
+  const uri = await resolveAcrossRoots(relative);
+  if (!uri) {
+    return { error: 'Error: path is outside the workspace.' };
+  }
+  if (!line || line < 1 || !symbol.trim()) {
+    return { error: 'Error: line (1-based) and symbol are required.' };
+  }
+  let doc: vscode.TextDocument;
+  try {
+    doc = await vscode.workspace.openTextDocument(uri);
+  } catch (error) {
+    return { error: `Error: could not open "${relative}" (${error instanceof Error ? error.message : 'unknown'}).` };
+  }
+  if (line > doc.lineCount) {
+    return { error: `Error: line ${line} is past the end of the file (${doc.lineCount} lines).` };
+  }
+  const text = doc.lineAt(line - 1).text;
+  const col = text.indexOf(symbol);
+  if (col === -1) {
+    return { error: `Error: "${symbol}" does not appear on line ${line}. That line is:\n${text.trim()}` };
+  }
+  return { doc, position: new vscode.Position(line - 1, col + Math.floor(symbol.length / 2)) };
+}
+
+async function findDefinition(relative: string, line: number | undefined, symbol: string): Promise<string> {
+  const located = await locateSymbolOccurrence(relative, line, symbol);
+  if ('error' in located) {
+    return located.error;
+  }
+  const results = await vscode.commands.executeCommand<Array<vscode.Location | vscode.LocationLink>>(
+    'vscode.executeDefinitionProvider',
+    located.doc.uri,
+    located.position
+  );
+  if (!results || results.length === 0) {
+    return NO_PROVIDER_HINT;
+  }
+  const rows = [
+    ...new Set(
+      results.map((r) => {
+        const uri = 'targetUri' in r ? r.targetUri : r.uri;
+        const range = 'targetRange' in r ? r.targetRange : r.range;
+        return `${toolRelPath(uri)}:${range.start.line + 1}`;
+      })
+    )
+  ].slice(0, 20);
+  return `Definition of "${symbol}":\n${rows.join('\n')}`;
 }
 
 async function findReferences(

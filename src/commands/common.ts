@@ -32,6 +32,8 @@ export interface CommandDependencies {
    * once the {@link ChatPanel} exists.
    */
   runPrompt?: (prompt: string, options: ContextOptions) => Promise<void>;
+  /** When set, drops a generated image into the chat as an inline note. Wired in extension.ts. */
+  showImage?: (dataUri: string, label: string) => void;
 }
 
 export interface ContextOptions {
@@ -42,7 +44,10 @@ export interface ContextOptions {
   readonly includeUserSelectedFiles?: boolean;
 }
 
-export async function collectCommandContext(options: ContextOptions, settings: ParleySettings): Promise<ContextAttachment[]> {
+export async function collectCommandContext(
+  options: ContextOptions,
+  settings: ParleySettings
+): Promise<ContextAttachment[]> {
   const editor = vscode.window.activeTextEditor;
   const attachments: ContextAttachment[] = [];
   const workspaceFolder = editor ? vscode.workspace.getWorkspaceFolder(editor.document.uri) : undefined;

@@ -166,6 +166,8 @@ import hljs from 'highlight.js/lib/common';
         return 'Finding symbol "' + (a.query || '') + '"';
       case 'document_symbols':
         return 'Outlining ' + (a.path || '');
+      case 'find_definition':
+        return 'Finding definition of ' + (a.symbol || '');
       case 'find_references':
         return 'Finding references to ' + (a.symbol || '');
       case 'write_file':
@@ -278,6 +280,8 @@ import hljs from 'highlight.js/lib/common';
       prompt.focus();
     });
     messageNode.appendChild(btn);
+  }
+  function addRewindButton(messageNode, tindex) {
     const rw = document.createElement('button');
     rw.type = 'button';
     rw.className = 'msgrewind';
@@ -288,7 +292,7 @@ import hljs from 'highlight.js/lib/common';
       if (busy) {
         return;
       }
-      vscode.postMessage({ type: 'rewind', ordinal });
+      vscode.postMessage({ type: 'rewind', tindex });
     });
     messageNode.appendChild(rw);
   }
@@ -643,7 +647,9 @@ import hljs from 'highlight.js/lib/common';
     history.replaceChildren();
     pendingIds = pendingIds || [];
     let userOrdinal = 0;
+    let tindex = -1;
     for (const e of entries) {
+      tindex += 1;
       if (e.kind === 'user') {
         const c = bubble('user', renderMd(e.text));
         if (e.images && e.images.length) {
@@ -659,9 +665,11 @@ import hljs from 'highlight.js/lib/common';
         }
         addCopyButton(c.parentNode, e.text);
         addEditButton(c.parentNode, e.text, userOrdinal);
+        addRewindButton(c.parentNode, tindex);
         userOrdinal += 1;
       } else if (e.kind === 'assistant') {
         const c = bubble('assistant', renderMd(e.text));
+        addRewindButton(c.parentNode, tindex);
         if (e.thinking) {
           const det = document.createElement('details');
           det.className = 'thinking';
@@ -706,6 +714,17 @@ import hljs from 'highlight.js/lib/common';
       } else if (e.kind === 'note') {
         const c = bubble('assistant', renderMd(e.text));
         c.parentNode.classList.add('note');
+        if (e.images && e.images.length) {
+          const wrap = document.createElement('div');
+          wrap.className = 'msgimgs';
+          e.images.forEach((src) => {
+            const img = document.createElement('img');
+            img.className = 'msgimg';
+            img.src = src;
+            wrap.append(img);
+          });
+          c.append(wrap);
+        }
       }
     }
     maybeScroll();

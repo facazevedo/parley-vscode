@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.53.0
+
+### Added — the "live scenario" as a permanent test
+- New `test/gatewayLoop.test.ts` drives the **production ParleyClient** against a real local HTTP gateway mock: a **forced 429** must be retried transparently (verified: 3 requests, 2 retry notices, ~2.5s of real backoff, full streamed answer) and **>8k `run_command` output** must arrive at the next request **clamped with the honest omission marker, head AND tail preserved** — asserted on the wire. 127 tests total.
+
+### Changed — every declared design deviation upgraded
+- **Staleness guard auto-informs:** a `write_file` against an unread/changed file still refuses to clobber, but now **auto-reads the current content into the reply** (numbered, capped) and records its hash — the model corrects itself in ONE round instead of being told to go read.
+- **Rules match what the agent touches:** glob-scoped rules now attach when the active file **or any file the agent has read/edited this conversation** matches — and rules files/directories are gathered from **every workspace root**.
+- **`find_definition`** joins the LSP tools: point at any occurrence (file + line + symbol) and get the definition site(s).
+- **⏪ on every message:** assistant messages get the rewind button too (transcript-index anchored), not just yours.
+- **Multi-root beyond the agent layer:** `@codebase` gathering is folder-prefixed across roots, rules load from all roots, and in multi-root workspaces the agent is told the folder layout and that `run_command` executes in the first root (`cd <folder> && …` for others).
+- **Palette commands follow focus:** Export/Compact/Regenerate/Open Past/Revert Last/Revert All now act on the **last-focused chat** (sidebar or tab) instead of always the sidebar; the command allowlist is shared across tabs instead of fragmenting per tab.
+- **Generated images render inline:** `Parley: Generate Image` still saves the PNG, and now also drops it into the active chat as an inline thumbnail note.
+
 ## 0.52.0
 
 ### Internal — the full 4-way ChatPanel decomposition (no behavior change)

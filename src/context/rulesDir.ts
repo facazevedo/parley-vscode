@@ -89,13 +89,13 @@ export function globMatches(glob: string, relPath: string): boolean {
   return new RegExp(`^${rx}$`).test(path);
 }
 
-/** Whether a rule should attach for the given active file (undefined = no file open). */
-export function ruleApplies(rule: RuleFile, activeRelPath: string | undefined): boolean {
+/**
+ * Whether a rule should attach given the candidate files: the active editor file
+ * plus every file the agent has read/edited this conversation.
+ */
+export function ruleApplies(rule: RuleFile, candidatePaths: ReadonlyArray<string | undefined>): boolean {
   if (rule.alwaysApply || rule.globs.length === 0) {
     return true;
   }
-  if (!activeRelPath) {
-    return false;
-  }
-  return rule.globs.some((g) => globMatches(g, activeRelPath));
+  return candidatePaths.some((p) => p && rule.globs.some((g) => globMatches(g, p)));
 }

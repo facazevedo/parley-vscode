@@ -7,8 +7,8 @@ test('parseRuleFile without frontmatter is an always-on rule', () => {
   assert.deepEqual(rule.globs, []);
   assert.equal(rule.alwaysApply, false);
   assert.equal(rule.body, 'Use tabs.\nNever use eval.');
-  assert.ok(ruleApplies(rule, 'any/file.ts'));
-  assert.ok(ruleApplies(rule, undefined));
+  assert.ok(ruleApplies(rule, ['any/file.ts']));
+  assert.ok(ruleApplies(rule, [undefined]));
 });
 
 test('parseRuleFile reads description, globs, and alwaysApply', () => {
@@ -42,9 +42,15 @@ test('globMatches: bare-name patterns match at any depth; backslashes normalize'
 
 test('ruleApplies: glob rules need a matching active file; alwaysApply overrides', () => {
   const globbed = parseRuleFile('---\nglobs: docs/**\n---\nDocs style.');
-  assert.ok(ruleApplies(globbed, 'docs/guide.md'));
-  assert.ok(!ruleApplies(globbed, 'src/app.ts'));
-  assert.ok(!ruleApplies(globbed, undefined));
+  assert.ok(ruleApplies(globbed, ['docs/guide.md']));
+  assert.ok(!ruleApplies(globbed, ['src/app.ts']));
+  assert.ok(!ruleApplies(globbed, []));
   const always = parseRuleFile('---\nglobs: docs/**\nalwaysApply: true\n---\nAlways.');
-  assert.ok(ruleApplies(always, 'src/app.ts'));
+  assert.ok(ruleApplies(always, ['src/app.ts']));
+});
+
+test('ruleApplies: any agent-touched file can activate a glob rule', () => {
+  const globbed = parseRuleFile('---\nglobs: src/components/**\n---\nReact rules.');
+  assert.ok(ruleApplies(globbed, ['README.md', 'src/components/App.tsx']));
+  assert.ok(!ruleApplies(globbed, ['README.md', 'lib/x.py']));
 });

@@ -34,7 +34,6 @@ import {
   indexOfUserMessage,
   transcriptToMarkdown,
   transcriptToPlainText,
-  truncateBeforeUserMessage,
   type TranscriptEntry,
   type TranscriptMeta
 } from '../transcript/transcript';
@@ -102,6 +101,8 @@ interface ChatPanelMessage {
   readonly editOrdinal?: number;
   /** For 'rewind': 0-based ordinal of the user message to rewind to. */
   readonly ordinal?: number;
+  /** For 'rewind': transcript entry index to rewind to. */
+  readonly tindex?: number;
 }
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp']);
@@ -187,6 +188,15 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private customCommandNames: string[] = []; // user-defined /commands from .parley|.claude/commands
   private embeddingIndex?: EmbeddingIndex; // lazy local semantic index for @codebase
   private attachments: PendingAttachment[] = [];
+  // The chat the user interacted with last (sidebar or a tab) — palette commands target it.
+  private static activeInstance?: ChatPanel;
+  public static get current(): ChatPanel | undefined {
+    return ChatPanel.activeInstance;
+  }
+  public get checkpointStore(): CheckpointStore {
+    return this.checkpoints;
+  }
+
   private turns!: AgentTurnRunner;
   private get busy(): boolean {
     return this.turns.busy;
@@ -378,6 +388,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   }
 
   public resolveWebviewView(webviewView: vscode.WebviewView): void {
+    ChatPanel.activeInstance = this;
     this.view = webviewView;
     const webview = webviewView.webview;
     webview.options = {
@@ -398,6 +409,12 @@ export class ChatPanel implements vscode.WebviewViewProvider {
 
   /** Host this chat instance in an editor-tab WebviewPanel (multi-conversation tabs). */
   public attachPanel(panel: vscode.WebviewPanel): void {
+    ChatPanel.activeInstance = this;
+    panel.onDidChangeViewState(() => {
+      if (panel.active) {
+        ChatPanel.activeInstance = this;
+      }
+    });
     this.view = panel;
     panel.webview.options = {
       enableScripts: true,
@@ -429,6 +446,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   }
 
   private async handleMessage(message: ChatPanelMessage): Promise<void> {
+    ChatPanel.activeInstance = this; // any interaction makes this chat the command target
     switch (message.type) {
       case 'refreshAgents':
         await this.refreshAgents();
@@ -450,7 +468,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         this.turns.removeQueued(message.index ?? -1);
         return;
       case 'rewind':
-        await this.rewindAtUserMessage(message.ordinal ?? -1);
+        await this.rewindAtIndex(message.tindex ?? -1);
         return;
       case 'openHistory':
         await this.openPastConversation();
@@ -683,10 +701,13 @@ export class ChatPanel implements vscode.WebviewViewProvider {
    * file-rewind for those. Returns false when the ordinal can't be resolved.
    */
   private async forkAtUserMessage(ordinal: number): Promise<boolean> {
-    const truncated = truncateBeforeUserMessage(this.transcript, ordinal);
-    if (truncated === undefined) {
-      return false;
-    }
+    const idx = indexOfUserMessage(this.transcript, ordinal);
+    return idx === undefined ? false : this.forkAtIndex(idx);
+  }
+
+  /** Fork the conversation just before transcript position `idx` (see forkAtUserMessage). */
+  private async forkAtIndex(idx: number): Promise<boolean> {
+    const truncated = this.transcript.slice(0, idx);
     await this.autosaveConversation();
     this.archiveCurrent();
     this.transcript = [...truncated];
@@ -701,14 +722,13 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     return true;
   }
 
-  /** ⏪ on a user message: choose to fork the conversation, restore files, or both. */
-  private async rewindAtUserMessage(ordinal: number): Promise<void> {
+  /** ⏪ on any message: choose to fork the conversation, restore files, or both. */
+  private async rewindAtIndex(idx: number): Promise<void> {
     if (this.busy) {
       await vscode.window.showInformationMessage('Parley is still responding — stop it before rewinding.');
       return;
     }
-    const idx = indexOfUserMessage(this.transcript, ordinal);
-    if (idx === undefined) {
+    if (idx < 0 || idx >= this.transcript.length) {
       return;
     }
     const CONVO = {
@@ -728,7 +748,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       return;
     }
     if (pick !== FILES) {
-      await this.forkAtUserMessage(ordinal);
+      await this.forkAtIndex(idx);
     }
     if (pick !== CONVO) {
       const files = await this.checkpoints.rewindTo(idx);
@@ -740,6 +760,14 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       this.appendTranscript({ kind: 'note', text: note, at: new Date().toISOString() });
       await this.postState();
     }
+  }
+
+  /** Drop a generated image into the chat as an inline note (used by "Parley: Generate Image"). */
+  public showGeneratedImage(dataUri: string, label: string): void {
+    const note = `🎨 Generated image: ${label}`;
+    this.history.push({ role: 'assistant', content: note, createdAt: new Date().toISOString() });
+    this.appendTranscript({ kind: 'note', text: note, images: [dataUri], at: new Date().toISOString() });
+    void this.postState();
   }
 
   /** Re-run the last user message (drop the responses after it). */
@@ -923,7 +951,12 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         '- <any known limitations or follow-ups>\n' +
         'Use a bold **SUMMARY** heading on its own line, then concise Markdown bullet points (`- `). Put <DONE> on its own line AFTER the summary. Always include this SUMMARY section when finishing — even for small tasks.';
     }
-    return [rules, modeNote].filter(Boolean).join('\n\n') || undefined;
+    const folders = vscode.workspace.workspaceFolders ?? [];
+    const multiRootNote =
+      folders.length > 1
+        ? `This is a MULTI-ROOT workspace (folders: ${folders.map((f) => f.name).join(', ')}). Tool paths may target any root — prefix with the folder name (e.g. "${folders[1].name}/src/…") when the first root isn't meant. run_command executes in the FIRST root (${folders[0].name}); use "cd <folder> && …" for the others.`
+        : undefined;
+    return [rules, multiRootNote, modeNote].filter(Boolean).join('\n\n') || undefined;
   }
 
   /**
@@ -1619,7 +1652,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     settings: ParleySettings
   ): Promise<ContextAttachment[]> {
     const query = prompt.replace(/(?:^|\s)@\S+/g, ' ').trim() || prompt;
-    const docs = await this.gatherCodebaseDocs(root);
+    const docs = await this.gatherCodebaseDocs();
     if (docs.length === 0) {
       return [];
     }
@@ -1656,7 +1689,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   }
 
   /** Read indexable workspace files (skip binaries, huge files, node_modules, sensitive). */
-  private async gatherCodebaseDocs(root: vscode.Uri): Promise<RankDoc[]> {
+  private async gatherCodebaseDocs(): Promise<RankDoc[]> {
     let files: vscode.Uri[];
     try {
       files = await vscode.workspace.findFiles(
@@ -1669,7 +1702,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     }
     const docs: RankDoc[] = [];
     for (const uri of files) {
-      const rel = path.relative(root.fsPath, uri.fsPath).replace(/\\/g, '/');
+      const rel = toolRelPath(uri); // folder-prefixed in multi-root workspaces
       if (isSensitiveFile(rel)) {
         continue;
       }
@@ -1698,7 +1731,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: 'Parley: building local codebase index…' },
         async () => {
-          const docs = await this.gatherCodebaseDocs(root);
+          const docs = await this.gatherCodebaseDocs();
           const n = await this.embeddingIndex!.build(root.fsPath, docs);
           void vscode.window.showInformationMessage(`Parley indexed ${n} files for semantic @codebase search.`);
         }
@@ -1734,55 +1767,67 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   }
 
   /**
-   * Project rules for the system prompt: the first single-file rules file
-   * (.parleyrules / AGENTS.md / .cursorrules), plus directory rules from
-   * `.parley/rules/` and `.cursor/rules/` — glob-scoped rules attach only when
-   * the active editor file matches their frontmatter globs (Cursor-compatible).
+   * Project rules for the system prompt, gathered from EVERY workspace root: the
+   * first single-file rules file per root (.parleyrules / AGENTS.md / .cursorrules),
+   * plus directory rules from `.parley/rules/` and `.cursor/rules/`. Glob-scoped
+   * rules attach when the active editor file — or ANY file the agent has read or
+   * edited this conversation — matches their frontmatter globs (Cursor-compatible).
    */
   private async readProjectRules(): Promise<string | undefined> {
-    const root = vscode.workspace.workspaceFolders?.[0]?.uri;
-    if (!root) {
+    const folders = vscode.workspace.workspaceFolders ?? [];
+    if (folders.length === 0) {
       return undefined;
     }
     const parts: string[] = [];
-    for (const name of PROJECT_RULES_FILES) {
-      try {
-        const raw = Buffer.from(await vscode.workspace.fs.readFile(vscode.Uri.joinPath(root, name))).toString('utf8');
-        if (raw.trim().length > 0) {
-          parts.push(raw.slice(0, 8000));
-          break;
+    for (const folder of folders) {
+      for (const name of PROJECT_RULES_FILES) {
+        try {
+          const raw = Buffer.from(await vscode.workspace.fs.readFile(vscode.Uri.joinPath(folder.uri, name))).toString(
+            'utf8'
+          );
+          if (raw.trim().length > 0) {
+            parts.push(raw.slice(0, 8000));
+            break; // one single-file rules file per root
+          }
+        } catch {
+          // Not present; try the next.
         }
-      } catch {
-        // Not present; try the next.
       }
     }
 
     const active = vscode.window.activeTextEditor?.document;
-    const activeRel =
+    const candidates: Array<string | undefined> = [
       active && active.uri.scheme === 'file'
-        ? path.relative(root.fsPath, active.uri.fsPath).replace(/\\/g, '/')
-        : undefined;
-    for (const dir of RULES_DIRS) {
-      let entries: Array<[string, vscode.FileType]>;
-      try {
-        entries = await vscode.workspace.fs.readDirectory(vscode.Uri.joinPath(root, dir));
-      } catch {
-        continue; // Directory absent.
-      }
-      for (const [name, type] of entries.sort((a, b) => a[0].localeCompare(b[0]))) {
-        if (type !== vscode.FileType.File || !/\.(md|mdc)$/i.test(name)) {
-          continue;
-        }
+        ? vscode.workspace.asRelativePath(active.uri, false).replace(/\\/g, '/')
+        : undefined,
+      // Files the agent has read/edited this conversation can activate glob rules too.
+      ...this.executor
+        .touchedFiles()
+        .map((fsPath) => vscode.workspace.asRelativePath(vscode.Uri.file(fsPath), false).replace(/\\/g, '/'))
+    ];
+    for (const folder of folders) {
+      for (const dir of RULES_DIRS) {
+        let entries: Array<[string, vscode.FileType]>;
         try {
-          const raw = Buffer.from(await vscode.workspace.fs.readFile(vscode.Uri.joinPath(root, dir, name))).toString(
-            'utf8'
-          );
-          const rule = parseRuleFile(raw);
-          if (rule.body && ruleApplies(rule, activeRel)) {
-            parts.push(`## Rule: ${rule.description ?? name}\n${rule.body.slice(0, 4000)}`);
-          }
+          entries = await vscode.workspace.fs.readDirectory(vscode.Uri.joinPath(folder.uri, dir));
         } catch {
-          // Unreadable rule — skip.
+          continue; // Directory absent.
+        }
+        for (const [name, type] of entries.sort((a, b) => a[0].localeCompare(b[0]))) {
+          if (type !== vscode.FileType.File || !/\.(md|mdc)$/i.test(name)) {
+            continue;
+          }
+          try {
+            const raw = Buffer.from(
+              await vscode.workspace.fs.readFile(vscode.Uri.joinPath(folder.uri, dir, name))
+            ).toString('utf8');
+            const rule = parseRuleFile(raw);
+            if (rule.body && ruleApplies(rule, candidates)) {
+              parts.push(`## Rule: ${rule.description ?? name}\n${rule.body.slice(0, 4000)}`);
+            }
+          } catch {
+            // Unreadable rule — skip.
+          }
         }
       }
     }
