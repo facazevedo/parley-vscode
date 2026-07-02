@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.72.1
+
+### Security — honor VS Code Workspace Trust
+
+- **A malicious repository can no longer hijack Parley through its checked-in `.vscode/settings.json`.** Four settings can execute code or redirect where your API key is sent, and were previously honored from any workspace: `parley.endpoint` (the Bearer API key is sent to whatever URL this points at — an attacker value exfiltrates your key on the next message), `parley.hooks` (runs shell commands at prompt/tool lifecycle points), `parley.mcpServers` (spawns subprocesses), and `parley.video.ffmpegPath` (executes that binary). The extension now declares `capabilities.untrustedWorkspaces` with these as `restrictedConfigurations`, so in an **untrusted** workspace their workspace-scoped values are ignored and your user-level settings are used instead; trusting the workspace restores full configurability. Chat and everything else keep working untrusted — only these four settings are gated.
+
+### Fixed
+
+- `parley.context.maxCharacters` and `parley.inlineCompletion.debounceMs` are now range-clamped like every other numeric setting, so a negative/zero/NaN value can't degrade context truncation or completion timing.
+
 ## 0.72.0
 
 ### Context UX — fuzzy mentions, selection pill, line ranges, right-click, drop anything
