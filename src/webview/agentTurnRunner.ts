@@ -338,6 +338,7 @@ function describeToolEvent(name: string, argsJson: string): string {
     query?: string;
     pattern?: string;
     symbol?: string;
+    selector?: string;
     command?: string;
     url?: string;
   } = {};
@@ -373,6 +374,18 @@ function describeToolEvent(name: string, argsJson: string): string {
       return `Run: ${a.command ?? ''}`.trim();
     case 'fetch_url':
       return `Fetch ${a.url ?? ''}`.trim();
+    case 'browser_navigate':
+      return `Browse ${a.url ?? ''}`.trim();
+    case 'browser_read':
+      return 'Read page';
+    case 'browser_console':
+      return 'Read console';
+    case 'browser_click':
+      return `Click ${a.selector ?? ''}`.trim();
+    case 'browser_type':
+      return `Type into ${a.selector ?? ''}`.trim();
+    case 'browser_screenshot':
+      return 'Screenshot page';
     default:
       return name;
   }
@@ -401,6 +414,10 @@ function summarizeToolResult(name: string, result: string): string {
       return clip(firstLine || '(no output)');
     case 'fetch_url':
       return `${result.length.toLocaleString()} chars`;
+    case 'browser_navigate':
+    case 'browser_read':
+    case 'browser_console':
+      return /^\[?(no|error)/i.test(firstLine) ? clip(firstLine) : `${result.length.toLocaleString()} chars`;
     default:
       return clip(firstLine);
   }

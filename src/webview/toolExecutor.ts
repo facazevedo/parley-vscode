@@ -11,6 +11,7 @@ import { formatUnifiedDiff } from '../diff/lineDiff';
 import { reviewProposedEdit } from '../diff/reviewEdit';
 import { showProposedDiff } from '../diff/showDiff';
 import { dbg } from '../debug/debug';
+import type { BrowserManager } from '../browser/browserManager';
 import { runHookEvent } from '../hooks/hooks';
 import type { McpManager } from '../mcp/McpManager';
 import { clampMiddle } from '../parley/clampText';
@@ -24,6 +25,7 @@ import type { TranscriptRecorder } from './transcriptRecorder';
 export interface ToolExecutorHost {
   readonly checkpoints: CheckpointStore;
   readonly mcp: McpManager;
+  readonly browser: BrowserManager;
   readonly state: vscode.Memento;
   readonly recorder: TranscriptRecorder;
   readonly diffProvider: CommandDependencies['diffProvider'];
@@ -123,7 +125,37 @@ export class ToolExecutor {
     if (call.name === 'web_search') {
       return this.toolWebSearch(call);
     }
+    if (call.name.startsWith('browser_')) {
+      return this.toolBrowser(call);
+    }
     return runAgentTool(call);
+  }
+
+  /** Route a browser_* call to the shared BrowserManager (local Playwright). */
+  private async toolBrowser(call: ToolCall): Promise<string> {
+    let a: { url?: string; selector?: string; text?: string; errors_only?: boolean } = {};
+    try {
+      a = JSON.parse(call.arguments || '{}');
+    } catch {
+      return 'Error: arguments were not valid JSON.';
+    }
+    const b = this.host.browser;
+    switch (call.name) {
+      case 'browser_navigate':
+        return b.navigate(String(a.url ?? ''));
+      case 'browser_read':
+        return b.read(a.selector ? String(a.selector) : undefined);
+      case 'browser_console':
+        return b.consoleOutput(a.errors_only === true);
+      case 'browser_click':
+        return a.selector ? b.click(String(a.selector)) : 'Error: selector is required.';
+      case 'browser_type':
+        return a.selector ? b.type(String(a.selector), String(a.text ?? '')) : 'Error: selector is required.';
+      case 'browser_screenshot':
+        return b.screenshot();
+      default:
+        return `Error: unknown browser tool "${call.name}".`;
+    }
   }
 
   private async toolWebSearch(call: ToolCall): Promise<string> {

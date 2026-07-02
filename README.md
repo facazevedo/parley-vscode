@@ -154,7 +154,8 @@ In any tool mode the model runs an OpenAI tool‑calling loop. Built‑in tools:
 | `edit_file` | Precise find‑and‑replace edit (reviewed/checkpointed) |
 | `write_file` | Create/overwrite a file (reviewed/checkpointed) |
 | `run_command` | Run a shell command (confirmation required except Full access) |
-| `fetch_url` | Fetch a public `https://` page as text |
+| `fetch_url` | Fetch a public `https://` page as text (raw HTML, no JS) |
+| `browser_*` | Drive a local Chromium: `navigate`/`read`/`console`/`click`/`type`/`screenshot` (runs JS; installs on first use) |
 | `web_search` | Search the web (see [Web search](#web-search)) |
 | `update_plan` | Maintain the live task checklist |
 | `mcp__<server>__<tool>` | Any tools from your configured [MCP servers](#mcp-servers) |
@@ -250,6 +251,7 @@ Type **`@`** in the composer:
 | `@codebase` | Retrieve the most relevant files for your question (see below) |
 | `@git` | Attach the uncommitted diff (vs HEAD) |
 | `@terminal` | Attach recent integrated-terminal commands + output (shell integration) |
+| `@browser <url>` | Open the URL in a local browser (runs JS) and attach rendered text + console errors |
 | `@https://…` | Fetch the page and attach its text |
 
 ---

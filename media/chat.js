@@ -176,6 +176,18 @@ import hljs from 'highlight.js/lib/common';
         return 'Running: ' + (a.command || '');
       case 'fetch_url':
         return 'Fetching ' + (a.url || '');
+      case 'browser_navigate':
+        return 'Browsing ' + (a.url || '');
+      case 'browser_read':
+        return 'Reading page';
+      case 'browser_console':
+        return 'Reading console';
+      case 'browser_click':
+        return 'Clicking ' + (a.selector || '');
+      case 'browser_type':
+        return 'Typing into ' + (a.selector || '');
+      case 'browser_screenshot':
+        return 'Screenshotting page';
       default:
         return name + ' ' + (argsStr || '').slice(0, 60);
     }

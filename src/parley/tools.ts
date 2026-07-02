@@ -211,12 +211,89 @@ export const AGENT_TOOLS: readonly ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'fetch_url',
-      description: 'Fetch a public web page over HTTPS and return its text content (HTML stripped, truncated).',
+      description:
+        'Fetch a public web page over HTTPS and return its text content (HTML stripped, truncated). This is a RAW fetch with no JavaScript — for JS-rendered pages, localhost apps, console errors, or interaction, use the browser_* tools instead.',
       parameters: {
         type: 'object',
         properties: { url: { type: 'string', description: 'An https:// URL to fetch.' } },
         required: ['url']
       }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'browser_navigate',
+      description:
+        "Open a URL in a real local browser (Chromium) that runs JavaScript — use for localhost dev servers, single-page apps, or anything fetch_url can't render. Returns the page title and rendered visible text. First use installs the browser runtime (one-time).",
+      parameters: {
+        type: 'object',
+        properties: { url: { type: 'string', description: 'http:// or https:// URL (localhost is fine).' } },
+        required: ['url']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'browser_read',
+      description:
+        'Return the rendered visible text of the current browser page, or of a CSS selector within it. Call browser_navigate first.',
+      parameters: {
+        type: 'object',
+        properties: {
+          selector: { type: 'string', description: 'Optional CSS selector to read (defaults to the whole page body).' }
+        }
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'browser_console',
+      description:
+        'Return the current page\'s console output. Set errors_only to see just errors and warnings — ideal for "check the console for errors".',
+      parameters: {
+        type: 'object',
+        properties: { errors_only: { type: 'boolean', description: 'Only errors/warnings. Default false.' } }
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'browser_click',
+      description:
+        'Click an element on the current page by CSS selector (or Playwright text= selector). Call browser_navigate first.',
+      parameters: {
+        type: 'object',
+        properties: { selector: { type: 'string', description: 'CSS or text= selector to click.' } },
+        required: ['selector']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'browser_type',
+      description: 'Fill a form field on the current page with text, by CSS selector. Call browser_navigate first.',
+      parameters: {
+        type: 'object',
+        properties: {
+          selector: { type: 'string', description: 'CSS selector of the input/textarea.' },
+          text: { type: 'string', description: 'Text to fill in.' }
+        },
+        required: ['selector', 'text']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'browser_screenshot',
+      description:
+        'Save a full-page PNG screenshot of the current browser page and return its file path. Call browser_navigate first.',
+      parameters: { type: 'object', properties: {} }
     }
   },
   {
@@ -260,7 +337,19 @@ export const AGENT_TOOLS: readonly ToolDefinition[] = [
   }
 ];
 
-const WRITE_TOOLS = new Set(['write_file', 'edit_file', 'run_command']);
+// Excluded from Plan mode: writes/commands, plus browser tools (which run JS, hit the
+// network, and can trigger a one-time runtime install — not "read-only exploration").
+const WRITE_TOOLS = new Set([
+  'write_file',
+  'edit_file',
+  'run_command',
+  'browser_navigate',
+  'browser_read',
+  'browser_console',
+  'browser_click',
+  'browser_type',
+  'browser_screenshot'
+]);
 
 /** The subset of tools that never modify the workspace — used by Plan mode. */
 export const READ_ONLY_TOOLS: readonly ToolDefinition[] = AGENT_TOOLS.filter(

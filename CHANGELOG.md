@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.56.0
+
+### Added — local browser control (`@browser` + `browser_*` tools)
+- Parley can now drive a **real local browser** (Chromium via Playwright) that runs JavaScript — for localhost dev servers, single-page apps, console errors, and interaction that `fetch_url`'s raw HTML can't reach.
+  - **Agent tools:** `browser_navigate`, `browser_read` (rendered text, whole page or a selector), `browser_console` (`errors_only` for the classic "check the console for errors"), `browser_click`, `browser_type`, `browser_screenshot` (saves a PNG, returns its path).
+  - **Composer:** `@browser <url>` opens the page and attaches its rendered text plus any console errors as context.
+  - **`Parley: Close Browser`** tears the browser down.
+- Like the semantic-index runtime, **Playwright is not shipped in the VSIX** — it installs on demand into the extension's global storage the first time a browser tool runs (needs `npm` on PATH; downloads Chromium once). Every path is defensive: if install or launch fails, the tool returns an actionable message and the rest of Parley keeps working. Browser tools are excluded from read-only **Plan** mode.
+- This is Parley's own local Chromium — distinct from Claude Code's `@browser`, which drives your existing Chrome through a companion extension.
+
+### Note on scope
+- **Background / cloud agents remain out of scope** (they need server infrastructure the Parley gateway doesn't provide). *Local* subagents (a nested read-only exploration loop) are feasible and a candidate for a future release; cloud offload is not.
+
 ## 0.55.0
 
 ### Added — lifecycle hooks (`parley.hooks`)

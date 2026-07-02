@@ -28,6 +28,7 @@ import { contextWindowFor, modelSupportsThinking } from '../parley/models';
 import { formatUsd } from '../parley/pricing';
 import { armDebugFile } from '../debug/debug';
 import { runHookEvent } from '../hooks/hooks';
+import { getBrowserManager } from '../browser/browserManager';
 import type { McpManager } from '../mcp/McpManager';
 import { lexicalRank, type RankDoc } from '../codebase/lexicalSearch';
 import { EmbeddingIndex } from '../codebase/embeddingIndex';
@@ -237,6 +238,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     this.executor = new ToolExecutor({
       checkpoints: this.checkpoints,
       mcp: this.mcp,
+      browser: getBrowserManager(this.globalStorageUri, this.logger),
       state: this.state,
       recorder: this.recorder,
       diffProvider: this.commandDeps.diffProvider,
@@ -1687,6 +1689,24 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         content,
         characterCount: content.length,
         truncated: diff.length > content.length
+      });
+    }
+
+    // @browser <url> — open the URL in the local browser and attach rendered text + any console errors.
+    const browserMatch = /(?:^|\s)@browser\s+(\S+)/i.exec(prompt);
+    if (browserMatch) {
+      const url = browserMatch[1].replace(/[)\].,;]+$/, '');
+      const browser = getBrowserManager(this.globalStorageUri, this.logger);
+      const rendered = await browser.navigate(url);
+      const errors = rendered.startsWith('Error') ? '' : `\n\nConsole:\n${browser.consoleOutput(true)}`;
+      const content = `${rendered}${errors}`.slice(0, cap);
+      out.push({
+        id: 'mention-browser',
+        kind: 'user-file',
+        label: `@browser ${url}`,
+        content,
+        characterCount: content.length,
+        truncated: rendered.length + errors.length > content.length
       });
     }
 

@@ -24,6 +24,7 @@ import { CheckpointStore } from './diff/checkpoints';
 import { ProposedContentProvider } from './diff/showDiff';
 import { Logger } from './logging/logger';
 import { McpManager } from './mcp/McpManager';
+import { closeSharedBrowser } from './browser/browserManager';
 import { ParleyAuthStore } from './parley/auth';
 import { createParleyProvider } from './parley/providerFactory';
 import type { ParleyProvider } from './parley/ParleyProvider';
@@ -158,7 +159,13 @@ export function activate(context: vscode.ExtensionContext): void {
       );
     }),
     vscode.commands.registerCommand('parley.rebuildCodebaseIndex', () => chatPanel.rebuildCodebaseIndex()),
-    vscode.commands.registerCommand('parley.manageAllowedCommands', () => chatPanel.manageAllowedCommands()),
+    vscode.commands.registerCommand('parley.manageAllowedCommands', () => currentChat().manageAllowedCommands()),
+    vscode.commands.registerCommand('parley.closeBrowser', async () => {
+      const closed = await closeSharedBrowser();
+      await vscode.window.showInformationMessage(
+        closed ? 'Parley: closed the local browser.' : 'Parley: no browser was open.'
+      );
+    }),
     vscode.commands.registerCommand('parley.newConversationInTab', () => openTabConversation()),
     vscode.commands.registerCommand('parley.newConversationInWindow', async () => {
       // Same tab conversation, floated into its own OS window.

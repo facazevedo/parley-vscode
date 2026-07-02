@@ -21,8 +21,8 @@ async function main() {
     platform: 'node',
     target: 'node18',
     outfile: 'dist/extension.js',
-    // `vscode` is provided by the host; transformers.js is installed on demand at runtime.
-    external: ['vscode', '@xenova/transformers'],
+    // `vscode` is provided by the host; transformers.js and playwright are installed on demand at runtime.
+    external: ['vscode', '@xenova/transformers', 'playwright'],
     sourcemap: !production,
     minify: production,
     logLevel: 'info'
