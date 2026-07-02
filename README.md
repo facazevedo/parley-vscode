@@ -1,18 +1,40 @@
-# Parley for VS Code
+<div align="center">
 
-`parley-vscode` is a Visual Studio Code extension that turns **MIT Parley** into a
-full Cursor / Claude‑Code / Codex‑class coding assistant inside the editor:
-a streaming chat sidebar, an agent that reads and edits your workspace, inline
-(ghost‑text) completions, multimodal attachments (image / PDF / audio / video),
-web search, an optional on‑device semantic codebase index, MCP servers, image
-generation, and diff‑reviewed edits — all on top of the MIT Parley gateway.
+<h1>Parley for VS Code</h1>
 
-It is built around a `ParleyProvider` abstraction, so the UI, context collection,
-diff review, and safety controls stay independent of the transport.
+<p><strong>A Cursor- and Claude-Code-class AI coding assistant for MIT's Parley gateway</strong><br/>
+A streaming chat sidebar, an agent that reads and edits your workspace, multimodal context,<br/>
+and every change diff-reviewed before it touches your files — all inside VS Code.</p>
+
+<p>
+  <a href="CHANGELOG.md"><img alt="Version" src="https://img.shields.io/badge/version-0.70.0-A31F34"></a>
+  <img alt="VS Code" src="https://img.shields.io/badge/VS%20Code-%E2%89%A5%201.92-1F6FEB">
+  <a href="https://opensource.org/licenses/MIT"><img alt="License" src="https://img.shields.io/badge/license-MIT-3FB950"></a>
+  <img alt="Tests" src="https://img.shields.io/badge/tests-229%20passing-2EA043">
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-3178C6">
+</p>
+
+</div>
 
 ---
 
-## Contents
+## Highlights
+
+- **Agentic editing, safely** — six modes from plain chat to full autonomy; every edit is diff-reviewed, checkpointed, and **rewindable** per message.
+- **Any model on the gateway** — Claude, GPT, Gemini and more, switchable per conversation; no vendor lock-in.
+- **Deep context** — `@file` / `@codebase` (lexical or on-device semantic) / `@terminal` / `@git` / `@browser` mentions, plus project rules files.
+- **Multimodal** — attach images, PDFs, audio, and **video** (ffmpeg frames + audio) as context.
+- **Local browser & subagents** — drive a real headless Chromium, or delegate scoped read-only investigations to a nested agent.
+- **MCP** — connect stdio, streamable-HTTP, and legacy-SSE Model Context Protocol servers.
+- **Safety & privacy first** — sensitive-file filtering, **outbound secret redaction**, a per-segment command allowlist, and honest documentation of gateway limits.
+- **Transparent by design** — full on-disk JSONL transcripts, live cost/context gauges, a `/context` breakdown, and 229 automated tests.
+
+Built around a `ParleyProvider` abstraction, so the UI, context collection, diff review, and safety controls stay independent of the transport.
+
+---
+
+<details>
+<summary><strong>Contents</strong></summary>
 
 - [How Parley compares](#how-parley-compares)
 - [Requirements](#requirements)
@@ -42,6 +64,8 @@ diff review, and safety controls stay independent of the transport.
 - [Troubleshooting](#troubleshooting)
 - [Development & packaging](#development--packaging)
 - [Architecture](#architecture)
+
+</details>
 
 ---
 
@@ -79,7 +103,7 @@ three are a standalone editor (**Cursor**), OpenAI's coding agent (**Codex**), a
 | Full on‑disk event transcripts          | ✅ (JSONL + export)                                 | ◐                 | ◐                 | ◐                    |
 
 **✅ supported · ◐ partial or different approach · ✗ not available.** Parley's column reflects
-the current code (v0.65.0). Competitor columns reflect publicly documented capabilities as of
+the current code (v0.70.0). Competitor columns reflect publicly documented capabilities as of
 early 2026 and are **best‑effort** — these tools move fast, so check their own docs for the
 latest. Parley's deliberate non‑goals (a trained Tab/next‑edit model, background/cloud agents,
 server‑side embeddings) follow from running on a shared gateway rather than dedicated

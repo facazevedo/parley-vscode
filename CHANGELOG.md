@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.70.0
+
+### Docs
+
+- Reworked the README for a more professional first impression: a centered header with a tagline and status badges (version, VS Code engine, license, tests, TypeScript), a scannable **Highlights** section, and a collapsible table of contents. No code changes.
+
 ## 0.69.0
 
 ### Internal — extract & test the context/index bookkeeping (no behavior change)
