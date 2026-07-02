@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.68.0
+
+### Internal — tests for the agent's read-only explorers (no behavior change)
+
+- Added a suite covering the tools the agent uses to explore a workspace, run against a real temp filesystem (+8 tests, 216 total):
+  - **`read_file`** — numbered output with header/total, `start_line`/`end_line` ranges + the continuation footer, and the guards (past-EOF, empty file, sensitive-file refusal, missing file, and `../` outside-workspace rejection).
+  - **`list_directory`** (trailing slash for dirs, missing-dir error), **`find_files`** (glob match, `node_modules` excluded, no-match), and **`search_text`** (path:line matches, binary-file and sensitive-file skipping, no-match).
+  - **`fetch_url`** rejects non-`https://` URLs without touching the network; `runAgentTool` reports unknown tools and invalid JSON.
+- The test `vscode` double gained a real glob-walking `findFiles`. No production code changed.
+
 ## 0.67.0
 
 ### Internal — production-hardening (no user-facing behavior change)

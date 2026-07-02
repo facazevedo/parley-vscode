@@ -26,6 +26,41 @@ function mkUri(p: string): any {
   return { fsPath: p, path: p.replace(/\\/g, '/'), scheme: 'file', toString: () => `file://${p}` };
 }
 
+/** A `{a,b,c}` brace list → its members; a plain glob → a single-member list; undefined → none. */
+function splitBrace(glob: string | undefined): string[] {
+  if (!glob) {
+    return [];
+  }
+  const m = /^\{(.*)\}$/.exec(glob);
+  return m ? m[1].split(',') : [glob];
+}
+
+/** Minimal VS Code-style glob → anchored RegExp (enough for the tool tests). */
+function globToRegExp(glob: string): RegExp {
+  let re = '';
+  for (let i = 0; i < glob.length; i += 1) {
+    const c = glob[i];
+    if (c === '*' && glob[i + 1] === '*') {
+      if (glob[i + 2] === '/') {
+        re += '(?:.*/)?';
+        i += 2;
+      } else {
+        re += '.*';
+        i += 1;
+      }
+    } else if (c === '*') {
+      re += '[^/]*';
+    } else if (c === '?') {
+      re += '[^/]';
+    } else if ('.+^${}()|[]\\'.includes(c)) {
+      re += `\\${c}`;
+    } else {
+      re += c;
+    }
+  }
+  return new RegExp(`^${re}$`);
+}
+
 export const fakeVscode: any = {
   Uri: {
     file: (p: string) => mkUri(p),
@@ -61,7 +96,38 @@ export const fakeVscode: any = {
     openTextDocument: async () => {
       throw new Error('no language server in tests');
     },
-    asRelativePath: (uri: any) => path.relative(root, uri.fsPath).replace(/\\/g, '/')
+    asRelativePath: (uri: any) => path.relative(root, uri.fsPath).replace(/\\/g, '/'),
+    // Real glob walk over the workspace root — backs search_text / find_files.
+    findFiles: async (include: string, exclude?: string, max?: number) => {
+      const includeRe = globToRegExp(include);
+      const excludeRes = splitBrace(exclude).map(globToRegExp);
+      const out: any[] = [];
+      const walk = async (dir: string): Promise<void> => {
+        let entries: import('fs').Dirent[];
+        try {
+          entries = await fsp.readdir(dir, { withFileTypes: true });
+        } catch {
+          return;
+        }
+        for (const e of entries) {
+          if (max !== undefined && out.length >= max) {
+            return;
+          }
+          const full = path.join(dir, e.name);
+          const rel = path.relative(root, full).replace(/\\/g, '/');
+          if (excludeRes.some((re) => re.test(rel))) {
+            continue;
+          }
+          if (e.isDirectory()) {
+            await walk(full);
+          } else if (includeRe.test(rel)) {
+            out.push(mkUri(full));
+          }
+        }
+      };
+      await walk(root);
+      return out;
+    }
   },
   window: {
     showWarningMessage: async () => undefined,
