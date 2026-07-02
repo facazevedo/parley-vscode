@@ -3,7 +3,6 @@ import * as vscode from 'vscode';
 import type { ChatMode, ParleySettings } from '../config/settings';
 import {
   collectCommandContext,
-  handleResponse,
   previewAndConfirmContext,
   reportProviderError,
   type CommandDependencies,
@@ -18,15 +17,15 @@ import type { Logger } from '../logging/logger';
 import type { ParleyProvider } from '../parley/ParleyProvider';
 import { extractMentionPaths } from '../parley/parsing';
 import { AGENT_TOOLS, READ_ONLY_TOOLS, resolveAcrossRoots, runAgentTool, toolRelPath } from '../parley/tools';
-import { normalizeThinkingLevel, resolveThinking, type ThinkingLevel } from '../parley/thinking';
-import { decideTurnStep } from '../parley/turnPolicy';
+import { normalizeThinkingLevel, type ThinkingLevel } from '../parley/thinking';
 import { buildChatHtml } from './webviewHtml';
 import { TranscriptRecorder } from './transcriptRecorder';
+import { AgentTurnRunner } from './agentTurnRunner';
 import { ToolExecutor, runShellCommand } from './toolExecutor';
 import { audioFormatFromExt, audioFormatFromMime, modelSupportsAudio } from '../parley/audio';
 import { documentProviderFor } from '../parley/files';
 import { contextWindowFor, modelSupportsThinking } from '../parley/models';
-import { estimateCostUsd, formatUsd } from '../parley/pricing';
+import { formatUsd } from '../parley/pricing';
 import { armDebugFile, dbg } from '../debug/debug';
 import type { McpManager } from '../mcp/McpManager';
 import { lexicalRank, type RankDoc } from '../codebase/lexicalSearch';
@@ -176,7 +175,6 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private set conversationId(value: string) {
     this.recorder.conversationId = value;
   }
-  private lastToolAction = ''; // pairs a tool's ⏺ action with its ⎿ result for the transcript
   private agents: readonly AgentInfo[] = [];
   private selectedAgentId = '';
   private selectedThinking: ThinkingLevel = 'off';
@@ -189,10 +187,13 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private customCommandNames: string[] = []; // user-defined /commands from .parley|.claude/commands
   private embeddingIndex?: EmbeddingIndex; // lazy local semantic index for @codebase
   private attachments: PendingAttachment[] = [];
-  private busy = false;
-  private abortController?: AbortController;
-  // Steering: messages typed while the agent is busy, injected at the next round boundary.
-  private queuedSteering: string[] = [];
+  private turns!: AgentTurnRunner;
+  private get busy(): boolean {
+    return this.turns.busy;
+  }
+  private set busy(value: boolean) {
+    this.turns.busy = value;
+  }
   private executor!: ToolExecutor;
 
   private resolveReady!: () => void;
@@ -228,8 +229,27 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       diffProvider: this.commandDeps.diffProvider,
       getSettings: this.getSettings,
       getMode: () => this.mode,
-      getAbortSignal: () => this.abortController?.signal,
+      getAbortSignal: () => this.turns.abortSignal,
       post: (m) => this.post(m)
+    });
+    this.turns = new AgentTurnRunner({
+      history: this.history,
+      recorder: this.recorder,
+      executor: this.executor,
+      checkpoints: this.checkpoints,
+      commandDeps: this.commandDeps,
+      logger: this.logger,
+      post: (m) => this.post(m),
+      postState: () => this.postState(),
+      applyUsage: (tokens, cost) => {
+        this.sessionTokens += tokens;
+        if (cost) {
+          this.sessionCost += cost;
+        }
+        return { sessionTokens: this.sessionTokens, sessionCostUsd: this.sessionCost };
+      },
+      getSessionTokens: () => this.sessionTokens,
+      runFollowUp: (prompt) => void this.runTurn(prompt, this.contextOptions)
     });
     const settings = this.getSettings();
     // Restore the previous session if present, else fall back to settings defaults.
@@ -340,7 +360,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
 
   /** Public entry point for the "New Conversation" command. */
   public async newConversation(): Promise<void> {
-    this.abortController?.abort();
+    this.turns.abort();
     await this.startNewConversation();
     await vscode.commands.executeCommand('workbench.view.extension.parley');
     await vscode.commands.executeCommand('parley.chatView.focus');
@@ -388,7 +408,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       void this.handleMessage(message);
     });
     panel.onDidDispose(() => {
-      this.abortController?.abort();
+      this.turns.abort();
       void this.autosaveConversation();
     });
     this.resolveReady();
@@ -418,19 +438,16 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         await this.refreshAgents();
         return;
       case 'stop':
-        this.queuedSteering = [];
-        this.post({ type: 'queued', items: [] });
-        this.abortController?.abort();
+        this.turns.clearSteering();
+        this.turns.abort();
         return;
       case 'newChat':
-        this.queuedSteering = [];
-        this.post({ type: 'queued', items: [] });
-        this.abortController?.abort();
+        this.turns.clearSteering();
+        this.turns.abort();
         await this.startNewConversation();
         return;
       case 'unqueue':
-        this.queuedSteering = this.queuedSteering.filter((_, i) => i !== (message.index ?? -1));
-        this.post({ type: 'queued', items: [...this.queuedSteering] });
+        this.turns.removeQueued(message.index ?? -1);
         return;
       case 'rewind':
         await this.rewindAtUserMessage(message.ordinal ?? -1);
@@ -518,8 +535,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
           const text = message.prompt.trim();
           if (this.busy) {
             // Steering: don't refuse — queue it for the next round boundary.
-            this.queuedSteering.push(text);
-            this.post({ type: 'queued', items: [...this.queuedSteering] });
+            this.turns.queueSteering(text);
             return;
           }
           if (message.editOrdinal !== undefined && message.editOrdinal >= 0) {
@@ -828,9 +844,6 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     // level was carried over from a previous session (no change event would have fired).
     this.maybeWarnOpenAiReasoning();
     this.attachments = [];
-    this.busy = true;
-    this.abortController = new AbortController();
-    await this.postState();
 
     const useStream = settings.stream;
     const provider = this.getProvider();
@@ -861,230 +874,24 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         : [...baseTools, ...this.mcp.getTools()]
       : undefined;
 
-    let turnTokens = 0;
-    const cpStart = this.checkpoints.size;
-    this.post({ type: 'tokens', total: 0 });
-    dbg('turn', 'start', {
+    await this.turns.execute({
+      prompt,
+      context,
+      images,
+      documents,
+      audios,
+      responseFormat,
+      systemExtra,
       agentId,
-      mode: this.mode,
-      toolsEnabled,
-      canAutoContinue,
-      stream: useStream,
       thinking: this.selectedThinking,
       speed: this.selectedSpeed,
-      mcpTools: this.mcp.getTools().length
+      settings,
+      provider,
+      toolsEnabled,
+      canAutoContinue,
+      useStream,
+      turnTools
     });
-
-    try {
-      let auto = 0;
-      let nudged = false; // one free "your reply was empty" retry before declaring a stall
-      let continuation: string | null = null; // null = first send (real prompt + context)
-      for (;;) {
-        const stepActions: string[] = []; // tool activity for this step (persisted if the model doesn't narrate)
-        if (useStream) {
-          this.post({ type: 'streamStart' });
-        }
-        const isCont = continuation !== null;
-        const contText = continuation ?? '';
-        const messages = isCont
-          ? [...this.history, { role: 'user' as const, content: contText, createdAt: new Date().toISOString() }]
-          : this.history;
-
-        const response = await provider.sendMessage(
-          {
-            prompt: isCont ? contText : prompt,
-            messages,
-            context: isCont ? [] : context,
-            agentId,
-            images: isCont || images.length === 0 ? undefined : images,
-            documents: isCont || documents.length === 0 ? undefined : documents,
-            audios: isCont || audios.length === 0 ? undefined : audios,
-            thinking: resolveThinking(this.selectedThinking),
-            speed: this.selectedSpeed,
-            responseFormat,
-            systemExtra
-          },
-          {
-            signal: this.abortController.signal,
-            onToken: useStream ? (delta) => this.post({ type: 'streamDelta', delta }) : undefined,
-            onThinking: useStream ? (delta) => this.post({ type: 'thinkingDelta', delta }) : undefined,
-            tools: turnTools,
-            runTool: toolsEnabled ? (call) => this.runTool(call) : undefined,
-            onToolEvent: toolsEnabled
-              ? (event) => {
-                  const action = this.describeToolEvent(event.name, event.args);
-                  stepActions.push(action);
-                  this.lastToolAction = action;
-                  this.post({ type: 'toolEvent', name: event.name, args: event.args });
-                }
-              : undefined,
-            onToolResult: toolsEnabled
-              ? (name, result) => {
-                  // write/edit show a diff card already; others get a Claude-style ⎿ result line.
-                  if (name !== 'write_file' && name !== 'edit_file') {
-                    const text = summarizeToolResult(name, result);
-                    this.post({ type: 'toolResult', text });
-                    // Record the ⏺ action + ⎿ result together in the persisted transcript.
-                    this.appendTranscript({
-                      kind: 'tool',
-                      action: this.lastToolAction || name,
-                      result: text,
-                      at: new Date().toISOString()
-                    });
-                  }
-                }
-              : undefined,
-            onRetry: (info) => {
-              // Transient failure being retried — show it on the status line instead of dying.
-              this.post({
-                type: 'retry',
-                text: `${info.reason} — retrying in ${Math.ceil(info.delayMs / 1000)}s (attempt ${info.attempt}/${info.maxAttempts})…`
-              });
-            },
-            getQueuedUserMessages: () => {
-              // Steering: drain messages typed while the agent works into the
-              // conversation (history + transcript + a live bubble in the chat).
-              if (this.queuedSteering.length === 0) {
-                return [];
-              }
-              const items = this.queuedSteering.splice(0);
-              for (const text of items) {
-                this.history.push({ role: 'user', content: text, createdAt: new Date().toISOString() });
-                this.appendTranscript({ kind: 'user', text, at: new Date().toISOString() });
-                this.post({ type: 'steerInjected', text });
-              }
-              this.post({ type: 'queued', items: [] });
-              return items;
-            },
-            onUsage: (usage) => {
-              turnTokens += usage.total;
-              this.sessionTokens += usage.total;
-              const cost = estimateCostUsd(agentId, usage);
-              if (cost) {
-                this.sessionCost += cost;
-              }
-              this.post({
-                type: 'tokens',
-                total: turnTokens,
-                session: this.sessionTokens,
-                sessionCostUsd: this.sessionCost
-              });
-            },
-            maxToolRounds: settings.maxToolRounds
-          }
-        );
-
-        // All loop policy (stall vs thinking-only, one-shot nudge, <DONE>, limits)
-        // lives in the pure, unit-tested decideTurnStep.
-        const decision = decideTurnStep({
-          content: response.message.content,
-          thinkingChars: response.message.thinking?.trim().length ?? 0,
-          toolActions: stepActions.length,
-          canAutoContinue,
-          nudged,
-          aborted: this.abortController.signal.aborted,
-          sessionTokens: this.sessionTokens,
-          tokenLimit: settings.tokenLimit,
-          autoSteps: auto,
-          maxAutoContinue: settings.maxAutoContinue
-        });
-        dbg('turn', 'send complete', {
-          auto,
-          decision: decision.kind,
-          next: decision.kind === 'proceed' ? decision.next.kind : undefined,
-          aborted: this.abortController.signal.aborted
-        });
-
-        if (decision.kind === 'nudge') {
-          nudged = true;
-          auto += 1;
-          continuation = decision.continuation;
-          continue;
-        }
-        if (decision.kind === 'stall') {
-          // Empty response with no tool actions: don't render a blank bubble or keep looping.
-          this.history.push({
-            role: 'assistant',
-            content: decision.note,
-            createdAt: new Date().toISOString(),
-            model: agentId
-          });
-          this.appendTranscript({ kind: 'note', text: decision.note, at: new Date().toISOString() });
-          this.post({ type: 'streamEnd' });
-          await this.postState();
-          break;
-        }
-
-        // If the model worked through tools but didn't narrate, persist a summary of what it did
-        // so the conversation and exports aren't blank (Claude-Code-style activity log).
-        const cleaned = decision.cleaned.trim() ? decision.cleaned : stepActions.map((a) => `⏺ ${a}`).join('\n');
-        this.history.push({ ...response.message, content: cleaned, model: agentId });
-        // Record an assistant entry when there was real prose — or when the step was
-        // thinking-only, so the streamed 💭 panel survives the post-turn re-render.
-        // With tool actions and no narration, the tool/fileEdit entries already
-        // represent this step in the transcript (no duplication).
-        if (decision.hadNarration || decision.thinkingOnly) {
-          this.appendTranscript({
-            kind: 'assistant',
-            text: cleaned,
-            model: agentId,
-            thinking: response.message.thinking,
-            tokens: response.usage?.total,
-            at: new Date().toISOString()
-          });
-        }
-        this.post({ type: 'streamEnd' });
-        await this.postState();
-        // Chat mode (no file tools): surface any "File:" blocks as inline Apply cards
-        // instead of modal popups. Agent modes apply edits through tools, so skip there.
-        await handleResponse(this.commandDeps, response, { skipMessageDisplay: true, skipProposedChanges: true });
-        if (!toolsEnabled) {
-          for (const change of response.proposedChanges ?? []) {
-            this.postProposedChange(change);
-          }
-        }
-
-        if (decision.next.kind === 'stop') {
-          break;
-        }
-        if (decision.next.kind === 'stop-token-limit' || decision.next.kind === 'stop-max-auto') {
-          this.history.push({ role: 'assistant', content: decision.next.note, createdAt: new Date().toISOString() });
-          this.appendTranscript({ kind: 'note', text: decision.next.note, at: new Date().toISOString() });
-          await this.postState();
-          break;
-        }
-        auto += 1;
-        continuation = decision.next.continuation;
-      }
-
-      const changed = this.checkpoints.changedSince(cpStart);
-      if (changed.length > 0) {
-        const note = `✏️ Changed ${changed.length} file${changed.length === 1 ? '' : 's'}: ${changed.join(', ')}\n_Run "Parley: Revert Last Edit" or "Parley: Revert All Edits" to undo._`;
-        this.history.push({ role: 'assistant', content: note, createdAt: new Date().toISOString() });
-        this.appendTranscript({ kind: 'note', text: note, at: new Date().toISOString() });
-      }
-      this.busy = false;
-      this.abortController = undefined;
-      await this.postState();
-      await this.autosaveConversation();
-      // Steering queued after the last round boundary (or during a plain chat turn)
-      // runs as an immediate follow-up turn instead of being forgotten.
-      const followUp = this.queuedSteering.shift();
-      if (followUp) {
-        this.post({ type: 'queued', items: [...this.queuedSteering] });
-        void this.runTurn(followUp, this.contextOptions);
-      }
-    } catch (error) {
-      this.busy = false;
-      this.abortController = undefined;
-      this.post({ type: 'streamEnd' });
-      await this.postState();
-      if ((error as { name?: string })?.name === 'AbortError') {
-        this.logger.info('Parley reply was stopped by the user.');
-        return;
-      }
-      await reportProviderError(this.commandDeps, error);
-    }
   }
 
   /** Compose project rules + the mode-specific system instruction (plan / autonomous agent). */
@@ -1119,51 +926,6 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     return [rules, modeNote].filter(Boolean).join('\n\n') || undefined;
   }
 
-  /** Short human label for a tool call, used to persist an activity log when the model doesn't narrate. */
-  private describeToolEvent(name: string, argsJson: string): string {
-    let a: {
-      path?: string;
-      glob?: string;
-      query?: string;
-      pattern?: string;
-      symbol?: string;
-      command?: string;
-      url?: string;
-    } = {};
-    try {
-      a = JSON.parse(argsJson || '{}');
-    } catch {
-      a = {};
-    }
-    switch (name) {
-      case 'read_file':
-        return `Read ${a.path ?? ''}`.trim();
-      case 'list_directory':
-        return `List ${a.path ?? '.'}`;
-      case 'find_files':
-        return `Find ${a.glob ?? ''}`.trim();
-      case 'search_text':
-        return `Search "${a.query ?? ''}"`;
-      case 'grep':
-        return `Grep /${a.pattern ?? ''}/`;
-      case 'find_symbol':
-        return `Symbol "${a.query ?? ''}"`;
-      case 'document_symbols':
-        return `Outline ${a.path ?? ''}`.trim();
-      case 'find_references':
-        return `Refs of ${a.symbol ?? ''}`.trim();
-      case 'write_file':
-        return `Write ${a.path ?? ''}`.trim();
-      case 'edit_file':
-        return `Edit ${a.path ?? ''}`.trim();
-      case 'run_command':
-        return `Run: ${a.command ?? ''}`.trim();
-      case 'fetch_url':
-        return `Fetch ${a.url ?? ''}`.trim();
-      default:
-        return name;
-    }
-  }
 
   /**
    * One-time chat hint: extended thinking is a no-op on OpenAI models via Parley
@@ -2116,32 +1878,5 @@ function isLikelyVisionModel(model: string): boolean {
   return /claude|gemini|gpt-5/i.test(model);
 }
 
-/** Short, Claude-style one-line summary of a tool result for the `⎿` line. */
-function summarizeToolResult(name: string, result: string): string {
-  const lines = result.split('\n');
-  const firstLine = lines.find((l) => l.trim()) ?? '';
-  const clip = (s: string): string => (s.length > 100 ? `${s.slice(0, 100)}…` : s);
-  switch (name) {
-    case 'read_file':
-      return `Read ${lines.length} line${lines.length === 1 ? '' : 's'}`;
-    case 'list_directory': {
-      const n = lines.filter((l) => l.trim()).length;
-      return `${n} entr${n === 1 ? 'y' : 'ies'}`;
-    }
-    case 'find_files': {
-      const n = lines.filter((l) => l.trim()).length;
-      return `${n} file${n === 1 ? '' : 's'}`;
-    }
-    case 'search_text':
-    case 'grep':
-      return /^\[?no\b/i.test(firstLine) ? 'No matches' : `${lines.filter((l) => l.trim()).length} match line(s)`;
-    case 'run_command':
-      return clip(firstLine || '(no output)');
-    case 'fetch_url':
-      return `${result.length.toLocaleString()} chars`;
-    default:
-      return clip(firstLine);
-  }
-}
 
 
