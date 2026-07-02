@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.52.0
+
+### Internal — the full 4-way ChatPanel decomposition (no behavior change)
+- The 3,100-line ChatPanel god-class is now four focused modules, extracted in four reviewable commits, each gated by the full test suite:
+  - **`webviewHtml.ts`** — the webview's HTML shell/CSP/nonce.
+  - **`transcriptRecorder.ts`** — owns the transcript and its `.parley` persistence (JSONL/markdown/index/state).
+  - **`toolExecutor.ts`** — all tool execution: file edits (staleness guard, tiered matching, approval cards, checkpoints, post-edit diagnostics), the command allowlist, plan/web-search/MCP routing, and `runShellCommand`.
+  - **`agentTurnRunner.ts`** — the turn loop: streaming, auto-continue (pure `turnPolicy`), steering queue, tool routing, and the busy/abort lifecycle.
+- ChatPanel drops from ~3,100 to ~1,880 lines and is now the WebviewBridge it was meant to be: webview lifecycle, message dispatch, context/mention/attachment assembly, and conversation commands. Each subsystem talks to its host through a small explicit interface — the groundwork for full multi-tab parity and direct loop testing with fake providers.
+
 ## 0.51.0
 
 ### Added — parallel conversations in editor tabs

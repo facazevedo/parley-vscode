@@ -1,4 +1,3 @@
-import * as vscode from 'vscode';
 import { handleResponse, reportProviderError, type CommandDependencies } from '../commands/common';
 import type { ParleySettings } from '../config/settings';
 import type { CheckpointStore } from '../diff/checkpoints';

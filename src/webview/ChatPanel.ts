@@ -26,7 +26,7 @@ import { audioFormatFromExt, audioFormatFromMime, modelSupportsAudio } from '../
 import { documentProviderFor } from '../parley/files';
 import { contextWindowFor, modelSupportsThinking } from '../parley/models';
 import { formatUsd } from '../parley/pricing';
-import { armDebugFile, dbg } from '../debug/debug';
+import { armDebugFile } from '../debug/debug';
 import type { McpManager } from '../mcp/McpManager';
 import { lexicalRank, type RankDoc } from '../codebase/lexicalSearch';
 import { EmbeddingIndex } from '../codebase/embeddingIndex';
@@ -925,7 +925,6 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     }
     return [rules, modeNote].filter(Boolean).join('\n\n') || undefined;
   }
-
 
   /**
    * One-time chat hint: extended thinking is a no-op on OpenAI models via Parley
@@ -1837,7 +1836,6 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       attachments: this.attachments.map((a) => ({ id: a.id, label: a.label, kind: a.kind }))
     });
   }
-
 }
 
 /** Reconstruct the model-facing message history from a transcript (user/assistant text only). */
@@ -1877,6 +1875,3 @@ function normalizeMode(value: string | undefined): ChatMode {
 function isLikelyVisionModel(model: string): boolean {
   return /claude|gemini|gpt-5/i.test(model);
 }
-
-
-
