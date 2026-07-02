@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { normalizeThinkingLevel, type ThinkingLevel } from '../parley/thinking';
+import type { HooksConfig } from '../hooks/hooks';
 import type { McpServerConfig } from '../mcp/McpManager';
 import type { WebSearchProvider } from '../web/webSearch';
 
@@ -36,6 +37,7 @@ export interface ParleySettings {
   readonly conversationsDir: string;
   readonly commandTimeoutSeconds: number;
   readonly mcpServers: Record<string, McpServerConfig>;
+  readonly hooks: HooksConfig;
   readonly webSearchProvider: WebSearchProvider;
   readonly webSearchApiKey: string;
   readonly webSearchGoogleCx: string;
@@ -80,6 +82,7 @@ export function getSettings(): ParleySettings {
     conversationsDir: config.get<string>('conversationsDir', '').trim(),
     commandTimeoutSeconds: clampInt(config.get<number>('commandTimeoutSeconds', 300), 5, 3600),
     mcpServers: config.get<Record<string, McpServerConfig>>('mcpServers', {}) ?? {},
+    hooks: config.get<HooksConfig>('hooks', {}) ?? {},
     webSearchProvider: normalizeWebSearchProvider(config.get<string>('webSearch.provider', 'duckduckgo')),
     webSearchApiKey: config.get<string>('webSearch.apiKey', '').trim(),
     webSearchGoogleCx: config.get<string>('webSearch.googleCx', '').trim(),
@@ -111,5 +114,7 @@ function clampInt(value: number, min: number, max: number): number {
 }
 
 function normalizeMode(value: string): ChatMode {
-  return value === 'ask' || value === 'edit' || value === 'plan' || value === 'auto' || value === 'full' ? value : 'chat';
+  return value === 'ask' || value === 'edit' || value === 'plan' || value === 'auto' || value === 'full'
+    ? value
+    : 'chat';
 }

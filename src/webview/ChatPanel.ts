@@ -27,6 +27,7 @@ import { documentProviderFor } from '../parley/files';
 import { contextWindowFor, modelSupportsThinking } from '../parley/models';
 import { formatUsd } from '../parley/pricing';
 import { armDebugFile } from '../debug/debug';
+import { runHookEvent } from '../hooks/hooks';
 import type { McpManager } from '../mcp/McpManager';
 import { lexicalRank, type RankDoc } from '../codebase/lexicalSearch';
 import { EmbeddingIndex } from '../codebase/embeddingIndex';
@@ -154,6 +155,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
 
   // The hosting surface: the sidebar WebviewView, or an editor-tab WebviewPanel.
   private view?: { readonly webview: vscode.Webview };
+  // Set only for tab-hosted chats — lets the AI-generated title rename the tab.
+  private hostPanel?: vscode.WebviewPanel;
   private readonly history: ChatMessage[] = [];
   // Full ordered record of everything shown — owned by the TranscriptRecorder
   // (decomposition 2/4); these accessors keep the rest of the panel unchanged.
@@ -283,6 +286,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     this.sessionTokens = this.state.get<number>('parley.sessionTokens', 0);
     this.sessionCost = this.state.get<number>('parley.sessionCost', 0);
     this.conversationId = this.state.get<string>('parley.conversationId', '') || this.newConversationId();
+    this.recorder.customTitle = this.state.get<string>('parley.title') || undefined;
     // Checkpoints are stamped with the transcript position (for ⏪ rewind) and
     // persisted per conversation, so Revert works across window reloads.
     this.checkpoints.setMarkerProvider(() => this.transcript.length);
@@ -316,6 +320,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     void this.state.update('parley.sessionTokens', this.sessionTokens);
     void this.state.update('parley.sessionCost', this.sessionCost);
     void this.state.update('parley.conversationId', this.conversationId);
+    void this.state.update('parley.title', this.recorder.customTitle);
   }
 
   // ---------- transcript delegation (owner: TranscriptRecorder, decomposition 2/4) ----------
@@ -364,6 +369,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     this.sessionCost = 0;
     this.conversationId = this.newConversationId();
     this.conversationStartedAt = new Date().toISOString();
+    this.recorder.customTitle = undefined;
     await this.checkpoints.bind(this.parleyBase(), this.conversationId);
     await this.postState();
   }
@@ -410,6 +416,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   /** Host this chat instance in an editor-tab WebviewPanel (multi-conversation tabs). */
   public attachPanel(panel: vscode.WebviewPanel): void {
     ChatPanel.activeInstance = this;
+    this.hostPanel = panel;
     panel.onDidChangeViewState(() => {
       if (panel.active) {
         ChatPanel.activeInstance = this;
@@ -715,6 +722,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     this.history.push(...transcriptToHistory(truncated));
     this.executor.resetConversationState();
     this.conversationId = this.newConversationId();
+    this.recorder.customTitle = undefined; // the fork names itself on its next exchange
     // The fork inherits the checkpoint stack (its files ARE this timeline's files).
     await this.checkpoints.rebind(this.parleyBase(), this.conversationId);
     this.syncTranscriptFile();
@@ -816,8 +824,34 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       );
       return;
     }
+    // UserPromptSubmit hooks: exit 2 blocks the prompt; zero-exit stdout becomes extra context.
+    const submitHook = await runHookEvent(
+      settings.hooks,
+      'UserPromptSubmit',
+      { prompt },
+      { cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath, log: (m) => this.logger.debug(`hooks: ${m}`) }
+    );
+    if (submitHook.blocked) {
+      const note = `🚫 Blocked by a UserPromptSubmit hook${submitHook.feedback ? `: ${submitHook.feedback}` : ''}.`;
+      this.history.push({ role: 'assistant', content: note, createdAt: new Date().toISOString() });
+      this.appendTranscript({ kind: 'note', text: note, at: new Date().toISOString() });
+      await this.postState();
+      return;
+    }
+
     const collected = await collectCommandContext(contextOptions, settings);
     const mentions = await this.resolveMentions(prompt, settings);
+    if (submitHook.extraContext) {
+      const content = submitHook.extraContext.slice(0, settings.contextMaxCharacters);
+      mentions.push({
+        id: 'hook-context',
+        kind: 'user-file',
+        label: 'UserPromptSubmit hook context',
+        content,
+        characterCount: content.length,
+        truncated: submitHook.extraContext.length > content.length
+      });
+    }
     // Large attached text files are uploaded via /v1/files on OpenAI/Google (so they
     // aren't truncated); small files — and any file on Bedrock/Anthropic, which have no
     // upload endpoint — stay inline as (possibly truncated) prompt context.
@@ -925,6 +959,50 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     // (Claude-Code style — your edited version is what gets implemented).
     if (this.mode === 'plan') {
       void this.offerPlanReview();
+    }
+    // Name the conversation after its first exchange (cheap model, once, background).
+    if (!this.recorder.customTitle) {
+      void this.maybeGenerateTitle();
+    }
+  }
+
+  /** AI-generate a short conversation title from the first exchange (best-effort, silent on failure). */
+  private async maybeGenerateTitle(): Promise<void> {
+    if (this.recorder.customTitle || this.turns.busy) {
+      return;
+    }
+    const firstUser = this.transcript.find((e) => e.kind === 'user');
+    const firstAssistant = this.transcript.find((e) => e.kind === 'assistant');
+    if (firstUser?.kind !== 'user' || firstAssistant?.kind !== 'assistant') {
+      return;
+    }
+    try {
+      const prompt =
+        'Write a short title (3-6 words, no quotes, no trailing punctuation) for a coding-assistant conversation that starts:\n' +
+        `User: ${firstUser.text.slice(0, 300)}\n` +
+        `Assistant: ${firstAssistant.text.slice(0, 300)}\n` +
+        'Reply with ONLY the title.';
+      const response = await this.getProvider().sendMessage({
+        prompt,
+        messages: [{ role: 'user', content: prompt, createdAt: new Date().toISOString() }],
+        context: [],
+        agentId: this.getSettings().inlineCompletionModel // fast + cheap
+      });
+      const title = response.message.content
+        .trim()
+        .split('\n')[0]
+        .replace(/^["'#*\s]+|["'*.\s]+$/g, '')
+        .slice(0, 60);
+      if (title.length >= 3) {
+        this.recorder.customTitle = title;
+        this.save();
+        if (this.hostPanel) {
+          this.hostPanel.title = `Parley — ${title}`;
+        }
+        await this.autosaveConversation(); // the history picker shows the new title
+      }
+    } catch {
+      // Title stays derived from the first message — never worth surfacing an error.
     }
   }
 
@@ -1411,6 +1489,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     this.history.length = 0;
     this.history.push(...transcriptToHistory(transcript));
     this.conversationId = id;
+    this.recorder.customTitle = pick.label && pick.label !== 'Conversation' ? pick.label : undefined;
     this.conversationStartedAt = transcript[0]?.at ?? new Date().toISOString();
     this.attachments = [];
     this.executor.resetConversationState();

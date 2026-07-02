@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.54.0",
+  "version": "0.55.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -121,6 +121,11 @@
       {
         "command": "parley.newConversationInTab",
         "title": "Parley: New Conversation in Tab",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.newConversationInWindow",
+        "title": "Parley: New Conversation in New Window",
         "category": "Parley"
       },
       {
@@ -333,6 +338,87 @@
                   "type": "string"
                 },
                 "description": "Extra HTTP headers (e.g. Authorization) for url-based transports."
+              }
+            }
+          }
+        },
+        "parley.hooks": {
+          "type": "object",
+          "default": {},
+          "markdownDescription": "Lifecycle hooks: shell commands that run at fixed points, receiving the event as JSON on stdin. Events: `PreToolUse` (exit 2 **blocks** the tool; stderr goes to the model), `PostToolUse` (exit 2 appends stderr as feedback), `UserPromptSubmit` (exit 2 blocks the prompt; exit 0 stdout is attached as context), `Stop` (notification when a turn finishes). `matcher` is a regex on the tool name. Example: `{ \"PreToolUse\": [{ \"matcher\": \"run_command\", \"command\": \"node guard.js\" }] }`.",
+          "properties": {
+            "PreToolUse": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "matcher": {
+                    "type": "string"
+                  },
+                  "command": {
+                    "type": "string"
+                  },
+                  "timeoutSeconds": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "command"
+                ]
+              }
+            },
+            "PostToolUse": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "matcher": {
+                    "type": "string"
+                  },
+                  "command": {
+                    "type": "string"
+                  },
+                  "timeoutSeconds": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "command"
+                ]
+              }
+            },
+            "UserPromptSubmit": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "command": {
+                    "type": "string"
+                  },
+                  "timeoutSeconds": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "command"
+                ]
+              }
+            },
+            "Stop": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "command": {
+                    "type": "string"
+                  },
+                  "timeoutSeconds": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "command"
+                ]
               }
             }
           }

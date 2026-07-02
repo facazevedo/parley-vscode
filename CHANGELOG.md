@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.55.0
+
+### Added — lifecycle hooks (`parley.hooks`)
+- Shell commands that run at fixed points of the agent's life, Claude-Code-compatible semantics (event JSON on stdin, **exit 2 intervenes**):
+  - **`PreToolUse`** — runs before a tool (regex `matcher` on the tool name); exit 2 **blocks the call** and its stderr is returned to the model.
+  - **`PostToolUse`** — runs after a tool; exit 2 appends its stderr to the result as feedback the model must address (e.g. run a linter after every `edit_file`).
+  - **`UserPromptSubmit`** — exit 2 blocks the prompt (reason shown in chat); a zero-exit stdout is **attached to the prompt as extra context** (e.g. inject the current branch/ticket).
+  - **`Stop`** — fire-and-forget notification when a turn finishes (e.g. `notify-send`).
+- Fully unit-tested including two real-process end-to-end cases (a blocking exit-2 hook; stdin JSON round-trip). Hooks with malformed matchers or empty commands never fire.
+
+### Added — AI-generated conversation titles
+- After a conversation's first exchange, a background call to the **cheap completion model** names it (3–6 words). The title shows in the 🕘 history picker, persists in the `.parley` index, survives reloads, and **renames tab conversations' editor tabs**. Falls back silently to the first-message title; forks re-title themselves on their next exchange.
+
+### Added — `Parley: New Conversation in New Window`
+- Opens an independent tab conversation and floats it into a **separate OS window** — the last missing multi-conversation surface.
+
 ## 0.54.0
 
 ### Added — editable plan document (Claude-Code style)

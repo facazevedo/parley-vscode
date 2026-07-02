@@ -442,6 +442,20 @@ folder in your workspace, so it never depends on what's in memory:
 
 ---
 
+## Hooks
+
+**`parley.hooks`** runs your shell commands at fixed points (event JSON on stdin;
+**exit 2 intervenes**, Claude‑Code‑compatible):
+
+```jsonc
+"parley.hooks": {
+  "PreToolUse":  [{ "matcher": "run_command|write_file", "command": "node guard.js" }], // exit 2 blocks the tool
+  "PostToolUse": [{ "matcher": "edit_file", "command": "npm run lint --silent" }],      // exit 2 → feedback to the model
+  "UserPromptSubmit": [{ "command": "git branch --show-current" }],                     // stdout attaches as context
+  "Stop": [{ "command": "msg * Parley finished" }]                                      // notification only
+}
+```
+
 ## Project rules
 
 A **`.parleyrules`**, **`AGENTS.md`**, or **`.cursorrules`** file in the workspace
@@ -505,6 +519,7 @@ frontmatter‑less (or `alwaysApply: true`) rules always apply.
 | `Parley: Set API Key` | Store/verify your `sk-parley-…` key in SecretStorage |
 | `Parley: Open Chat Window` | Focus the Parley chat view |
 | `Parley: New Conversation in Tab` | Open a parallel, independent conversation as an editor tab |
+| `Parley: New Conversation in New Window` | Same, floated into a separate OS window |
 | `Parley: New Conversation` | Save the current chat and start a fresh one |
 | `Parley: Open Past Conversation` | Reopen an archived conversation |
 | `Parley: Open Conversations Folder` | Reveal the auto‑saved transcripts |

@@ -11,6 +11,7 @@ import { formatUnifiedDiff } from '../diff/lineDiff';
 import { reviewProposedEdit } from '../diff/reviewEdit';
 import { showProposedDiff } from '../diff/showDiff';
 import { dbg } from '../debug/debug';
+import { runHookEvent } from '../hooks/hooks';
 import type { McpManager } from '../mcp/McpManager';
 import { clampMiddle } from '../parley/clampText';
 import { isMcpTool } from '../mcp/naming';
@@ -76,6 +77,29 @@ export class ToolExecutor {
 
   /** Tool runner for agent mode: read tools delegate to the read-only runner; writes/commands need UI + checkpoints. */
   public async run(call: ToolCall): Promise<string> {
+    // Lifecycle hooks (parley.hooks): PreToolUse may block; PostToolUse may append feedback.
+    const hooks = this.host.getSettings().hooks;
+    const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const pre = await runHookEvent(
+      hooks,
+      'PreToolUse',
+      { tool: call.name, arguments: safeParseArgs(call.arguments) },
+      { cwd, log: (m) => dbg('hooks', m) }
+    );
+    if (pre.blocked) {
+      return `Error: blocked by a PreToolUse hook${pre.feedback ? ` — ${pre.feedback}` : ''}. Adjust your approach accordingly.`;
+    }
+    const result = await this.dispatch(call);
+    const post = await runHookEvent(
+      hooks,
+      'PostToolUse',
+      { tool: call.name, arguments: safeParseArgs(call.arguments), result: result.slice(0, 4000) },
+      { cwd, log: (m) => dbg('hooks', m) }
+    );
+    return post.feedback ? `${result}\n\n[PostToolUse hook feedback — address this]\n${post.feedback}` : result;
+  }
+
+  private async dispatch(call: ToolCall): Promise<string> {
     if (isMcpTool(call.name)) {
       return this.host.mcp.callTool(call.name, call.arguments);
     }
@@ -666,6 +690,15 @@ export class ToolExecutor {
         ? `Parley: removed ${removed} allowed command${removed === 1 ? '' : 's'} (${keep.length} kept).`
         : `Parley: keeping all ${keep.length} allowed command${keep.length === 1 ? '' : 's'}.`
     );
+  }
+}
+
+/** Best-effort parse of tool-call JSON args for hook payloads. */
+function safeParseArgs(argsJson: string): unknown {
+  try {
+    return JSON.parse(argsJson || '{}');
+  } catch {
+    return argsJson;
   }
 }
 

@@ -97,6 +97,37 @@ export function activate(context: vscode.ExtensionContext): void {
   // Palette commands act on the last-focused chat (sidebar or tab).
   const currentChat = (): ChatPanel => ChatPanel.current ?? chatPanel;
 
+  // A parallel conversation in an editor tab: its own ChatPanel instance with
+  // prefix-isolated memento state and its own checkpoint store. Transcripts
+  // land in the same .parley store, so the history picker sees them.
+  const openTabConversation = (): void => {
+    const panel = vscode.window.createWebviewPanel('parley.chatTab', 'Parley Chat', vscode.ViewColumn.Beside, {
+      retainContextWhenHidden: true
+    });
+    const prefix = `parley.tab.${Date.now()}.`;
+    const tabState = prefixedMemento(context.workspaceState, prefix);
+    const tabChat = new ChatPanel(
+      context.extensionUri,
+      () => provider,
+      () => settings,
+      logger,
+      commandDeps,
+      tabState,
+      new CheckpointStore(),
+      context.globalStorageUri,
+      mcp
+    );
+    tabChat.attachPanel(panel);
+    panel.onDidDispose(() => {
+      // Don't leave the tab's memento keys behind (its transcript stays in .parley).
+      for (const key of context.workspaceState.keys()) {
+        if (key.startsWith(prefix)) {
+          void context.workspaceState.update(key, undefined);
+        }
+      }
+    });
+  };
+
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(ChatPanel.viewType, chatPanel, {
       webviewOptions: { retainContextWhenHidden: true }
@@ -128,35 +159,11 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('parley.rebuildCodebaseIndex', () => chatPanel.rebuildCodebaseIndex()),
     vscode.commands.registerCommand('parley.manageAllowedCommands', () => chatPanel.manageAllowedCommands()),
-    vscode.commands.registerCommand('parley.newConversationInTab', () => {
-      // A parallel conversation in an editor tab: its own ChatPanel instance with
-      // prefix-isolated memento state and its own checkpoint store. Transcripts
-      // land in the same .parley store, so the history picker sees them.
-      const panel = vscode.window.createWebviewPanel('parley.chatTab', 'Parley Chat', vscode.ViewColumn.Beside, {
-        retainContextWhenHidden: true
-      });
-      const prefix = `parley.tab.${Date.now()}.`;
-      const tabState = prefixedMemento(context.workspaceState, prefix);
-      const tabChat = new ChatPanel(
-        context.extensionUri,
-        () => provider,
-        () => settings,
-        logger,
-        commandDeps,
-        tabState,
-        new CheckpointStore(),
-        context.globalStorageUri,
-        mcp
-      );
-      tabChat.attachPanel(panel);
-      panel.onDidDispose(() => {
-        // Don't leave the tab's memento keys behind (its transcript stays in .parley).
-        for (const key of context.workspaceState.keys()) {
-          if (key.startsWith(prefix)) {
-            void context.workspaceState.update(key, undefined);
-          }
-        }
-      });
+    vscode.commands.registerCommand('parley.newConversationInTab', () => openTabConversation()),
+    vscode.commands.registerCommand('parley.newConversationInWindow', async () => {
+      // Same tab conversation, floated into its own OS window.
+      openTabConversation();
+      await vscode.commands.executeCommand('workbench.action.moveEditorToNewWindow');
     }),
     vscode.commands.registerCommand('parley.newConversation', () => chatPanel.newConversation()),
     vscode.commands.registerCommand('parley.openConversationsFolder', () => chatPanel.openConversationsFolder()),

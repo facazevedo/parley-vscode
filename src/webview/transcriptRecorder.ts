@@ -26,6 +26,8 @@ export class TranscriptRecorder {
   public entries: TranscriptEntry[] = [];
   public conversationId: string;
   public startedAt = new Date().toISOString();
+  /** AI-generated conversation title; falls back to the first user message. */
+  public customTitle?: string;
 
   public constructor(
     private readonly getSettings: () => ParleySettings,
@@ -59,6 +61,9 @@ export class TranscriptRecorder {
   }
 
   public currentTitle(): string {
+    if (this.customTitle) {
+      return this.customTitle;
+    }
     const firstUser = this.entries.find((e) => e.kind === 'user') as { text?: string } | undefined;
     return (firstUser?.text ?? 'Conversation').replace(/\s+/g, ' ').trim().slice(0, 60) || 'Conversation';
   }

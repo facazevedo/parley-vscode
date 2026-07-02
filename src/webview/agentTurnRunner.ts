@@ -2,6 +2,7 @@ import { handleResponse, reportProviderError, type CommandDependencies } from '.
 import type { ParleySettings } from '../config/settings';
 import type { CheckpointStore } from '../diff/checkpoints';
 import { dbg } from '../debug/debug';
+import { runHookEvent } from '../hooks/hooks';
 import type { Logger } from '../logging/logger';
 import type { ParleyProvider } from '../parley/ParleyProvider';
 import { estimateCostUsd } from '../parley/pricing';
@@ -306,6 +307,8 @@ export class AgentTurnRunner {
       this.abortController = undefined;
       await this.host.postState();
       await this.host.recorder.autosave();
+      // Stop hooks: fire-and-forget notifications that a turn finished (never blocking).
+      void runHookEvent(settings.hooks, 'Stop', {}, { log: (m) => this.host.logger.debug(`hooks: ${m}`) });
       // Steering queued after the last round boundary (or during a plain chat turn)
       // runs as an immediate follow-up turn instead of being forgotten.
       const followUp = this.queuedSteering.shift();
