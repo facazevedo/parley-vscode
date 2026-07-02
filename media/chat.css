@@ -1,3 +1,8 @@
+:root {
+  --chat-action-offset-y: -28px;
+  --chat-action-reserved-space: 32px;
+}
+
 body {
   margin: 0;
   color: var(--vscode-foreground);
@@ -148,7 +153,7 @@ button:disabled {
 .message {
   overflow-wrap: anywhere;
   max-width: 100%;
-  margin-top: 18px;
+  margin-top: var(--chat-action-reserved-space);
 }
 .message.user {
   position: relative;
@@ -161,7 +166,7 @@ button:disabled {
 }
 .msgcopy {
   position: absolute;
-  top: -22px;
+  top: var(--chat-action-offset-y);
   right: 5px;
   display: inline-flex;
   align-items: center;
@@ -191,7 +196,7 @@ button:disabled {
 }
 .msgedit {
   position: absolute;
-  top: -22px;
+  top: var(--chat-action-offset-y);
   right: 26px;
   display: inline-flex;
   align-items: center;
@@ -217,7 +222,7 @@ button:disabled {
 }
 .msgrewind {
   position: absolute;
-  top: -22px;
+  top: var(--chat-action-offset-y);
   right: 47px;
   display: inline-flex;
   align-items: center;
@@ -241,7 +246,7 @@ button:disabled {
   position: relative;
 }
 .message.assistant .msgrewind {
-  top: -22px;
+  top: var(--chat-action-offset-y);
   right: 5px;
   background: transparent;
 }
@@ -278,7 +283,7 @@ button:disabled {
 }
 .content .codeblock {
   position: relative;
-  margin: 32px 0 8px;
+  margin: var(--chat-action-reserved-space) 0 8px;
 }
 .content pre {
   background: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.15));
@@ -360,7 +365,7 @@ button:disabled {
 }
 .content .codeblock .copy {
   position: absolute;
-  top: -28px;
+  top: var(--chat-action-offset-y);
   right: 5px;
   display: inline-flex;
   align-items: center;
