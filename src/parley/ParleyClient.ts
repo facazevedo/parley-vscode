@@ -44,7 +44,15 @@ const SYSTEM_PROMPT = [
   'Use one such block per changed or newly created file. Do not abbreviate file contents with',
   'comments like "// ... unchanged ...". Only emit a File: block when you actually intend to',
   'edit or create that file; otherwise answer normally. The user reviews every change in a diff',
-  'before it is applied, so never claim a change has already been made.'
+  'before it is applied, so never claim a change has already been made.',
+  '',
+  'Never generate or guess URLs unless you are confident they help with the programming task;',
+  'prefer URLs the user provided or that appear in the workspace files.',
+  'If something fails, diagnose before switching tactics: read the actual error, check your',
+  'assumptions, and try a focused fix — do not blindly repeat the same failing action, but do',
+  'not abandon a workable approach after a single failure either.',
+  'Keep replies as short as the task allows: lead with the answer, reserve length for genuine',
+  'complexity, and avoid restating the question or padding with preamble.'
 ].join('\n');
 
 const COMPLETION_SYSTEM =
@@ -759,9 +767,9 @@ export class ParleyClient implements ParleyProvider {
   }
 
   private buildMessages(request: ChatRequest, documentParts: unknown[] = []): OpenAiMessage[] {
-    const system = request.systemExtra
-      ? `${SYSTEM_PROMPT}\n\n# Project rules (from the workspace)\n${request.systemExtra}`
-      : SYSTEM_PROMPT;
+    // systemExtra is fully structured by the caller (env block, output style, mode
+    // note, project rules with their own headers) — append it verbatim.
+    const system = request.systemExtra ? `${SYSTEM_PROMPT}\n\n${request.systemExtra}` : SYSTEM_PROMPT;
     const messages: OpenAiMessage[] = [{ role: 'system', content: system }];
 
     const history =

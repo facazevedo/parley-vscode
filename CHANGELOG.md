@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.61.0
+
+### Added — output styles
+
+- Pick how Parley communicates via **`Parley: Select Output Style`** (or the `parley.outputStyle` setting): **Default**, **Concise** (answer/code first, no preamble), **Explanatory** (surfaces the why and trade-offs), or **Learning** (teaches as it goes). The chosen style's instruction is prepended to the system prompt.
+- **Custom styles**: drop a `.parley/output-styles/<id>.md` in any workspace root (optional `description:` frontmatter, body = the instruction) and it appears in the picker; a custom id overrides a built-in of the same name.
+
+### Changed — tighter, environment-aware prompting
+
+- The system prompt now includes an explicit **`<env>` block** (working directory, whether it's a git repo, platform, OS version, default shell, model, date) so the model stops guessing about its environment.
+- Added three model-agnostic guidance lines: **never invent URLs** (prefer user-/workspace-provided ones), **diagnose before switching tactics** (read the error, don't blindly retry, don't abandon a working approach after one failure), and a **brevity anchor** (lead with the answer, reserve length for real complexity).
+- The dynamic system section is now assembled entirely on the client side (env → output style → mode instruction → project rules, each with its own heading) instead of the transport hard-coding a single "Project rules" header.
+
 ## 0.60.0
 
 ### Added — `multi_edit` (atomic multi-hunk edits)

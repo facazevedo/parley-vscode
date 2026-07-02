@@ -527,38 +527,39 @@ frontmatter‑less (or `alwaysApply: true`) rules always apply.
 
 ## Command reference
 
-| Command                                         | What it does                                               |
-| ----------------------------------------------- | ---------------------------------------------------------- |
-| `Parley: Set API Key`                           | Store/verify your `sk-parley-…` key in SecretStorage       |
-| `Parley: Open Chat Window`                      | Focus the Parley chat view                                 |
-| `Parley: New Conversation in Tab`               | Open a parallel, independent conversation as an editor tab |
-| `Parley: New Conversation in New Window`        | Same, floated into a separate OS window                    |
-| `Parley: New Conversation`                      | Save the current chat and start a fresh one                |
-| `Parley: Open Past Conversation`                | Reopen an archived conversation                            |
-| `Parley: Open Conversations Folder`             | Reveal the auto‑saved transcripts                          |
-| `Parley: Export Conversation`                   | Export to Markdown / plain text / JSON                     |
-| `Parley: Compact Conversation`                  | Summarize history to free context                          |
-| `Parley: Regenerate Last Response`              | Re‑run the last user message                               |
-| `Parley: Ask About Selection`                   | Ask about the current selection                            |
-| `Parley: Explain Current File`                  | Explain the active file                                    |
-| `Parley: Refactor Selection`                    | Refactor the selection (diff‑reviewed)                     |
-| `Parley: Generate Tests`                        | Generate tests for the current file                        |
-| `Parley: Fix Diagnostics`                       | Fix reported problems minimally                            |
-| `Parley: Suggest Terminal Command`              | Suggest a shell command (manual confirm)                   |
-| `Parley: Edit Selection (Inline)`               | Inline edit (`Ctrl+Alt+K` / `Cmd+Alt+K`)                   |
-| `Parley: Revert Last Edit` / `Revert All Edits` | Undo checkpointed edits                                    |
-| `Parley: Generate Image`                        | Generate an image with `gpt-image-1`                       |
-| `Parley: Generate Commit Message`               | Commit message from the diff → Source Control              |
-| `Parley: Rebuild Codebase Index`                | Build the local semantic `@codebase` index                 |
-| `Parley: Manage Allowed Commands`               | Review/remove commands approved via "Always Allow"         |
-| `Parley: Reconnect MCP Servers`                 | Restart MCP servers and show status                        |
-| `Parley: Show Usage`                            | Real billed spend for the current month                    |
-| `Parley: Set Token Limit`                       | Per‑conversation token budget                              |
-| `Parley: Toggle Inline Completion`              | Enable/disable ghost‑text completions                      |
-| `Parley: Init Project Rules`                    | Scaffold an `AGENTS.md` rules file                         |
-| `Parley: Run Diagnostics`                       | Probe the live API and report what works                   |
-| `Parley: Open Debug Log`                        | Open the verbose debug log                                 |
-| `Parley: Sign Out`                              | Clear the stored API key                                   |
+| Command                                         | What it does                                                                   |
+| ----------------------------------------------- | ------------------------------------------------------------------------------ |
+| `Parley: Set API Key`                           | Store/verify your `sk-parley-…` key in SecretStorage                           |
+| `Parley: Open Chat Window`                      | Focus the Parley chat view                                                     |
+| `Parley: New Conversation in Tab`               | Open a parallel, independent conversation as an editor tab                     |
+| `Parley: New Conversation in New Window`        | Same, floated into a separate OS window                                        |
+| `Parley: New Conversation`                      | Save the current chat and start a fresh one                                    |
+| `Parley: Open Past Conversation`                | Reopen an archived conversation                                                |
+| `Parley: Open Conversations Folder`             | Reveal the auto‑saved transcripts                                              |
+| `Parley: Export Conversation`                   | Export to Markdown / plain text / JSON                                         |
+| `Parley: Compact Conversation`                  | Summarize history to free context                                              |
+| `Parley: Regenerate Last Response`              | Re‑run the last user message                                                   |
+| `Parley: Ask About Selection`                   | Ask about the current selection                                                |
+| `Parley: Explain Current File`                  | Explain the active file                                                        |
+| `Parley: Refactor Selection`                    | Refactor the selection (diff‑reviewed)                                         |
+| `Parley: Generate Tests`                        | Generate tests for the current file                                            |
+| `Parley: Fix Diagnostics`                       | Fix reported problems minimally                                                |
+| `Parley: Suggest Terminal Command`              | Suggest a shell command (manual confirm)                                       |
+| `Parley: Edit Selection (Inline)`               | Inline edit (`Ctrl+Alt+K` / `Cmd+Alt+K`)                                       |
+| `Parley: Revert Last Edit` / `Revert All Edits` | Undo checkpointed edits                                                        |
+| `Parley: Generate Image`                        | Generate an image with `gpt-image-1`                                           |
+| `Parley: Generate Commit Message`               | Commit message from the diff → Source Control                                  |
+| `Parley: Rebuild Codebase Index`                | Build the local semantic `@codebase` index                                     |
+| `Parley: Manage Allowed Commands`               | Review/remove commands approved via "Always Allow"                             |
+| `Parley: Select Output Style`                   | Choose how Parley communicates (Default/Concise/Explanatory/Learning + custom) |
+| `Parley: Reconnect MCP Servers`                 | Restart MCP servers and show status                                            |
+| `Parley: Show Usage`                            | Real billed spend for the current month                                        |
+| `Parley: Set Token Limit`                       | Per‑conversation token budget                                                  |
+| `Parley: Toggle Inline Completion`              | Enable/disable ghost‑text completions                                          |
+| `Parley: Init Project Rules`                    | Scaffold an `AGENTS.md` rules file                                             |
+| `Parley: Run Diagnostics`                       | Probe the live API and report what works                                       |
+| `Parley: Open Debug Log`                        | Open the verbose debug log                                                     |
+| `Parley: Sign Out`                              | Clear the stored API key                                                       |
 
 ---
 

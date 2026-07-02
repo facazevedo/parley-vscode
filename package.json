@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.60.0",
+  "version": "0.61.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -121,6 +121,11 @@
       {
         "command": "parley.manageAllowedCommands",
         "title": "Parley: Manage Allowed Commands",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.selectOutputStyle",
+        "title": "Parley: Select Output Style",
         "category": "Parley"
       },
       {
@@ -269,6 +274,23 @@
             "CAUTION: auto-applies edits AND runs shell commands without asking"
           ],
           "markdownDescription": "Default chat **Mode**, also switchable from the Mode popover in the composer. Shell commands always require confirmation regardless of mode."
+        },
+        "parley.outputStyle": {
+          "type": "string",
+          "default": "default",
+          "enum": [
+            "default",
+            "concise",
+            "explanatory",
+            "learning"
+          ],
+          "enumDescriptions": [
+            "Parley's standard voice — concise and technical",
+            "Minimal prose; lead with the answer or the code",
+            "Explain the reasoning and trade-offs behind the work",
+            "Teach as you go; invite the user to try small pieces"
+          ],
+          "markdownDescription": "Communication **output style** prepended to the system prompt. Switch quickly with **`Parley: Select Output Style`**. Custom styles can be added as `.parley/output-styles/*.md` (filename = id, body = instruction)."
         },
         "parley.autoContinue": {
           "type": "boolean",

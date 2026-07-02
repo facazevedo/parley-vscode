@@ -1,6 +1,8 @@
+import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import type { ChatMode, ParleySettings } from '../config/settings';
+import { loadOutputStyles, resolveStylePrompt } from '../config/outputStyles';
 import {
   collectCommandContext,
   previewAndConfirmContext,
@@ -1061,9 +1063,39 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     );
   }
 
-  /** Compose project rules + the mode-specific system instruction (plan / autonomous agent). */
+  /** An `<env>` block telling the model its concrete environment (reduces platform/tool hallucination). */
+  private async buildEnvBlock(): Promise<string> {
+    const folders = vscode.workspace.workspaceFolders ?? [];
+    const root = folders[0]?.uri;
+    let isGit = false;
+    if (root) {
+      try {
+        await vscode.workspace.fs.stat(vscode.Uri.joinPath(root, '.git'));
+        isGit = true;
+      } catch {
+        // Not a git repo.
+      }
+    }
+    const model = this.selectedAgentId || this.getSettings().defaultAgent;
+    return [
+      '<env>',
+      `Working directory: ${root?.fsPath ?? '(no folder open)'}`,
+      `Is a git repo: ${isGit ? 'yes' : 'no'}`,
+      `Platform: ${process.platform}`,
+      `OS: ${os.type()} ${os.release()}`,
+      `Default shell: ${vscode.env.shell || 'unknown'}`,
+      `Model: ${model}`,
+      `Today's date: ${new Date().toISOString().slice(0, 10)}`,
+      '</env>'
+    ].join('\n');
+  }
+
+  /** Compose the dynamic system prompt: env, output style, mode instruction, and project rules. */
   private async buildSystemExtra(): Promise<string | undefined> {
+    const env = await this.buildEnvBlock();
+    const stylePrompt = resolveStylePrompt(await loadOutputStyles(), this.getSettings().outputStyle);
     const rules = await this.readProjectRules();
+    const rulesSection = rules ? `# Project rules (from the workspace)\n${rules}` : undefined;
     let modeNote: string | undefined;
     if (this.mode === 'plan') {
       modeNote =
@@ -1096,7 +1128,28 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       folders.length > 1
         ? `This is a MULTI-ROOT workspace (folders: ${folders.map((f) => f.name).join(', ')}). Tool paths may target any root — prefix with the folder name (e.g. "${folders[1].name}/src/…") when the first root isn't meant. run_command executes in the FIRST root (${folders[0].name}); use "cd <folder> && …" for the others.`
         : undefined;
-    return [rules, multiRootNote, modeNote].filter(Boolean).join('\n\n') || undefined;
+    return (
+      [env, stylePrompt || undefined, modeNote, multiRootNote, rulesSection].filter(Boolean).join('\n\n') || undefined
+    );
+  }
+
+  /** "Parley: Select Output Style" — pick a communication style (built-in or custom) for the model. */
+  public async selectOutputStyle(): Promise<void> {
+    const styles = await loadOutputStyles();
+    const current = this.getSettings().outputStyle;
+    const pick = await vscode.window.showQuickPick(
+      styles.map((s) => ({
+        label: `${s.label}${s.id === current ? '  ✓' : ''}`,
+        description: s.description,
+        id: s.id
+      })),
+      { title: 'Parley: output style', placeHolder: 'How should Parley communicate? (applies to new messages)' }
+    );
+    if (!pick) {
+      return;
+    }
+    await vscode.workspace.getConfiguration('parley').update('outputStyle', pick.id, vscode.ConfigurationTarget.Global);
+    await vscode.window.showInformationMessage(`Parley output style: ${pick.label.replace(/\s*✓$/, '')}.`);
   }
 
   /**

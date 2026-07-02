@@ -27,6 +27,8 @@ export interface ParleySettings {
   readonly stream: boolean;
   readonly thinking: ThinkingLevel;
   readonly defaultMode: ChatMode;
+  /** Output-style id prepended to the system prompt (built-in or custom); '' / 'default' = none. */
+  readonly outputStyle: string;
   readonly autoContinue: boolean;
   readonly maxToolRounds: number;
   readonly maxAutoContinue: number;
@@ -72,6 +74,7 @@ export function getSettings(): ParleySettings {
     stream: config.get<boolean>('stream', true),
     thinking: normalizeThinkingLevel(config.get<string>('thinking', 'off')),
     defaultMode: normalizeMode(config.get<string>('defaultMode', 'chat')),
+    outputStyle: config.get<string>('outputStyle', 'default').trim() || 'default',
     autoContinue: config.get<boolean>('autoContinue', true),
     maxToolRounds: clampInt(config.get<number>('maxToolRounds', 50), 1, 400),
     maxAutoContinue: clampInt(config.get<number>('maxAutoContinue', 25), 0, 200),
