@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.71.0
+
+### Docs
+
+- Simplified the README tagline to "A VS Code AI coding assistant powered by MIT's Parley gateway" (dropped the comparative framing).
+
 ## 0.70.0
 
 ### Docs

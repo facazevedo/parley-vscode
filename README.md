@@ -2,12 +2,12 @@
 
 <h1>Parley for VS Code</h1>
 
-<p><strong>A Cursor- and Claude-Code-class AI coding assistant for MIT's Parley gateway</strong><br/>
+<p><strong>A VS Code AI coding assistant powered by MIT's Parley gateway</strong><br/>
 A streaming chat sidebar, an agent that reads and edits your workspace, multimodal context,<br/>
 and every change diff-reviewed before it touches your files — all inside VS Code.</p>
 
 <p>
-  <a href="CHANGELOG.md"><img alt="Version" src="https://img.shields.io/badge/version-0.70.0-A31F34"></a>
+  <a href="CHANGELOG.md"><img alt="Version" src="https://img.shields.io/badge/version-0.71.0-A31F34"></a>
   <img alt="VS Code" src="https://img.shields.io/badge/VS%20Code-%E2%89%A5%201.92-1F6FEB">
   <a href="https://opensource.org/licenses/MIT"><img alt="License" src="https://img.shields.io/badge/license-MIT-3FB950"></a>
   <img alt="Tests" src="https://img.shields.io/badge/tests-229%20passing-2EA043">
@@ -103,7 +103,7 @@ three are a standalone editor (**Cursor**), OpenAI's coding agent (**Codex**), a
 | Full on‑disk event transcripts          | ✅ (JSONL + export)                                 | ◐                 | ◐                 | ◐                    |
 
 **✅ supported · ◐ partial or different approach · ✗ not available.** Parley's column reflects
-the current code (v0.70.0). Competitor columns reflect publicly documented capabilities as of
+the current code (v0.71.0). Competitor columns reflect publicly documented capabilities as of
 early 2026 and are **best‑effort** — these tools move fast, so check their own docs for the
 latest. Parley's deliberate non‑goals (a trained Tab/next‑edit model, background/cloud agents,
 server‑side embeddings) follow from running on a shared gateway rather than dedicated
