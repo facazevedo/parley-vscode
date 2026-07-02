@@ -161,7 +161,7 @@ export class AgentTurnRunner {
             onToolResult: toolsEnabled
               ? (name, result) => {
                   // write/edit show a diff card already; others get a Claude-style ⎿ result line.
-                  if (name !== 'write_file' && name !== 'edit_file') {
+                  if (name !== 'write_file' && name !== 'edit_file' && name !== 'multi_edit') {
                     const text = summarizeToolResult(name, result);
                     this.host.post({ type: 'toolResult', text });
                     // Record the ⏺ action + ⎿ result together in the persisted transcript.
@@ -342,6 +342,7 @@ function describeToolEvent(name: string, argsJson: string): string {
     command?: string;
     task?: string;
     action?: string;
+    edits?: unknown[];
     url?: string;
   } = {};
   try {
@@ -372,6 +373,8 @@ function describeToolEvent(name: string, argsJson: string): string {
       return `Write ${a.path ?? ''}`.trim();
     case 'edit_file':
       return `Edit ${a.path ?? ''}`.trim();
+    case 'multi_edit':
+      return `Edit ${a.path ?? ''} (${Array.isArray(a.edits) ? a.edits.length : 0} edits)`.trim();
     case 'run_command':
       return `Run: ${a.command ?? ''}`.trim();
     case 'fetch_url':

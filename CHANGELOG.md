@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.60.0
+
+### Added — `multi_edit` (atomic multi-hunk edits)
+
+- A new tool applies **several edits to one file in a single atomic operation** — all succeed together or none are applied, producing **one review card, one diff, one checkpoint** instead of a call (and card) per hunk. It's the preferred tool for changing several parts of the same file.
+  - Edits apply top-to-bottom against the running file (each sees the previous result) and every hunk must match uniquely via the same tiered matcher `edit_file` uses (exact → trimmed-line → collapsed-whitespace, with closest-match repair hints).
+  - **Overlap guard:** a later edit's `old_text` may not be a substring of text an earlier edit inserted — that almost always signals fragile/ambiguous intent, so the whole batch is rejected (naming the offending edit) rather than half-applied.
+  - On any failure nothing is written; the error names which edit (`edit #k of n`) failed, includes a repair hint, and notes if the file changed on disk. Honors encoding/EOL preservation and Plan-mode read-only gating like the other write tools.
+- Pure, unit-tested core in `src/diff/editMatch.ts` (`applyMultiEdit`, 6 new tests).
+
 ## 0.59.0
 
 ### Fixed — preserve file encoding & line endings on write (Windows)

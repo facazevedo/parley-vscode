@@ -157,6 +157,7 @@ In any tool mode the model runs an OpenAI tool‑calling loop. Built‑in tools:
 | `search_text`                                        | Simple substring search of file **contents**                                                                     |
 | `find_symbol`, `document_symbols`, `find_references` | **Language-server** navigation: where is X defined, a file's outline, all usages of a symbol                     |
 | `edit_file`                                          | Precise find‑and‑replace edit (reviewed/checkpointed)                                                            |
+| `multi_edit`                                         | Several edits to one file, applied atomically (all‑or‑nothing; one review/checkpoint)                            |
 | `write_file`                                         | Create/overwrite a file (reviewed/checkpointed)                                                                  |
 | `run_command`                                        | Run a shell command (confirmation required except Full access)                                                   |
 | `fetch_url`                                          | Fetch a public `https://` page as text (raw HTML, no JS)                                                         |

@@ -71,6 +71,71 @@ export function applySnippetEdit(original: string, oldText: string, newText: str
   return { kind: 'notfound', hint: closestWindow(fileLines, oldLines) };
 }
 
+export interface MultiEditItem {
+  readonly oldText: string;
+  readonly newText: string;
+}
+
+export type MultiEditResult =
+  | { readonly kind: 'ok'; readonly newText: string }
+  | { readonly kind: 'error'; readonly index: number; readonly message: string; readonly hint?: ClosestMatch };
+
+/**
+ * Apply a sequence of `oldText`→`newText` edits to one file, all-or-nothing.
+ * Edits are applied in order against the running text (so each sees the result of
+ * the previous), and every edit must match uniquely via the tiered matcher.
+ *
+ * Overlap guard: a later edit's `oldText` may not be a substring of text an
+ * earlier edit *inserted* — that almost always means the model is matching
+ * content that didn't exist in the original, a fragile/ambiguous intent. We
+ * reject the whole batch (with the offending index) rather than half-apply.
+ *
+ * `index` in an error is the 0-based edit that failed (-1 for whole-batch issues
+ * like an empty list or a no-op result).
+ */
+export function applyMultiEdit(original: string, edits: readonly MultiEditItem[]): MultiEditResult {
+  if (edits.length === 0) {
+    return { kind: 'error', index: -1, message: 'no edits were provided.' };
+  }
+  let text = original;
+  const insertedSoFar: string[] = [];
+  for (let i = 0; i < edits.length; i += 1) {
+    const { oldText, newText } = edits[i];
+    if (!oldText) {
+      return { kind: 'error', index: i, message: 'old_text is required.' };
+    }
+    const overlap = insertedSoFar.findIndex((prev) => prev.length > 0 && prev.includes(oldText));
+    if (overlap !== -1) {
+      return {
+        kind: 'error',
+        index: i,
+        message:
+          `old_text overlaps text inserted by edit #${overlap + 1} — edits must be independent of each other's ` +
+          'output. Reorder them, widen the context, or fold them into a single edit.'
+      };
+    }
+    const result = applySnippetEdit(text, oldText, newText);
+    if (result.kind === 'ambiguous') {
+      return {
+        kind: 'error',
+        index: i,
+        message:
+          `old_text matches ${result.startLines.length} places (starting at lines ` +
+          `${result.startLines.slice(0, 8).join(', ')}). Include more surrounding context so it is unique.`
+      };
+    }
+    if (result.kind === 'notfound') {
+      return { kind: 'error', index: i, message: 'old_text was not found.', hint: result.hint };
+    }
+    text = result.newText;
+    insertedSoFar.push(newText);
+  }
+  if (text === original) {
+    return { kind: 'error', index: -1, message: 'the edits left the file unchanged.' };
+  }
+  return { kind: 'ok', newText: text };
+}
+
 /** 1-based line numbers where the exact `oldText` occurrences start. */
 function exactMatchLines(original: string, oldText: string): number[] {
   const lines: number[] = [];

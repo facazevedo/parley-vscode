@@ -6,7 +6,7 @@ import type { ChatMode, ParleySettings } from '../config/settings';
 import type { CommandDependencies } from '../commands/common';
 import { isSensitiveFile } from '../context/sensitiveFileFilter';
 import type { CheckpointStore } from '../diff/checkpoints';
-import { applySnippetEdit } from '../diff/editMatch';
+import { applyMultiEdit, applySnippetEdit, type MultiEditItem } from '../diff/editMatch';
 import { decodeText } from '../diff/fileFormat';
 import { formatUnifiedDiff } from '../diff/lineDiff';
 import { reviewProposedEdit } from '../diff/reviewEdit';
@@ -130,6 +130,9 @@ export class ToolExecutor {
     }
     if (call.name === 'edit_file') {
       return this.toolEditFile(call);
+    }
+    if (call.name === 'multi_edit') {
+      return this.toolMultiEdit(call);
     }
     if (call.name === 'run_command') {
       return this.toolRunCommand(call);
@@ -407,6 +410,55 @@ export class ToolExecutor {
       return `Error: old_text was not found in ${rel}.${stale} Re-read the file with read_file and copy an exact snippet.`;
     }
     return this.applyProposedEdit(uri, rel, original, match.newText);
+  }
+
+  /** Apply several edits to one file atomically (all-or-nothing), then one review/checkpoint. */
+  private async toolMultiEdit(call: ToolCall): Promise<string> {
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+    if (!root) {
+      return 'Error: no workspace folder is open.';
+    }
+    let args: { path?: string; edits?: Array<{ old_text?: string; new_text?: string }> };
+    try {
+      args = JSON.parse(call.arguments || '{}');
+    } catch {
+      return 'Error: arguments were not valid JSON.';
+    }
+    const rel = String(args.path ?? '').replace(/^[/\\]+/, '');
+    if (!rel) {
+      return 'Error: path is required.';
+    }
+    if (!Array.isArray(args.edits) || args.edits.length === 0) {
+      return 'Error: edits must be a non-empty array of { old_text, new_text }.';
+    }
+    if (isSensitiveFile(rel)) {
+      return 'Error: refusing to edit a sensitive file.';
+    }
+    const edits: MultiEditItem[] = args.edits.map((e) => ({
+      oldText: String(e?.old_text ?? ''),
+      newText: String(e?.new_text ?? '')
+    }));
+
+    const uri = (await resolveAcrossRoots(rel)) ?? vscode.Uri.joinPath(root, rel);
+    let original: string;
+    try {
+      original = await ToolExecutor.readText(uri);
+    } catch {
+      return `Error: could not read "${rel}" — does it exist? Use write_file to create new files.`;
+    }
+
+    const result = applyMultiEdit(original, edits);
+    if (result.kind === 'error') {
+      const which = result.index >= 0 ? ` (edit #${result.index + 1} of ${edits.length})` : '';
+      const stale = result.index >= 0 ? this.staleNote(uri.fsPath, original) : '';
+      const hint = result.hint
+        ? ` Closest match is lines ${result.hint.startLine}-${result.hint.endLine}` +
+          ` (${Math.round(result.hint.similarity * 100)}% of lines match) — the file actually contains:\n${result.hint.excerpt}\n` +
+          'Copy old_text EXACTLY from the lines above, then retry.'
+        : '';
+      return `Error: ${result.message}${which} No edits were applied (this tool is all-or-nothing).${stale}${hint}`;
+    }
+    return this.applyProposedEdit(uri, rel, original, result.newText);
   }
 
   /** Apply a proposed file change: auto in edit/auto/full modes, diff-approval otherwise. Always checkpointed. */

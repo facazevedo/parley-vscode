@@ -96,6 +96,36 @@ export const AGENT_TOOLS: readonly ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'multi_edit',
+      description:
+        "Apply SEVERAL precise edits to ONE existing file in a single atomic operation — all succeed together or none are applied (one review/diff/checkpoint). Each edit replaces a unique old_text with new_text, applied top-to-bottom against the running file. Prefer this over multiple edit_file calls when changing several parts of the same file. A later edit's old_text must NOT overlap text an earlier edit inserted (keep edits independent).",
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Workspace-relative path of the existing file.' },
+          edits: {
+            type: 'array',
+            description: 'Ordered edits to apply to the file.',
+            items: {
+              type: 'object',
+              properties: {
+                old_text: {
+                  type: 'string',
+                  description: 'Exact existing snippet to replace (must appear exactly once at apply time).'
+                },
+                new_text: { type: 'string', description: 'Replacement text.' }
+              },
+              required: ['old_text', 'new_text']
+            }
+          }
+        },
+        required: ['path', 'edits']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'run_command',
       description:
         'Request to run a shell command in the workspace root. The user must approve each command before it runs; returns combined stdout/stderr.',
@@ -362,6 +392,7 @@ export const AGENT_TOOLS: readonly ToolDefinition[] = [
 const WRITE_TOOLS = new Set([
   'write_file',
   'edit_file',
+  'multi_edit',
   'run_command',
   'browser_navigate',
   'browser_read',

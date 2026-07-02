@@ -172,6 +172,8 @@ import hljs from 'highlight.js/lib/common';
         return 'Finding references to ' + (a.symbol || '');
       case 'write_file':
         return 'Editing ' + (a.path || '');
+      case 'multi_edit':
+        return 'Editing ' + (a.path || '') + ' (' + (Array.isArray(a.edits) ? a.edits.length : 0) + ' edits)';
       case 'run_command':
         return 'Running: ' + (a.command || '');
       case 'fetch_url':
