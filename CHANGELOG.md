@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.69.0
+
+### Internal — extract & test the context/index bookkeeping (no behavior change)
+
+- The pure logic behind three context features was extracted into standalone, unit-tested modules; the vscode-coupled files now just wire events and delegate (+13 tests, 229 total):
+  - **Recent-edits completion context** (`recentEditsCore`) — the same-file/line coalescing ring and the `file:line: text` summary.
+  - **`@terminal` capture** (`terminalText`) — ANSI CSI/OSC stripping, the ring buffer, and snapshot formatting. (The strip regex is now written with `\x1b`/`\x07` escapes instead of embedded control bytes — identical behavior, cleaner source.)
+  - **Semantic index** (`embeddingIndexCore`) — v1→v2 parse/migration, the incremental build decision (reuse unchanged files, re-embed changed/stale/new), index serialization, and top-N cosine ranking (best chunk per file) — all separated from the embedding model, filesystem, and vscode.
+
 ## 0.68.0
 
 ### Internal — tests for the agent's read-only explorers (no behavior change)

@@ -7,6 +7,15 @@ import { pathToFileURL } from 'url';
 import * as vscode from 'vscode';
 import type { Logger } from '../logging/logger';
 import { dbg } from '../debug/debug';
+import {
+  parseIndex,
+  planBuild,
+  rankByQuery,
+  serializeIndex,
+  type ChunkEntry,
+  type FileEntry,
+  type IndexFileFormat
+} from './embeddingIndexCore';
 
 /**
  * Optional local semantic index for `@codebase`, using a MiniLM model via
@@ -32,27 +41,6 @@ interface TransformersModule {
     model: string
   ) => Promise<(input: string[], opts: object) => Promise<{ data: Float32Array; dims: number[] }>>;
   env: { allowRemoteModels: boolean; cacheDir: string };
-}
-
-interface ChunkEntry {
-  /** 1-based first line of the chunk. */
-  s: number;
-  vec: number[];
-}
-
-interface FileEntry {
-  /** Content hash — unchanged files are reused instead of re-embedded. */
-  hash: string;
-  chunks: ChunkEntry[];
-}
-
-/** v2 index: per-file hash + ~60-line chunk vectors (v1 was one vector per file). */
-interface IndexFileFormat {
-  root: string;
-  version?: number;
-  files?: Record<string, FileEntry>;
-  /** Legacy v1 entries — migrated to single-chunk files with a stale hash. */
-  entries?: Array<{ path: string; vec: number[] }>;
 }
 
 // tsc would downlevel a normal `import()` to require() (which can't load this ESM-only
@@ -194,25 +182,18 @@ export class EmbeddingIndex {
   public async build(root: string, docs: ReadonlyArray<{ path: string; text: string }>): Promise<number> {
     await this.ensureLoaded(root);
     const embed = await this.getEmbedder(true);
-    const next = new Map<string, FileEntry>();
-    let reused = 0;
-    for (const doc of docs) {
-      const hash = EmbeddingIndex.hash(doc.text);
-      const existing = this.files.get(doc.path);
-      if (existing && existing.hash === hash && existing.chunks.length > 0) {
-        next.set(doc.path, existing);
-        reused += 1;
-        continue;
-      }
+    const { reuse, embed: toEmbed } = planBuild(docs, this.files, EmbeddingIndex.hash);
+    const next = new Map<string, FileEntry>(reuse);
+    for (const doc of toEmbed) {
       const chunks = await this.embedFile(embed, doc.text);
       if (chunks.length > 0) {
-        next.set(doc.path, { hash, chunks });
+        next.set(doc.path, { hash: doc.hash, chunks });
       }
     }
     this.files = next;
     this.loadedRoot = root;
     await this.persist(root);
-    dbg('codebase', 'index built', { files: next.size, reused });
+    dbg('codebase', 'index built', { files: next.size, reused: reuse.length });
     return next.size;
   }
 
@@ -247,8 +228,7 @@ export class EmbeddingIndex {
     try {
       const file = this.indexFile(root);
       await fsp.mkdir(path.dirname(file.fsPath), { recursive: true });
-      const payload: IndexFileFormat = { root, version: 2, files: Object.fromEntries(this.files) };
-      await fsp.writeFile(file.fsPath, JSON.stringify(payload), 'utf8');
+      await fsp.writeFile(file.fsPath, JSON.stringify(serializeIndex(root, this.files)), 'utf8');
     } catch (error) {
       this.logger.warn(`Could not persist codebase index: ${error instanceof Error ? error.message : 'error'}`);
     }
@@ -262,16 +242,7 @@ export class EmbeddingIndex {
     this.loadedRoot = root;
     try {
       const raw = await fsp.readFile(this.indexFile(root).fsPath, 'utf8');
-      const parsed = JSON.parse(raw) as IndexFileFormat;
-      if (parsed.files) {
-        this.files = new Map(Object.entries(parsed.files));
-      } else if (Array.isArray(parsed.entries)) {
-        // v1 migration: one whole-file vector becomes a single chunk with a stale
-        // hash, so the next build re-embeds it chunked but search works meanwhile.
-        for (const e of parsed.entries) {
-          this.files.set(e.path, { hash: '', chunks: [{ s: 1, vec: e.vec }] });
-        }
-      }
+      this.files = parseIndex(JSON.parse(raw) as IndexFileFormat);
     } catch {
       // No index on disk yet.
     }
@@ -286,36 +257,10 @@ export class EmbeddingIndex {
       }
       const embed = await this.getEmbedder(false);
       const [q] = await embed([query]);
-      const scored: Array<{ path: string; score: number }> = [];
-      for (const [p, entry] of this.files) {
-        let best = -Infinity;
-        for (const chunk of entry.chunks) {
-          const score = dot(q, chunk.vec);
-          if (score > best) {
-            best = score;
-          }
-        }
-        if (best > -Infinity) {
-          scored.push({ path: p, score: best });
-        }
-      }
-      return scored
-        .sort((a, b) => b.score - a.score)
-        .slice(0, topN)
-        .map((s) => s.path);
+      return rankByQuery(q, this.files, topN);
     } catch (error) {
       this.logger.warn(`Semantic codebase search failed: ${error instanceof Error ? error.message : 'error'}`);
       return undefined;
     }
   }
-}
-
-/** Dot product (vectors are L2-normalized, so this is cosine similarity). */
-function dot(a: number[], b: number[]): number {
-  let sum = 0;
-  const n = Math.min(a.length, b.length);
-  for (let i = 0; i < n; i += 1) {
-    sum += a[i] * b[i];
-  }
-  return sum;
 }

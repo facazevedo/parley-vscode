@@ -1,17 +1,13 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { formatRecentEdits, pushEdit, type RecentEdit } from './recentEditsCore';
 
 /**
  * Ring buffer of the user's most recent edit locations, fed into the ghost-text
  * completion prompt (Cursor-Tab-style context: what you just changed elsewhere
- * is a strong hint for what you're typing now).
+ * is a strong hint for what you're typing now). Ring/formatting live in the pure
+ * recentEditsCore; this file only wires the vscode events.
  */
-
-interface RecentEdit {
-  readonly file: string;
-  readonly line: number;
-  readonly text: string;
-}
 
 const MAX_EDITS = 5;
 const edits: RecentEdit[] = [];
@@ -34,25 +30,14 @@ export function activateRecentEdits(context: vscode.ExtensionContext): void {
         return;
       }
       const file = path.basename(e.document.uri.fsPath);
-      // Coalesce consecutive edits on the same file+line (typing produces many events).
-      const last = edits[edits.length - 1];
-      if (last && last.file === file && last.line === line) {
-        edits[edits.length - 1] = { file, line, text: text.slice(0, 160) };
-        return;
-      }
-      edits.push({ file, line, text: text.slice(0, 160) });
-      if (edits.length > MAX_EDITS) {
-        edits.splice(0, edits.length - MAX_EDITS);
-      }
+      pushEdit(edits, { file, line, text: text.slice(0, 160) }, MAX_EDITS);
     })
   );
 }
 
 /** Recent edit lines outside `excludeFsPath` (the file being completed), oldest first. */
 export function recentEditsSummary(excludeFsPath: string): string | undefined {
-  const exclude = path.basename(excludeFsPath);
-  const rows = edits.filter((e) => e.file !== exclude).map((e) => `${e.file}:${e.line + 1}: ${e.text}`);
-  return rows.length > 0 ? rows.join('\n') : undefined;
+  return formatRecentEdits(edits, path.basename(excludeFsPath));
 }
 
 /** Basenames of files open in editor tabs (excluding the completed file), for cross-file hints. */
