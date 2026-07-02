@@ -124,6 +124,36 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('parley.rebuildCodebaseIndex', () => chatPanel.rebuildCodebaseIndex()),
     vscode.commands.registerCommand('parley.manageAllowedCommands', () => chatPanel.manageAllowedCommands()),
+    vscode.commands.registerCommand('parley.newConversationInTab', () => {
+      // A parallel conversation in an editor tab: its own ChatPanel instance with
+      // prefix-isolated memento state and its own checkpoint store. Transcripts
+      // land in the same .parley store, so the history picker sees them.
+      const panel = vscode.window.createWebviewPanel('parley.chatTab', 'Parley Chat', vscode.ViewColumn.Beside, {
+        retainContextWhenHidden: true
+      });
+      const prefix = `parley.tab.${Date.now()}.`;
+      const tabState = prefixedMemento(context.workspaceState, prefix);
+      const tabChat = new ChatPanel(
+        context.extensionUri,
+        () => provider,
+        () => settings,
+        logger,
+        commandDeps,
+        tabState,
+        new CheckpointStore(),
+        context.globalStorageUri,
+        mcp
+      );
+      tabChat.attachPanel(panel);
+      panel.onDidDispose(() => {
+        // Don't leave the tab's memento keys behind (its transcript stays in .parley).
+        for (const key of context.workspaceState.keys()) {
+          if (key.startsWith(prefix)) {
+            void context.workspaceState.update(key, undefined);
+          }
+        }
+      });
+    }),
     vscode.commands.registerCommand('parley.newConversation', () => chatPanel.newConversation()),
     vscode.commands.registerCommand('parley.openConversationsFolder', () => chatPanel.openConversationsFolder()),
     vscode.commands.registerCommand('parley.openDebugLog', async () => {
@@ -189,6 +219,16 @@ export function activate(context: vscode.ExtensionContext): void {
   registerRunDiagnosticsCommand(context, commandDeps);
   registerInitProjectRulesCommand(context);
   registerSignOutCommand(context, commandDeps);
+}
+
+/** A Memento view whose keys are namespaced, so tab conversations don't share sidebar state. */
+function prefixedMemento(base: vscode.Memento, prefix: string): vscode.Memento {
+  return {
+    keys: () => base.keys().filter((k) => k.startsWith(prefix)),
+    get: (<T>(key: string, defaultValue?: T): T | undefined =>
+      base.get<T>(prefix + key, defaultValue as T)) as vscode.Memento['get'],
+    update: (key: string, value: unknown) => base.update(prefix + key, value)
+  };
 }
 
 export function deactivate(): void {

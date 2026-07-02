@@ -25,6 +25,7 @@ import type { ParleyProvider } from '../parley/ParleyProvider';
 import { extractMentionPaths } from '../parley/parsing';
 import { AGENT_TOOLS, READ_ONLY_TOOLS, resolveAcrossRoots, runAgentTool, toolRelPath } from '../parley/tools';
 import { normalizeThinkingLevel, resolveThinking, type ThinkingLevel } from '../parley/thinking';
+import { decideTurnStep } from '../parley/turnPolicy';
 import { audioFormatFromExt, audioFormatFromMime, modelSupportsAudio } from '../parley/audio';
 import { clampMiddle } from '../parley/clampText';
 import { documentProviderFor } from '../parley/files';
@@ -157,7 +158,8 @@ interface SavedSession {
 export class ChatPanel implements vscode.WebviewViewProvider {
   public static readonly viewType = 'parley.chatView';
 
-  private view?: vscode.WebviewView;
+  // The hosting surface: the sidebar WebviewView, or an editor-tab WebviewPanel.
+  private view?: { readonly webview: vscode.Webview };
   private readonly history: ChatMessage[] = [];
   // Full ordered record of everything shown (messages, tool activity, diffs, plans, notes).
   // The canonical copy is the per-conversation .jsonl on disk; this mirrors it for rendering.
@@ -418,6 +420,27 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       void this.handleMessage(message);
     });
 
+    this.resolveReady();
+    void this.refreshAgents();
+    void this.refreshCustomCommands().then(() => this.postState());
+    void this.postState();
+  }
+
+  /** Host this chat instance in an editor-tab WebviewPanel (multi-conversation tabs). */
+  public attachPanel(panel: vscode.WebviewPanel): void {
+    this.view = panel;
+    panel.webview.options = {
+      enableScripts: true,
+      localResourceRoots: [this.extensionUri]
+    };
+    panel.webview.html = this.getHtml(panel.webview);
+    panel.webview.onDidReceiveMessage((message: ChatPanelMessage) => {
+      void this.handleMessage(message);
+    });
+    panel.onDidDispose(() => {
+      this.abortController?.abort();
+      void this.autosaveConversation();
+    });
     this.resolveReady();
     void this.refreshAgents();
     void this.refreshCustomCommands().then(() => this.postState());
@@ -1015,39 +1038,42 @@ export class ChatPanel implements vscode.WebviewViewProvider {
           }
         );
 
-        const rawContent = response.message.content;
-        const done = /<DONE>/i.test(rawContent);
-        let cleaned = rawContent.replace(/<DONE>/gi, '').trimEnd();
-        // Reasoning counts as progress: with extended thinking on, a step can be
-        // thinking-only — that is the model working, not a stall.
-        const thinkingLen = response.message.thinking?.trim().length ?? 0;
-        const madeProgress = cleaned.trim().length > 0 || stepActions.length > 0 || thinkingLen > 0;
+        // All loop policy (stall vs thinking-only, one-shot nudge, <DONE>, limits)
+        // lives in the pure, unit-tested decideTurnStep.
+        const decision = decideTurnStep({
+          content: response.message.content,
+          thinkingChars: response.message.thinking?.trim().length ?? 0,
+          toolActions: stepActions.length,
+          canAutoContinue,
+          nudged,
+          aborted: this.abortController.signal.aborted,
+          sessionTokens: this.sessionTokens,
+          tokenLimit: settings.tokenLimit,
+          autoSteps: auto,
+          maxAutoContinue: settings.maxAutoContinue
+        });
         dbg('turn', 'send complete', {
           auto,
-          contentChars: cleaned.length,
-          thinkingChars: thinkingLen,
-          toolActions: stepActions.length,
-          madeProgress,
-          done,
+          decision: decision.kind,
+          next: decision.kind === 'proceed' ? decision.next.kind : undefined,
           aborted: this.abortController.signal.aborted
         });
 
-        if (!madeProgress) {
-          // A truly empty step is often a transient hiccup, not completion — nudge once
-          // before giving up (the model keeps its tools; see the agent system prompt).
-          if (canAutoContinue && !nudged && !this.abortController.signal.aborted) {
-            nudged = true;
-            auto += 1;
-            continuation =
-              'Your previous reply was empty. Continue with the task — call a tool or reply with text. If it is already fully complete, reply with <DONE>.';
-            continue;
-          }
+        if (decision.kind === 'nudge') {
+          nudged = true;
+          auto += 1;
+          continuation = decision.continuation;
+          continue;
+        }
+        if (decision.kind === 'stall') {
           // Empty response with no tool actions: don't render a blank bubble or keep looping.
-          const note = canAutoContinue
-            ? '⏸ Stopped: the model returned an empty response and took no actions. Try rephrasing, switching models, or another mode.'
-            : '_(The model returned an empty response.)_';
-          this.history.push({ role: 'assistant', content: note, createdAt: new Date().toISOString(), model: agentId });
-          this.appendTranscript({ kind: 'note', text: note, at: new Date().toISOString() });
+          this.history.push({
+            role: 'assistant',
+            content: decision.note,
+            createdAt: new Date().toISOString(),
+            model: agentId
+          });
+          this.appendTranscript({ kind: 'note', text: decision.note, at: new Date().toISOString() });
           this.post({ type: 'streamEnd' });
           await this.postState();
           break;
@@ -1055,17 +1081,13 @@ export class ChatPanel implements vscode.WebviewViewProvider {
 
         // If the model worked through tools but didn't narrate, persist a summary of what it did
         // so the conversation and exports aren't blank (Claude-Code-style activity log).
-        const hadNarration = cleaned.trim().length > 0;
-        const thinkingOnly = !hadNarration && stepActions.length === 0 && thinkingLen > 0;
-        if (!cleaned.trim()) {
-          cleaned = stepActions.map((a) => `⏺ ${a}`).join('\n');
-        }
+        const cleaned = decision.cleaned.trim() ? decision.cleaned : stepActions.map((a) => `⏺ ${a}`).join('\n');
         this.history.push({ ...response.message, content: cleaned, model: agentId });
         // Record an assistant entry when there was real prose — or when the step was
         // thinking-only, so the streamed 💭 panel survives the post-turn re-render.
         // With tool actions and no narration, the tool/fileEdit entries already
         // represent this step in the transcript (no duplication).
-        if (hadNarration || thinkingOnly) {
+        if (decision.hadNarration || decision.thinkingOnly) {
           this.appendTranscript({
             kind: 'assistant',
             text: cleaned,
@@ -1086,26 +1108,17 @@ export class ChatPanel implements vscode.WebviewViewProvider {
           }
         }
 
-        if (!canAutoContinue || done || this.abortController.signal.aborted) {
+        if (decision.next.kind === 'stop') {
           break;
         }
-        if (settings.tokenLimit > 0 && this.sessionTokens >= settings.tokenLimit) {
-          const note = `⏸ Stopped — token limit reached (${this.sessionTokens.toLocaleString()} / ${settings.tokenLimit.toLocaleString()}). Raise "parley.tokenLimit" or start a new conversation.`;
-          this.history.push({ role: 'assistant', content: note, createdAt: new Date().toISOString() });
-          this.appendTranscript({ kind: 'note', text: note, at: new Date().toISOString() });
-          await this.postState();
-          break;
-        }
-        if (auto >= settings.maxAutoContinue) {
-          // Don't stop silently — tell the user why and how to resume.
-          const note = `⏸ Paused after ${settings.maxAutoContinue} automatic steps to avoid runaway usage. Type "continue" to keep going.`;
-          this.history.push({ role: 'assistant', content: note, createdAt: new Date().toISOString() });
-          this.appendTranscript({ kind: 'note', text: note, at: new Date().toISOString() });
+        if (decision.next.kind === 'stop-token-limit' || decision.next.kind === 'stop-max-auto') {
+          this.history.push({ role: 'assistant', content: decision.next.note, createdAt: new Date().toISOString() });
+          this.appendTranscript({ kind: 'note', text: decision.next.note, at: new Date().toISOString() });
           await this.postState();
           break;
         }
         auto += 1;
-        continuation = 'Continue. If the task is already fully complete, reply with <DONE>.';
+        continuation = decision.next.continuation;
       }
 
       const changed = this.checkpoints.changedSince(cpStart);

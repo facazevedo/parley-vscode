@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.51.0
+
+### Added — parallel conversations in editor tabs
+- **`Parley: New Conversation in Tab`** opens an independent conversation as an editor tab beside your code: its own history, mode, model, steering queue, and checkpoint stack (prefix-isolated state; keys are cleaned up when the tab closes). Transcripts save into the same `.parley` store, so tab conversations appear in the 🕘 history picker. The sidebar remains the "main" chat: palette commands like Regenerate/Export/Compact and `Revert Last/All` target it.
+
+### Internal — agent-loop policy extracted and unit-tested
+- The auto-continue loop's decision logic (stall vs thinking-only, the one-shot empty-reply nudge, `<DONE>`, token/step limits, done-beats-limits ordering) moved to pure `src/parley/turnPolicy.ts` with **10 dedicated tests** — the loop scenarios from the original review plan are now covered without launching VS Code (124 tests total). The chat panel just renders what the policy decides; behavior is unchanged.
+
 ## 0.50.0
 
 ### Added — multi-root workspace support (agent layer)

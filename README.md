@@ -495,6 +495,7 @@ frontmatter‑less (or `alwaysApply: true`) rules always apply.
 | --- | --- |
 | `Parley: Set API Key` | Store/verify your `sk-parley-…` key in SecretStorage |
 | `Parley: Open Chat Window` | Focus the Parley chat view |
+| `Parley: New Conversation in Tab` | Open a parallel, independent conversation as an editor tab |
 | `Parley: New Conversation` | Save the current chat and start a fresh one |
 | `Parley: Open Past Conversation` | Reopen an archived conversation |
 | `Parley: Open Conversations Folder` | Reveal the auto‑saved transcripts |
