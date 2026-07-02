@@ -57,7 +57,7 @@ import hljs from 'highlight.js/lib/common';
   function renderSessionTokens(n) {
     const parts = [];
     if (n > 0) {
-      parts.push(Number(n).toLocaleString() + ' tok');
+      parts.push(Number(n).toLocaleString() + ' tokens');
     }
     if (sessionCostUsd > 0) {
       parts.push('~' + fmtUsd(sessionCostUsd));
