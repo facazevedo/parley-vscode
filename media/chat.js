@@ -188,6 +188,10 @@ import hljs from 'highlight.js/lib/common';
         return 'Typing into ' + (a.selector || '');
       case 'browser_screenshot':
         return 'Screenshotting page';
+      case 'run_subagent':
+        return 'Subagent: ' + (a.task || '').slice(0, 70);
+      case 'subagent_step':
+        return '↳ ' + (a.action || '');
       default:
         return name + ' ' + (argsStr || '').slice(0, 60);
     }

@@ -15,7 +15,8 @@ const TOOL_RESULT_BUDGETS: Record<string, number> = {
   run_command: 16000, // build/test output — the failure is usually at the tail
   fetch_url: 13000, // self-caps at 12k
   search_text: 12000,
-  grep: 12000
+  grep: 12000,
+  run_subagent: 20000 // a distilled report is the whole point — give it room
 };
 
 const DEFAULT_TOOL_RESULT_BUDGET = 8000;

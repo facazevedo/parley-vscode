@@ -245,6 +245,19 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       getSettings: this.getSettings,
       getMode: () => this.mode,
       getAbortSignal: () => this.turns.abortSignal,
+      getSubagentParams: () => ({
+        provider: this.getProvider(),
+        agentId: this.selectedAgentId || this.getSettings().defaultAgent,
+        thinking: this.selectedThinking,
+        speed: this.selectedSpeed
+      }),
+      applyUsage: (tokens, cost) => {
+        this.sessionTokens += tokens;
+        if (cost) {
+          this.sessionCost += cost;
+        }
+        return { sessionTokens: this.sessionTokens, sessionCostUsd: this.sessionCost };
+      },
       post: (m) => this.post(m)
     });
     this.turns = new AgentTurnRunner({
@@ -1054,7 +1067,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     let modeNote: string | undefined;
     if (this.mode === 'plan') {
       modeNote =
-        'You are in PLAN mode. Do NOT edit files or run commands. Use the read-only tools to explore the codebase, then present a concise, numbered plan of the changes you would make.';
+        'You are in PLAN mode. Do NOT edit files or run commands. Use the read-only tools to explore the codebase, then present a concise, numbered plan of the changes you would make. For broad reconnaissance (mapping a subsystem, surveying many files), delegate to run_subagent with a self-contained brief — it investigates in a fresh context and returns only its report, keeping this conversation lean.';
     } else if (this.mode !== 'chat') {
       const fullAccess = this.mode === 'full';
       modeNote =
@@ -1068,6 +1081,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         '\n\n' +
         'If a command is terminated for exceeding its timeout, that is recoverable: re-run it, split it into smaller steps, or proceed — do not give up.\n\n' +
         'For any task with more than a couple of steps, call the `update_plan` tool first with the high-level steps, then update it (one step `in_progress` at a time, mark steps `done` as you finish) so the user can follow your progress.\n\n' +
+        'When a task needs broad read-only reconnaissance first — mapping how a subsystem works, finding every usage of a pattern across many files, comparing several implementations — delegate that investigation to `run_subagent` with a SELF-CONTAINED brief (it cannot see this conversation) instead of flooding your own context with dozens of reads; then act on its report.\n\n' +
         'IMPORTANT — always communicate in plain text as you work: before each tool call, write a short sentence saying what you are about to do and why; after finishing a logical chunk, summarize what changed. Do NOT paste raw reasoning notes-to-self (fragments like "Need to…", "Use python? read __all__.") into your reply — write clear sentences for the user. NEVER reply with only tool calls and no text, and never return an empty message.\n\n' +
         'When the entire task is genuinely finished, your final message MUST end with a summary section formatted EXACTLY like this:\n' +
         '**SUMMARY**\n' +

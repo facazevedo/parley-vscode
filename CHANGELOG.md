@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.57.0
+
+### Added — local subagents (`run_subagent`)
+- The agent can now **delegate scoped read-only investigations to a subagent**: a nested agent loop with a **fresh context** that cannot see the parent conversation, explores with the read-only tools, and returns **only its final report**. Broad reconnaissance (mapping a subsystem, finding every usage of a pattern) no longer floods the main conversation with dozens of tool results — just the distilled report enters it.
+  - Runs through the same production loop as the parent (retries, tool-call reassembly, honest clamping); the report gets a generous 20k-char budget.
+  - **Depth 1 only** (a subagent cannot spawn subagents) and no `update_plan` (the checklist belongs to the parent). One bounded shot: max 15 tool rounds, no auto-continue.
+  - **Hooks apply to nested calls too** — each subagent tool call routes through the same PreToolUse/PostToolUse pipeline as parent calls, so a hook that blocks reading secrets blocks subagents equally.
+  - Live progress: the chat shows `⏺ Subagent: <task>` plus indented `↳ reading src/foo.ts` steps as it works; Stop aborts the nested loop with the turn; subagent tokens/cost count toward the session totals.
+  - Available in Plan mode as well (it is genuinely read-only); the plan/agent system prompts nudge the model to delegate broad reconnaissance.
+- Honest scope note: these are **local** subagents in your VS Code window. Background/cloud agents (Claude Code's remote sessions, Cursor's background agents) need server infrastructure the Parley gateway doesn't provide and remain out of scope.
+
 ## 0.56.0
 
 ### Added — local browser control (`@browser` + `browser_*` tools)

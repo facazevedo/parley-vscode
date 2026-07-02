@@ -312,6 +312,25 @@ export const AGENT_TOOLS: readonly ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'run_subagent',
+      description:
+        'Delegate a scoped READ-ONLY investigation to a subagent: a nested agent with a FRESH context that cannot see this conversation. It explores with the read-only tools (read/search/grep/symbols/fetch) and returns only its final report, keeping this conversation lean. Use it for broad reconnaissance — mapping how a subsystem works, finding every place that does X, comparing several files — especially when the intermediate reading would flood your context. The task must be SELF-CONTAINED: include all relevant paths, names, and background, and say exactly what the report should answer. Subagents cannot edit files, run commands, or spawn further subagents.',
+      parameters: {
+        type: 'object',
+        properties: {
+          task: {
+            type: 'string',
+            description:
+              'The complete, self-contained investigation brief: background, where to look, and what the report must answer.'
+          }
+        },
+        required: ['task']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'update_plan',
       description:
         'Maintain a short checklist of the high-level steps for the current task (3-8 items). Call it when you begin a multi-step task and again whenever a step changes status, so the user can follow along. Exactly one step should be "in_progress" at a time.',
@@ -354,6 +373,14 @@ const WRITE_TOOLS = new Set([
 /** The subset of tools that never modify the workspace — used by Plan mode. */
 export const READ_ONLY_TOOLS: readonly ToolDefinition[] = AGENT_TOOLS.filter(
   (tool) => !WRITE_TOOLS.has(tool.function.name)
+);
+
+/**
+ * What a subagent may call: the read-only set minus run_subagent (depth 1 only —
+ * no recursive spawning) and update_plan (the plan checklist belongs to the parent).
+ */
+export const SUBAGENT_TOOLS: readonly ToolDefinition[] = READ_ONLY_TOOLS.filter(
+  (tool) => tool.function.name !== 'run_subagent' && tool.function.name !== 'update_plan'
 );
 
 const MAX_FETCH_CHARS = 12000;

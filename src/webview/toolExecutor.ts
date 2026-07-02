@@ -14,9 +14,13 @@ import { dbg } from '../debug/debug';
 import type { BrowserManager } from '../browser/browserManager';
 import { runHookEvent } from '../hooks/hooks';
 import type { McpManager } from '../mcp/McpManager';
+import { runSubagentTask } from '../agents/subagent';
 import { clampMiddle } from '../parley/clampText';
 import { isMcpTool } from '../mcp/naming';
-import { resolveAcrossRoots, runAgentTool } from '../parley/tools';
+import type { ParleyProvider } from '../parley/ParleyProvider';
+import { estimateCostUsd } from '../parley/pricing';
+import { resolveThinking, type ThinkingLevel } from '../parley/thinking';
+import { SUBAGENT_TOOLS, resolveAcrossRoots, runAgentTool } from '../parley/tools';
 import type { ToolCall } from '../parley/types';
 import { webSearch } from '../web/webSearch';
 import type { TranscriptRecorder } from './transcriptRecorder';
@@ -32,6 +36,15 @@ export interface ToolExecutorHost {
   getSettings(): ParleySettings;
   getMode(): ChatMode;
   getAbortSignal(): AbortSignal | undefined;
+  /** Provider + current model/thinking/speed selection, for nested subagent loops. */
+  getSubagentParams(): {
+    provider: ParleyProvider;
+    agentId: string;
+    thinking: ThinkingLevel;
+    speed: 'standard' | 'fast';
+  };
+  /** Add nested-loop usage to the session counters (same sink as the turn runner's). */
+  applyUsage(totalTokens: number, costUsd: number): { sessionTokens: number; sessionCostUsd: number };
   post(message: Record<string, unknown>): void;
 }
 
@@ -128,7 +141,48 @@ export class ToolExecutor {
     if (call.name.startsWith('browser_')) {
       return this.toolBrowser(call);
     }
+    if (call.name === 'run_subagent') {
+      return this.toolSubagent(call);
+    }
     return runAgentTool(call);
+  }
+
+  /**
+   * Nested read-only investigation with a fresh context. Nested tool calls are
+   * whitelisted to SUBAGENT_TOOLS and routed back through run(), so PreToolUse/
+   * PostToolUse hooks and read tracking apply to subagent activity too.
+   */
+  private async toolSubagent(call: ToolCall): Promise<string> {
+    let task = '';
+    try {
+      task = String((JSON.parse(call.arguments || '{}') as { task?: unknown }).task ?? '').trim();
+    } catch {
+      return 'Error: arguments were not valid JSON.';
+    }
+    const p = this.host.getSubagentParams();
+    const allowed = new Set(SUBAGENT_TOOLS.map((t) => t.function.name));
+    dbg('subagent', `start: ${task.slice(0, 120)}`);
+    const report = await runSubagentTask({
+      task,
+      provider: p.provider,
+      agentId: p.agentId,
+      thinking: resolveThinking(p.thinking),
+      speed: p.speed,
+      tools: SUBAGENT_TOOLS,
+      runTool: (nested) =>
+        allowed.has(nested.name)
+          ? this.run(nested)
+          : Promise.resolve(`Error: ${nested.name} is not available to subagents (read-only tools only).`),
+      signal: this.host.getAbortSignal(),
+      onStep: (action) =>
+        this.host.post({ type: 'toolEvent', name: 'subagent_step', args: JSON.stringify({ action }) }),
+      onUsage: (usage) => {
+        // Subagent tokens/cost hit the same session counters as the parent loop.
+        this.host.applyUsage(usage.total, estimateCostUsd(p.agentId, usage) ?? 0);
+      }
+    });
+    dbg('subagent', `done: ${report.length} chars`);
+    return report;
   }
 
   /** Route a browser_* call to the shared BrowserManager (local Playwright). */

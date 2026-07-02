@@ -157,6 +157,7 @@ In any tool mode the model runs an OpenAI tool‑calling loop. Built‑in tools:
 | `fetch_url` | Fetch a public `https://` page as text (raw HTML, no JS) |
 | `browser_*` | Drive a local Chromium: `navigate`/`read`/`console`/`click`/`type`/`screenshot` (runs JS; installs on first use) |
 | `web_search` | Search the web (see [Web search](#web-search)) |
+| `run_subagent` | Delegate a scoped read-only investigation to a subagent (fresh context; returns only its report) |
 | `update_plan` | Maintain the live task checklist |
 | `mcp__<server>__<tool>` | Any tools from your configured [MCP servers](#mcp-servers) |
 

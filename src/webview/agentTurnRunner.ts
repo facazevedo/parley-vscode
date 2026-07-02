@@ -340,6 +340,8 @@ function describeToolEvent(name: string, argsJson: string): string {
     symbol?: string;
     selector?: string;
     command?: string;
+    task?: string;
+    action?: string;
     url?: string;
   } = {};
   try {
@@ -386,6 +388,10 @@ function describeToolEvent(name: string, argsJson: string): string {
       return `Type into ${a.selector ?? ''}`.trim();
     case 'browser_screenshot':
       return 'Screenshot page';
+    case 'run_subagent':
+      return `Subagent: ${(a.task ?? '').slice(0, 70)}`.trim();
+    case 'subagent_step':
+      return `↳ ${a.action ?? ''}`.trim();
     default:
       return name;
   }
@@ -418,6 +424,8 @@ function summarizeToolResult(name: string, result: string): string {
     case 'browser_read':
     case 'browser_console':
       return /^\[?(no|error)/i.test(firstLine) ? clip(firstLine) : `${result.length.toLocaleString()} chars`;
+    case 'run_subagent':
+      return /^error/i.test(firstLine) ? clip(firstLine) : `report: ${result.length.toLocaleString()} chars`;
     default:
       return clip(firstLine);
   }
