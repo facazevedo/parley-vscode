@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.65.0
+
+### Added — outbound secret scanning
+
+- Parley now scans content **leaving the machine** for embedded credentials and, by default, **redacts** them before they reach the gateway — covering both **attached context** and **tool results** (a file the agent read, command output). This complements the sensitive-_file_ denylist, which only blocks whole files.
+  - Detects high-confidence, distinctive-prefix patterns (curated from gitleaks): AWS `AKIA…`, GitHub `ghp_…`/`github_pat_…`, OpenAI/Parley `sk-…`, Anthropic `sk-ant-…`, Slack, Stripe `sk_live_…`, Google `AIza…`, npm tokens, and PEM `PRIVATE KEY` blocks. Prefix-anchored only — no generic entropy heuristics — so false positives are rare.
+  - Each hit is replaced with a `«redacted:<type>»` marker and a short notice says what was redacted; a chat note appears when attached context is scrubbed.
+  - **Setting `parley.secretScanning`**: `redact` (default), `warn` (notify but send as-is), or `off`.
+- Pure, unit-tested detector/redactor in `src/context/secretScanner.ts` (+ an executor test that a secret in a read file is redacted); 200 tests total.
+
 ## 0.64.0
 
 ### Internal — tests for the code that can lose your work (no behavior change)

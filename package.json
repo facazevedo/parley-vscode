@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.64.0",
+  "version": "0.65.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -296,6 +296,21 @@
             "Teach as you go; invite the user to try small pieces"
           ],
           "markdownDescription": "Communication **output style** prepended to the system prompt. Switch quickly with **`Parley: Select Output Style`**. Custom styles can be added as `.parley/output-styles/*.md` (filename = id, body = instruction)."
+        },
+        "parley.secretScanning": {
+          "type": "string",
+          "default": "redact",
+          "enum": [
+            "redact",
+            "warn",
+            "off"
+          ],
+          "enumDescriptions": [
+            "Replace detected credentials with a marker before sending (recommended)",
+            "Leave content unchanged but note what was detected",
+            "Do not scan outbound content"
+          ],
+          "markdownDescription": "Scan **outbound** context and tool results (a file the agent read, command output) for credential patterns (AWS/GitHub/OpenAI/Anthropic/Slack/Stripe/Google keys, PEM blocks) before they reach the gateway. Complements the sensitive-file denylist. High-confidence prefixes only, so false positives are rare."
         },
         "parley.autoContinue": {
           "type": "boolean",

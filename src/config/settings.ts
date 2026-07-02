@@ -29,6 +29,8 @@ export interface ParleySettings {
   readonly defaultMode: ChatMode;
   /** Output-style id prepended to the system prompt (built-in or custom); '' / 'default' = none. */
   readonly outputStyle: string;
+  /** Scan outbound context + tool results for secrets: redact (default), warn, or off. */
+  readonly secretScanning: 'redact' | 'warn' | 'off';
   readonly autoContinue: boolean;
   readonly maxToolRounds: number;
   readonly maxAutoContinue: number;
@@ -75,6 +77,7 @@ export function getSettings(): ParleySettings {
     thinking: normalizeThinkingLevel(config.get<string>('thinking', 'off')),
     defaultMode: normalizeMode(config.get<string>('defaultMode', 'chat')),
     outputStyle: config.get<string>('outputStyle', 'default').trim() || 'default',
+    secretScanning: normalizeSecretScanning(config.get<string>('secretScanning', 'redact')),
     autoContinue: config.get<boolean>('autoContinue', true),
     maxToolRounds: clampInt(config.get<number>('maxToolRounds', 50), 1, 400),
     maxAutoContinue: clampInt(config.get<number>('maxAutoContinue', 25), 0, 200),
@@ -110,6 +113,10 @@ export function getSettings(): ParleySettings {
 
 function normalizeWebSearchProvider(value: string): WebSearchProvider {
   return value === 'off' || value === 'google' || value === 'tavily' ? value : 'duckduckgo';
+}
+
+function normalizeSecretScanning(value: string): 'redact' | 'warn' | 'off' {
+  return value === 'warn' || value === 'off' ? value : 'redact';
 }
 
 function clampInt(value: number, min: number, max: number): number {

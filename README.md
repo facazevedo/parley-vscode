@@ -514,6 +514,12 @@ frontmatter‑less (or `alwaysApply: true`) rules always apply.
   (`*.pem`/`*.key`/`*.p12`/`*.pfx`), `secrets.*`, `id_rsa`/`id_ed25519`, `known_hosts`,
   `credentials`, and anything under `.ssh`/`.aws`/`.azure`/`.gnupg`. Hidden files are
   excluded by default. The same filter guards agent file reads.
+- **Outbound secret scanning** (`parley.secretScanning`, default **redact**) catches
+  credentials embedded _inside_ otherwise-ordinary content — a file the agent read, or
+  command output — before it reaches the gateway. It matches high-confidence prefixes
+  (AWS `AKIA…`, GitHub `ghp_…`, OpenAI/Parley `sk-…`, Anthropic `sk-ant-…`, Slack, Stripe,
+  Google, npm tokens, PEM private-key blocks) and replaces each with a marker, noting what
+  was redacted. Set it to `warn` (notify but send as-is) or `off`.
 - **`.parleyignore`** is honored; `.gitignore` optionally (`parley.context.respectGitignore`).
 - **Edits never apply silently** outside auto modes — they're diff‑reviewed and
   checkpointed; **Full access** is the only mode that runs commands without asking.
@@ -601,6 +607,7 @@ frontmatter‑less (or `alwaysApply: true`) rules always apply.
 | `parley.context.includeDiagnostics`       | `true`                          | Include diagnostics on request                                           |
 | `parley.context.respectGitignore`         | `true`                          | Respect `.gitignore` for context                                         |
 | `parley.confirmBeforeSendingLargeContext` | `true`                          | Preview/confirm large context                                            |
+| `parley.secretScanning`                   | `redact`                        | Scan outbound context + tool results for secrets: `redact`/`warn`/`off`  |
 | `parley.telemetry.enabled`                | `false`                         | No telemetry is emitted                                                  |
 | `parley.logLevel`                         | `info`                          | `error`/`warn`/`info`/`debug`                                            |
 

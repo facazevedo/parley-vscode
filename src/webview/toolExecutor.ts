@@ -18,6 +18,7 @@ import type { McpManager } from '../mcp/McpManager';
 import { runSubagentTask } from '../agents/subagent';
 import { clampMiddle } from '../parley/clampText';
 import { isCommandAllowed, isSimpleCommand } from '../parley/commandSafety';
+import { redactSecrets, summarizeFindings } from '../context/secretScanner';
 import { isMcpTool } from '../mcp/naming';
 import type { ParleyProvider } from '../parley/ParleyProvider';
 import { estimateCostUsd } from '../parley/pricing';
@@ -106,7 +107,9 @@ export class ToolExecutor {
     if (pre.blocked) {
       return `Error: blocked by a PreToolUse hook${pre.feedback ? ` — ${pre.feedback}` : ''}. Adjust your approach accordingly.`;
     }
-    const result = await this.dispatch(call);
+    // Scan tool output (e.g. a file the agent read, or command output) for credentials
+    // before it reaches the model/gateway — see the setting parley.secretScanning.
+    const result = this.applySecretPolicy(await this.dispatch(call));
     const post = await runHookEvent(
       hooks,
       'PostToolUse',
@@ -114,6 +117,24 @@ export class ToolExecutor {
       { cwd, log: (m) => dbg('hooks', m) }
     );
     return post.feedback ? `${result}\n\n[PostToolUse hook feedback — address this]\n${post.feedback}` : result;
+  }
+
+  /** Redact (or warn about) secrets in a tool result per the parley.secretScanning setting. */
+  private applySecretPolicy(text: string): string {
+    const mode = this.host.getSettings().secretScanning;
+    if (mode === 'off') {
+      return text;
+    }
+    const { text: redacted, findings } = redactSecrets(text);
+    if (findings.length === 0) {
+      return text;
+    }
+    const summary = summarizeFindings(findings);
+    dbg('secret', `${mode} in tool result: ${summary}`);
+    if (mode === 'warn') {
+      return `${text}\n\n[Parley: ${summary} detected in this output and sent as-is (secretScanning=warn).]`;
+    }
+    return `${redacted}\n\n[Parley redacted ${summary} from this output before sending.]`;
   }
 
   private async dispatch(call: ToolCall): Promise<string> {

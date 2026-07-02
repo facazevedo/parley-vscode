@@ -32,6 +32,7 @@ async function setup(mode = 'edit') {
   const posts: any[] = [];
   const recorder = makeRecorder();
   let curMode = mode;
+  let secretScanning = 'redact';
   let abort: AbortSignal | undefined;
   const host: any = {
     checkpoints: store,
@@ -40,7 +41,7 @@ async function setup(mode = 'edit') {
     state: makeMemento(),
     recorder,
     diffProvider: { set: () => {} },
-    getSettings: () => ({ hooks: {} }),
+    getSettings: () => ({ hooks: {}, secretScanning }),
     getMode: () => curMode,
     getAbortSignal: () => abort,
     getSubagentParams: () => ({}),
@@ -56,6 +57,9 @@ async function setup(mode = 'edit') {
     recorder,
     setMode: (m: string) => {
       curMode = m;
+    },
+    setSecretScanning: (m: string) => {
+      secretScanning = m;
     },
     setAbort: (s?: AbortSignal) => {
       abort = s;
@@ -150,6 +154,22 @@ test('write_file refuses to clobber an unseen existing file, then succeeds on re
   const second = await exec.run(call('write_file', { path: 's.txt', content: 'replacement' }));
   assert.match(second, /Applied edit to s\.txt/);
   assert.equal(await read(file), 'replacement\n');
+});
+
+test('tool results are scanned: a secret in a read file is redacted before returning', async () => {
+  const { root, exec, setSecretScanning } = await setup('edit');
+  const file = path.join(root, 'conf.txt');
+  const secret = 'AKIA' + 'ABCDEFGHIJKLMNOP';
+  await fsp.writeFile(file, `aws_key = ${secret}\n`);
+
+  const redacted = await exec.run(call('read_file', { path: 'conf.txt' }));
+  assert.ok(!redacted.includes(secret), 'the secret does not survive in the tool result');
+  assert.match(redacted, /redacted .*AWS access key/i);
+
+  // With scanning off, the raw value flows through.
+  setSecretScanning('off');
+  const raw = await exec.run(call('read_file', { path: 'conf.txt' }));
+  assert.ok(raw.includes(secret), 'secretScanning=off leaves the value intact');
 });
 
 test('read_file records the file as touched; resetConversationState clears state', async () => {
