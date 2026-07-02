@@ -77,7 +77,7 @@ not hot‑swap an extension; the reload is required after every (re)install.
 ## Quick start
 
 1. Create an API key in the **Parley Admin Portal** (Production:
-   `https://parley-admin.atlas-apps.mit.edu` → *My Account*) or get one from your
+   `https://parley-admin.atlas-apps.mit.edu` → _My Account_) or get one from your
    IS&T admin.
 2. In VS Code, run **`Parley: Set API Key`** (Command Palette) and paste it. The key
    is stored in VS Code **SecretStorage** — never in settings, files, or logs — and
@@ -100,6 +100,7 @@ unknown for a model), and buttons: **＋** new conversation, **🕘**
 past conversations, **⊟** compact, **⤓** export, **↻** refresh model list.
 
 **Composer (bottom):**
+
 - A **Context** disclosure with checkboxes (Selection, File, Open editors,
   Diagnostics, Pick files) controlling what's attached to commands.
 - The **prompt box**. `Enter` sends, `Shift+Enter` is a newline. Type **`@`** for
@@ -120,14 +121,14 @@ latest. Replies render as full Markdown with **syntax-highlighted code blocks**
 
 Open the **`Mode ▾`** popover (or set `parley.defaultMode`):
 
-| Mode | Behavior |
-| --- | --- |
-| **Chat** | Answer only; no file tools (default). |
-| **Ask before edits** | Agent proposes edits; approve each on an in‑chat card (Apply / Choose hunks… / Reject) with the full diff opened beside. |
-| **Edit automatically** | Agent applies edits without asking (checkpointed/revertible). |
-| **Plan** | Agent explores **read‑only** and presents a plan, which then **opens as an editable markdown doc** — edit it, then click **Build**: your edited version is what gets implemented. |
-| **Auto** | Agent decides and applies edits automatically. |
-| **Full access** ⚠ | **CAUTION** — auto‑applies edits **and runs shell commands without asking**. |
+| Mode                   | Behavior                                                                                                                                                                          |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Chat**               | Answer only; no file tools (default).                                                                                                                                             |
+| **Ask before edits**   | Agent proposes edits; approve each on an in‑chat card (Apply / Choose hunks… / Reject) with the full diff opened beside.                                                          |
+| **Edit automatically** | Agent applies edits without asking (checkpointed/revertible).                                                                                                                     |
+| **Plan**               | Agent explores **read‑only** and presents a plan, which then **opens as an editable markdown doc** — edit it, then click **Build**: your edited version is what gets implemented. |
+| **Auto**               | Agent decides and applies edits automatically.                                                                                                                                    |
+| **Full access** ⚠      | **CAUTION** — auto‑applies edits **and runs shell commands without asking**.                                                                                                      |
 
 Shell commands require confirmation in **every mode except Full access**. Edits are
 always checkpointed (`Parley: Revert Last Edit` / `Revert All Edits`).
@@ -144,22 +145,22 @@ stops cleanly instead of looping.
 
 In any tool mode the model runs an OpenAI tool‑calling loop. Built‑in tools:
 
-| Tool | What it does |
-| --- | --- |
-| `read_file` | Read a file (optional `start_line`/`end_line` for big files) |
-| `list_directory`, `find_files` | Explore the tree / glob for files |
-| `grep` | **Regex** search of file contents (VS Code's bundled ripgrep; case flag, context lines, glob filter) |
-| `search_text` | Simple substring search of file **contents** |
-| `find_symbol`, `document_symbols`, `find_references` | **Language-server** navigation: where is X defined, a file's outline, all usages of a symbol |
-| `edit_file` | Precise find‑and‑replace edit (reviewed/checkpointed) |
-| `write_file` | Create/overwrite a file (reviewed/checkpointed) |
-| `run_command` | Run a shell command (confirmation required except Full access) |
-| `fetch_url` | Fetch a public `https://` page as text (raw HTML, no JS) |
-| `browser_*` | Drive a local Chromium: `navigate`/`read`/`console`/`click`/`type`/`screenshot` (runs JS; installs on first use) |
-| `web_search` | Search the web (see [Web search](#web-search)) |
-| `run_subagent` | Delegate a scoped read-only investigation to a subagent (fresh context; returns only its report) |
-| `update_plan` | Maintain the live task checklist |
-| `mcp__<server>__<tool>` | Any tools from your configured [MCP servers](#mcp-servers) |
+| Tool                                                 | What it does                                                                                                     |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `read_file`                                          | Read a file (optional `start_line`/`end_line` for big files)                                                     |
+| `list_directory`, `find_files`                       | Explore the tree / glob for files                                                                                |
+| `grep`                                               | **Regex** search of file contents (VS Code's bundled ripgrep; case flag, context lines, glob filter)             |
+| `search_text`                                        | Simple substring search of file **contents**                                                                     |
+| `find_symbol`, `document_symbols`, `find_references` | **Language-server** navigation: where is X defined, a file's outline, all usages of a symbol                     |
+| `edit_file`                                          | Precise find‑and‑replace edit (reviewed/checkpointed)                                                            |
+| `write_file`                                         | Create/overwrite a file (reviewed/checkpointed)                                                                  |
+| `run_command`                                        | Run a shell command (confirmation required except Full access)                                                   |
+| `fetch_url`                                          | Fetch a public `https://` page as text (raw HTML, no JS)                                                         |
+| `browser_*`                                          | Drive a local Chromium: `navigate`/`read`/`console`/`click`/`type`/`screenshot` (runs JS; installs on first use) |
+| `web_search`                                         | Search the web (see [Web search](#web-search))                                                                   |
+| `run_subagent`                                       | Delegate a scoped read-only investigation to a subagent (fresh context; returns only its report)                 |
+| `update_plan`                                        | Maintain the live task checklist                                                                                 |
+| `mcp__<server>__<tool>`                              | Any tools from your configured [MCP servers](#mcp-servers)                                                       |
 
 **Activity output (Claude‑Code style).** As the agent works you see an **`⏺ action`**
 line followed by a muted **`⎿ result`** line — e.g. `⏺ Reading App.tsx` → `⎿ Read
@@ -180,7 +181,7 @@ an **Apply** (or **Create file**) and **Dismiss** button — click **Apply** to 
 flow; the heavier agent modes apply through tools instead.
 
 After a turn, a **"✏️ Changed N files"** summary lists what was edited. **Stop**
-aborts in‑flight work *and kills a running command*.
+aborts in‑flight work _and kills a running command_.
 
 **Resilience.** Transient failures — rate limits (429), upstream/server errors (5xx),
 network blips, mid‑stream errors — are **retried automatically** (up to 3 times, with
@@ -192,7 +193,7 @@ marker, so the model sees the end of a command's output (where the error lives) 
 knows exactly what was cut.
 
 **Self‑correction.** After each applied edit, Parley reads the editor's **live
-diagnostics** and reports any *new* errors/warnings back to the agent (`⚠ This edit
+diagnostics** and reports any _new_ errors/warnings back to the agent (`⚠ This edit
 introduced 2 new problem(s)…`), so it fixes its own breakage before declaring victory.
 A failed `edit_file` match returns the **closest real region of the file** (numbered
 lines + similarity) so the model repairs its snippet in one round; matching itself is
@@ -202,7 +203,10 @@ change you made mid‑conversation can never be silently clobbered.
 
 **Command allowlist.** On the run‑command confirmation, **Always Allow** stores the
 command as a workspace prefix rule (`npm test` also approves `npm test -- --grep foo`);
-matching commands then run without asking. Review rules with
+matching commands then run without asking. A compound command is checked **per
+segment** — `npm test && rm -rf /` is _not_ auto‑approved just because `npm test` is
+allowed — and any command using substitution (`$(…)`, backticks, `<(…)`) always
+prompts and can never be stored as a rule. Review rules with
 **`Parley: Manage Allowed Commands`**.
 
 **Steering.** The composer stays live while the agent works: send a message mid‑task
@@ -224,10 +228,10 @@ reloads** and works in reopened conversations.
 Open **`Mode ▾`** → **Extended thinking** and **Speed**. These behave differently
 per provider — verified live against the gateway:
 
-| Control | Claude (Bedrock) | Google / Gemini | OpenAI / GPT‑5.x |
-| --- | --- | --- | --- |
+| Control                                           | Claude (Bedrock)          | Google / Gemini   | OpenAI / GPT‑5.x                                |
+| ------------------------------------------------- | ------------------------- | ----------------- | ----------------------------------------------- |
 | **Extended thinking** (Off/Adaptive/Low/Med/High) | ✅ works (real reasoning) | ✅ affects output | ⚠️ **accepted but not applied** by Parley today |
-| **Speed** (Standard / ⚡ Fast) | n/a | n/a | ✅ Fast sends `service_tier: priority` |
+| **Speed** (Standard / ⚡ Fast)                    | n/a                       | n/a               | ✅ Fast sends `service_tier: priority`          |
 
 - Each provider is called its native way: **Claude/Gemini** get a `thinking` block,
   **OpenAI** gets `reasoning_effort`. Because Parley doesn't currently apply
@@ -245,15 +249,15 @@ per provider — verified live against the gateway:
 
 Type **`@`** in the composer:
 
-| Mention | Effect |
-| --- | --- |
-| `@path/to/file` | Attach that file's contents (autocomplete as you type) |
-| `@path/to/folder` | Attach a listing of the folder |
-| `@codebase` | Retrieve the most relevant files for your question (see below) |
-| `@git` | Attach the uncommitted diff (vs HEAD) |
-| `@terminal` | Attach recent integrated-terminal commands + output (shell integration) |
-| `@browser <url>` | Open the URL in a local browser (runs JS) and attach rendered text + console errors |
-| `@https://…` | Fetch the page and attach its text |
+| Mention           | Effect                                                                              |
+| ----------------- | ----------------------------------------------------------------------------------- |
+| `@path/to/file`   | Attach that file's contents (autocomplete as you type)                              |
+| `@path/to/folder` | Attach a listing of the folder                                                      |
+| `@codebase`       | Retrieve the most relevant files for your question (see below)                      |
+| `@git`            | Attach the uncommitted diff (vs HEAD)                                               |
+| `@terminal`       | Attach recent integrated-terminal commands + output (shell integration)             |
+| `@browser <url>`  | Open the URL in a local browser (runs JS) and attach rendered text + console errors |
+| `@https://…`      | Fetch the page and attach its text                                                  |
 
 ---
 
@@ -267,7 +271,7 @@ Controlled by `parley.codebaseSearch.provider`:
   of the value of semantic search.
 - **`local`** — a **true semantic index** using an **on‑device MiniLM embedding
   model** (transformers.js / ONNX). **Keyless and fully private** (nothing leaves
-  your machine); finds files by *meaning*, not just keywords. To use it:
+  your machine); finds files by _meaning_, not just keywords. To use it:
   1. Set `parley.codebaseSearch.provider` to `local`.
   2. Run **`Parley: Rebuild Codebase Index`**. The first build installs the embedding
      runtime into the extension's global storage (one‑time, needs **`npm` on your
@@ -279,7 +283,7 @@ Controlled by `parley.codebaseSearch.provider`:
 > **Why semantic is opt‑in (and installed on demand):** the embedding runtime is large
 > and platform‑specific (native `onnxruntime`/`sharp` binaries). Rather than bloat the
 > VSIX, the extension ships tiny (~100 KB) and installs the runtime locally — fetching
-> the binaries that match *your* machine — only when you opt in. The default (`lexical`)
+> the binaries that match _your_ machine — only when you opt in. The default (`lexical`)
 > needs nothing.
 
 `parley.codebaseSearch.maxFiles` (default 4) controls how many files are included.
@@ -290,15 +294,15 @@ Controlled by `parley.codebaseSearch.provider`:
 
 Type **`/`** in the composer for an autocomplete menu.
 
-| Command | Effect |
-| --- | --- |
-| `/clear` (or `/new`) | Start a new conversation |
-| `/compact` | Summarize to free context (choose keep‑recent or all) |
-| `/cost` | Show this conversation's token/cost usage |
-| `/model` | Switch the model |
-| `/init` | Create a project‑rules file (`AGENTS.md`) |
-| `/json` | Make the **next** reply a JSON object (`response_format`) |
-| `/help` | List commands |
+| Command              | Effect                                                    |
+| -------------------- | --------------------------------------------------------- |
+| `/clear` (or `/new`) | Start a new conversation                                  |
+| `/compact`           | Summarize to free context (choose keep‑recent or all)     |
+| `/cost`              | Show this conversation's token/cost usage                 |
+| `/model`             | Switch the model                                          |
+| `/init`              | Create a project‑rules file (`AGENTS.md`)                 |
+| `/json`              | Make the **next** reply a JSON object (`response_format`) |
+| `/help`              | List commands                                             |
 
 **Custom commands:** drop a `name.md` file in **`.parley/commands/`** (or
 `.claude/commands/`) and it becomes **`/name`**. The file body is used as the prompt,
@@ -311,13 +315,13 @@ appear in the `/` menu.
 
 Use the **📎** button, or **paste** (Ctrl/Cmd+V) / **drag‑and‑drop** onto the composer:
 
-| Type | Handling |
-| --- | --- |
-| **Text / code** (txt, md, csv, json, xml, html, source…) | Added as context. If larger than `parley.context.maxCharacters`, it's **uploaded via `/v1/files`** on OpenAI/Google so the full file reaches the model; inline (truncated) on Bedrock/Anthropic. |
-| **Images** (png, jpg, gif, webp, bmp) | Sent inline as `image_url` to vision models (Claude, Gemini, GPT‑5). |
-| **PDFs** | OpenAI/Google: **uploaded** to `/v1/files`; Bedrock/Anthropic: inline base64 `document` block. |
-| **Audio** (wav, mp3) | Sent as an `input_audio` block (OpenAI/Google only; warns otherwise). |
-| **Video** (mp4, mov, mkv, webm, avi…) | Via **ffmpeg** (Parley has no video type): choose **sample frames** (→ images), **extract audio** (→ `input_audio`), or **both**. Needs `ffmpeg`/`ffprobe` on PATH or `parley.video.ffmpegPath`. Tune with `parley.video.maxFrames` / `frameWidth` / `maxAudioSeconds`. Use the 📎 button (ffmpeg reads from disk). |
+| Type                                                     | Handling                                                                                                                                                                                                                                                                                                            |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Text / code** (txt, md, csv, json, xml, html, source…) | Added as context. If larger than `parley.context.maxCharacters`, it's **uploaded via `/v1/files`** on OpenAI/Google so the full file reaches the model; inline (truncated) on Bedrock/Anthropic.                                                                                                                    |
+| **Images** (png, jpg, gif, webp, bmp)                    | Sent inline as `image_url` to vision models (Claude, Gemini, GPT‑5).                                                                                                                                                                                                                                                |
+| **PDFs**                                                 | OpenAI/Google: **uploaded** to `/v1/files`; Bedrock/Anthropic: inline base64 `document` block.                                                                                                                                                                                                                      |
+| **Audio** (wav, mp3)                                     | Sent as an `input_audio` block (OpenAI/Google only; warns otherwise).                                                                                                                                                                                                                                               |
+| **Video** (mp4, mov, mkv, webm, avi…)                    | Via **ffmpeg** (Parley has no video type): choose **sample frames** (→ images), **extract audio** (→ `input_audio`), or **both**. Needs `ffmpeg`/`ffprobe` on PATH or `parley.video.ffmpegPath`. Tune with `parley.video.maxFrames` / `frameWidth` / `maxAudioSeconds`. Use the 📎 button (ffmpeg reads from disk). |
 
 Attachments show as removable chips and are cleared after sending.
 
@@ -383,7 +387,7 @@ keeps working.
 - **Estimated cost** (`~$`) accumulates in the header from Parley's published
   per‑model rates (unknown models show tokens only; Llama is free).
 - **`Parley: Show Usage`** reports your account's **real billed spend** for the month
-  (cost, requests, tokens). Needs `parley.accountId` (Admin Portal → *My Account*;
+  (cost, requests, tokens). Needs `parley.accountId` (Admin Portal → _My Account_;
   you're prompted on first use).
 - **Context gauge** (always visible in the header) shows how full the model's context window is.
 - **Automatic compaction** is **on by default at 80%** of the context window
@@ -427,7 +431,7 @@ folder in your workspace, so it never depends on what's in memory:
   text, or JSON** — to wherever you pick. The copy contains the entire transcript with a
   metadata header (model(s), mode, thinking level, speed, message count, tokens, cost).
 - **Compact:** **⊟**, `/compact`, or `Parley: Compact Conversation` — summarize the
-  conversation (choose *keep recent* or *everything*) to continue with fewer tokens. (This
+  conversation (choose _keep recent_ or _everything_) to continue with fewer tokens. (This
   trims the model's context; the saved transcript keeps the full record.)
 
 ---
@@ -474,6 +478,7 @@ description: React component conventions
 globs: src/components/**, *.tsx
 alwaysApply: false
 ---
+
 Use function components with hooks; never class components.
 ```
 
@@ -517,80 +522,80 @@ frontmatter‑less (or `alwaysApply: true`) rules always apply.
 
 ## Command reference
 
-| Command | What it does |
-| --- | --- |
-| `Parley: Set API Key` | Store/verify your `sk-parley-…` key in SecretStorage |
-| `Parley: Open Chat Window` | Focus the Parley chat view |
-| `Parley: New Conversation in Tab` | Open a parallel, independent conversation as an editor tab |
-| `Parley: New Conversation in New Window` | Same, floated into a separate OS window |
-| `Parley: New Conversation` | Save the current chat and start a fresh one |
-| `Parley: Open Past Conversation` | Reopen an archived conversation |
-| `Parley: Open Conversations Folder` | Reveal the auto‑saved transcripts |
-| `Parley: Export Conversation` | Export to Markdown / plain text / JSON |
-| `Parley: Compact Conversation` | Summarize history to free context |
-| `Parley: Regenerate Last Response` | Re‑run the last user message |
-| `Parley: Ask About Selection` | Ask about the current selection |
-| `Parley: Explain Current File` | Explain the active file |
-| `Parley: Refactor Selection` | Refactor the selection (diff‑reviewed) |
-| `Parley: Generate Tests` | Generate tests for the current file |
-| `Parley: Fix Diagnostics` | Fix reported problems minimally |
-| `Parley: Suggest Terminal Command` | Suggest a shell command (manual confirm) |
-| `Parley: Edit Selection (Inline)` | Inline edit (`Ctrl+Alt+K` / `Cmd+Alt+K`) |
-| `Parley: Revert Last Edit` / `Revert All Edits` | Undo checkpointed edits |
-| `Parley: Generate Image` | Generate an image with `gpt-image-1` |
-| `Parley: Generate Commit Message` | Commit message from the diff → Source Control |
-| `Parley: Rebuild Codebase Index` | Build the local semantic `@codebase` index |
-| `Parley: Manage Allowed Commands` | Review/remove commands approved via "Always Allow" |
-| `Parley: Reconnect MCP Servers` | Restart MCP servers and show status |
-| `Parley: Show Usage` | Real billed spend for the current month |
-| `Parley: Set Token Limit` | Per‑conversation token budget |
-| `Parley: Toggle Inline Completion` | Enable/disable ghost‑text completions |
-| `Parley: Init Project Rules` | Scaffold an `AGENTS.md` rules file |
-| `Parley: Run Diagnostics` | Probe the live API and report what works |
-| `Parley: Open Debug Log` | Open the verbose debug log |
-| `Parley: Sign Out` | Clear the stored API key |
+| Command                                         | What it does                                               |
+| ----------------------------------------------- | ---------------------------------------------------------- |
+| `Parley: Set API Key`                           | Store/verify your `sk-parley-…` key in SecretStorage       |
+| `Parley: Open Chat Window`                      | Focus the Parley chat view                                 |
+| `Parley: New Conversation in Tab`               | Open a parallel, independent conversation as an editor tab |
+| `Parley: New Conversation in New Window`        | Same, floated into a separate OS window                    |
+| `Parley: New Conversation`                      | Save the current chat and start a fresh one                |
+| `Parley: Open Past Conversation`                | Reopen an archived conversation                            |
+| `Parley: Open Conversations Folder`             | Reveal the auto‑saved transcripts                          |
+| `Parley: Export Conversation`                   | Export to Markdown / plain text / JSON                     |
+| `Parley: Compact Conversation`                  | Summarize history to free context                          |
+| `Parley: Regenerate Last Response`              | Re‑run the last user message                               |
+| `Parley: Ask About Selection`                   | Ask about the current selection                            |
+| `Parley: Explain Current File`                  | Explain the active file                                    |
+| `Parley: Refactor Selection`                    | Refactor the selection (diff‑reviewed)                     |
+| `Parley: Generate Tests`                        | Generate tests for the current file                        |
+| `Parley: Fix Diagnostics`                       | Fix reported problems minimally                            |
+| `Parley: Suggest Terminal Command`              | Suggest a shell command (manual confirm)                   |
+| `Parley: Edit Selection (Inline)`               | Inline edit (`Ctrl+Alt+K` / `Cmd+Alt+K`)                   |
+| `Parley: Revert Last Edit` / `Revert All Edits` | Undo checkpointed edits                                    |
+| `Parley: Generate Image`                        | Generate an image with `gpt-image-1`                       |
+| `Parley: Generate Commit Message`               | Commit message from the diff → Source Control              |
+| `Parley: Rebuild Codebase Index`                | Build the local semantic `@codebase` index                 |
+| `Parley: Manage Allowed Commands`               | Review/remove commands approved via "Always Allow"         |
+| `Parley: Reconnect MCP Servers`                 | Restart MCP servers and show status                        |
+| `Parley: Show Usage`                            | Real billed spend for the current month                    |
+| `Parley: Set Token Limit`                       | Per‑conversation token budget                              |
+| `Parley: Toggle Inline Completion`              | Enable/disable ghost‑text completions                      |
+| `Parley: Init Project Rules`                    | Scaffold an `AGENTS.md` rules file                         |
+| `Parley: Run Diagnostics`                       | Probe the live API and report what works                   |
+| `Parley: Open Debug Log`                        | Open the verbose debug log                                 |
+| `Parley: Sign Out`                              | Clear the stored API key                                   |
 
 ---
 
 ## Settings reference
 
-| Setting | Default | Description |
-| --- | --- | --- |
-| `parley.endpoint` | `https://parley.api.mit.edu/v1` | OpenAI‑compatible API base URL |
-| `parley.accountId` | `""` | Account id (`acc_…`) for `Show Usage` |
-| `parley.defaultAgent` | `bedrock/claude-sonnet-4-6` | Default model id |
-| `parley.stream` | `true` | Stream replies token‑by‑token |
-| `parley.thinking` | `off` | Extended thinking: `off`/`adaptive`/`low`/`medium`/`high` |
-| `parley.defaultMode` | `chat` | `chat`/`ask`/`edit`/`plan`/`auto`/`full` |
-| `parley.autoContinue` | `true` | Keep working until done in agent modes |
-| `parley.maxToolRounds` | `50` | Max tool‑call rounds per turn before it auto‑continues (keeps its tools) |
-| `parley.maxAutoContinue` | `25` | Max auto‑continue steps (`0` disables) |
-| `parley.tokenLimit` | `0` | Per‑conversation token budget (`0` = unlimited) |
-| `parley.autoCompactPercent` | `80` | Auto‑compact at this % of the context window (`0` off) |
-| `parley.autoCompactTokens` | `0` | Absolute auto‑compact threshold (`0` off) |
-| `parley.autoSaveConversations` | `true` | Auto‑save each conversation to disk |
-| `parley.conversationsDir` | `""` | Folder for saved conversations (empty = global storage) |
-| `parley.mcpServers` | `{}` | MCP servers `{ name: { command, args?, env? } }` |
-| `parley.webSearch.provider` | `duckduckgo` | `off`/`duckduckgo`/`google`/`tavily` |
-| `parley.webSearch.apiKey` | `""` | Key for Google/Tavily |
-| `parley.webSearch.googleCx` | `""` | Google Programmable Search engine id |
-| `parley.codebaseSearch.enabled` | `true` | Enable `@codebase` |
-| `parley.codebaseSearch.provider` | `lexical` | `lexical` or `local` (on‑device semantic) |
-| `parley.codebaseSearch.maxFiles` | `4` | Files `@codebase` includes |
-| `parley.commandTimeoutSeconds` | `300` | Timeout for agent shell commands |
-| `parley.inlineCompletion.enabled` | `true` | Ghost‑text completions |
-| `parley.inlineCompletion.model` | `openai/gpt-5-nano` | Completion model |
-| `parley.inlineCompletion.debounceMs` | `350` | Idle delay before a completion |
-| `parley.video.maxFrames` | `12` | Max sampled video frames |
-| `parley.video.frameWidth` | `768` | Downscale width for frames |
-| `parley.video.maxAudioSeconds` | `600` | Max seconds of extracted audio |
-| `parley.video.ffmpegPath` | `""` | Path to `ffmpeg` (else PATH) |
-| `parley.context.maxCharacters` | `12000` | Max context characters per request |
-| `parley.context.includeDiagnostics` | `true` | Include diagnostics on request |
-| `parley.context.respectGitignore` | `true` | Respect `.gitignore` for context |
-| `parley.confirmBeforeSendingLargeContext` | `true` | Preview/confirm large context |
-| `parley.telemetry.enabled` | `false` | No telemetry is emitted |
-| `parley.logLevel` | `info` | `error`/`warn`/`info`/`debug` |
+| Setting                                   | Default                         | Description                                                              |
+| ----------------------------------------- | ------------------------------- | ------------------------------------------------------------------------ |
+| `parley.endpoint`                         | `https://parley.api.mit.edu/v1` | OpenAI‑compatible API base URL                                           |
+| `parley.accountId`                        | `""`                            | Account id (`acc_…`) for `Show Usage`                                    |
+| `parley.defaultAgent`                     | `bedrock/claude-sonnet-4-6`     | Default model id                                                         |
+| `parley.stream`                           | `true`                          | Stream replies token‑by‑token                                            |
+| `parley.thinking`                         | `off`                           | Extended thinking: `off`/`adaptive`/`low`/`medium`/`high`                |
+| `parley.defaultMode`                      | `chat`                          | `chat`/`ask`/`edit`/`plan`/`auto`/`full`                                 |
+| `parley.autoContinue`                     | `true`                          | Keep working until done in agent modes                                   |
+| `parley.maxToolRounds`                    | `50`                            | Max tool‑call rounds per turn before it auto‑continues (keeps its tools) |
+| `parley.maxAutoContinue`                  | `25`                            | Max auto‑continue steps (`0` disables)                                   |
+| `parley.tokenLimit`                       | `0`                             | Per‑conversation token budget (`0` = unlimited)                          |
+| `parley.autoCompactPercent`               | `80`                            | Auto‑compact at this % of the context window (`0` off)                   |
+| `parley.autoCompactTokens`                | `0`                             | Absolute auto‑compact threshold (`0` off)                                |
+| `parley.autoSaveConversations`            | `true`                          | Auto‑save each conversation to disk                                      |
+| `parley.conversationsDir`                 | `""`                            | Folder for saved conversations (empty = global storage)                  |
+| `parley.mcpServers`                       | `{}`                            | MCP servers `{ name: { command, args?, env? } }`                         |
+| `parley.webSearch.provider`               | `duckduckgo`                    | `off`/`duckduckgo`/`google`/`tavily`                                     |
+| `parley.webSearch.apiKey`                 | `""`                            | Key for Google/Tavily                                                    |
+| `parley.webSearch.googleCx`               | `""`                            | Google Programmable Search engine id                                     |
+| `parley.codebaseSearch.enabled`           | `true`                          | Enable `@codebase`                                                       |
+| `parley.codebaseSearch.provider`          | `lexical`                       | `lexical` or `local` (on‑device semantic)                                |
+| `parley.codebaseSearch.maxFiles`          | `4`                             | Files `@codebase` includes                                               |
+| `parley.commandTimeoutSeconds`            | `300`                           | Timeout for agent shell commands                                         |
+| `parley.inlineCompletion.enabled`         | `true`                          | Ghost‑text completions                                                   |
+| `parley.inlineCompletion.model`           | `openai/gpt-5-nano`             | Completion model                                                         |
+| `parley.inlineCompletion.debounceMs`      | `350`                           | Idle delay before a completion                                           |
+| `parley.video.maxFrames`                  | `12`                            | Max sampled video frames                                                 |
+| `parley.video.frameWidth`                 | `768`                           | Downscale width for frames                                               |
+| `parley.video.maxAudioSeconds`            | `600`                           | Max seconds of extracted audio                                           |
+| `parley.video.ffmpegPath`                 | `""`                            | Path to `ffmpeg` (else PATH)                                             |
+| `parley.context.maxCharacters`            | `12000`                         | Max context characters per request                                       |
+| `parley.context.includeDiagnostics`       | `true`                          | Include diagnostics on request                                           |
+| `parley.context.respectGitignore`         | `true`                          | Respect `.gitignore` for context                                         |
+| `parley.confirmBeforeSendingLargeContext` | `true`                          | Preview/confirm large context                                            |
+| `parley.telemetry.enabled`                | `false`                         | No telemetry is emitted                                                  |
+| `parley.logLevel`                         | `info`                          | `error`/`warn`/`info`/`debug`                                            |
 
 ---
 
@@ -616,7 +621,7 @@ Verified live against the API:
   model instead of calling Parley.
 - **No client‑controlled prompt caching** — Anthropic `cache_control` breakpoints are
   accepted but **not propagated** to Bedrock (verified live: no cache writes/reads from
-  explicit markers), so the extension doesn't send them. Bedrock still applies *automatic*
+  explicit markers), so the extension doesn't send them. Bedrock still applies _automatic_
   prompt caching to repeated prefixes transparently, at no cost or effort to you.
 - **No web‑search endpoint** — `web_search` calls DuckDuckGo/Google/Tavily directly.
 - **No video content type** — video is approximated with ffmpeg (frames/audio).

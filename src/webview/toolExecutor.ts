@@ -16,6 +16,7 @@ import { runHookEvent } from '../hooks/hooks';
 import type { McpManager } from '../mcp/McpManager';
 import { runSubagentTask } from '../agents/subagent';
 import { clampMiddle } from '../parley/clampText';
+import { isCommandAllowed, isSimpleCommand } from '../parley/commandSafety';
 import { isMcpTool } from '../mcp/naming';
 import type { ParleyProvider } from '../parley/ParleyProvider';
 import { estimateCostUsd } from '../parley/pricing';
@@ -690,18 +691,21 @@ export class ToolExecutor {
     const mode = this.host.getMode();
     // Full-access mode runs commands without prompting; every other mode confirms —
     // unless the command matches a workspace allowlist rule the user approved earlier.
-    if (mode !== 'full' && this.isCommandAllowed(command)) {
+    if (mode !== 'full' && isCommandAllowed(command, this.allowedCommands())) {
       dbg('tool', 'run_command auto-approved by allowlist', command.slice(0, 120));
     } else if (mode !== 'full') {
       const ALWAYS = 'Always Allow';
+      // Only simple, substitution-free commands can be remembered — a compound
+      // command's prefix would silently approve an unrelated tail next time.
+      const canRemember = isSimpleCommand(command);
+      const detail = canRemember
+        ? `"${ALWAYS}" also approves future commands that start with this text (this workspace only; ` +
+          'review with "Parley: Manage Allowed Commands").'
+        : 'This command chains steps or uses command substitution, so it can only be run once — it will not be added to the allowlist.';
       const answer = await vscode.window.showWarningMessage(
-        `Parley agent wants to run a command in ${folder?.name ?? 'the workspace'}:\n\n${command}\n\n` +
-          `"${ALWAYS}" also approves future commands that start with this text (this workspace only; ` +
-          'review with "Parley: Manage Allowed Commands").',
+        `Parley agent wants to run a command in ${folder?.name ?? 'the workspace'}:\n\n${command}\n\n${detail}`,
         { modal: true },
-        'Run',
-        ALWAYS,
-        'Skip'
+        ...(canRemember ? ['Run', ALWAYS, 'Skip'] : ['Run', 'Skip'])
       );
       if (answer === ALWAYS) {
         const rules = this.allowedCommands();
@@ -740,11 +744,6 @@ export class ToolExecutor {
   private allowedCommands(): string[] {
     const rules = this.host.state.get<string[]>('parley.allowedCommands', []);
     return Array.isArray(rules) ? rules.filter((r) => typeof r === 'string' && r.trim().length > 0) : [];
-  }
-
-  /** A rule matches its exact command or any command that extends it with further arguments. */
-  private isCommandAllowed(command: string): boolean {
-    return this.allowedCommands().some((rule) => command === rule || command.startsWith(`${rule} `));
   }
 
   /** Review/remove the workspace's approved agent commands ("Parley: Manage Allowed Commands"). */
