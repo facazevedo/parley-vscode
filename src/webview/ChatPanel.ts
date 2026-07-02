@@ -27,6 +27,7 @@ import { AGENT_TOOLS, READ_ONLY_TOOLS, resolveAcrossRoots, runAgentTool, toolRel
 import { normalizeThinkingLevel, resolveThinking, type ThinkingLevel } from '../parley/thinking';
 import { decideTurnStep } from '../parley/turnPolicy';
 import { buildChatHtml } from './webviewHtml';
+import { TranscriptRecorder } from './transcriptRecorder';
 import { audioFormatFromExt, audioFormatFromMime, modelSupportsAudio } from '../parley/audio';
 import { clampMiddle } from '../parley/clampText';
 import { documentProviderFor } from '../parley/files';
@@ -162,10 +163,27 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   // The hosting surface: the sidebar WebviewView, or an editor-tab WebviewPanel.
   private view?: { readonly webview: vscode.Webview };
   private readonly history: ChatMessage[] = [];
-  // Full ordered record of everything shown (messages, tool activity, diffs, plans, notes).
-  // The canonical copy is the per-conversation .jsonl on disk; this mirrors it for rendering.
-  private transcript: TranscriptEntry[] = [];
-  private conversationStartedAt = new Date().toISOString();
+  // Full ordered record of everything shown — owned by the TranscriptRecorder
+  // (decomposition 2/4); these accessors keep the rest of the panel unchanged.
+  private recorder!: TranscriptRecorder;
+  private get transcript(): TranscriptEntry[] {
+    return this.recorder.entries;
+  }
+  private set transcript(value: TranscriptEntry[]) {
+    this.recorder.entries = value;
+  }
+  private get conversationStartedAt(): string {
+    return this.recorder.startedAt;
+  }
+  private set conversationStartedAt(value: string) {
+    this.recorder.startedAt = value;
+  }
+  private get conversationId(): string {
+    return this.recorder.conversationId;
+  }
+  private set conversationId(value: string) {
+    this.recorder.conversationId = value;
+  }
   private lastToolAction = ''; // pairs a tool's ⏺ action with its ⎿ result for the transcript
   private agents: readonly AgentInfo[] = [];
   private selectedAgentId = '';
@@ -176,7 +194,6 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private sessionTokens = 0;
   private sessionCost = 0;
   private jsonNext = false; // one-shot: request the next reply as a JSON object (/json)
-  private conversationId = ''; // stable id → filename for the auto-saved transcript
   private customCommandNames: string[] = []; // user-defined /commands from .parley|.claude/commands
   private commandChannel?: vscode.OutputChannel; // visible mirror of agent shell commands
   private embeddingIndex?: EmbeddingIndex; // lazy local semantic index for @codebase
@@ -217,6 +234,15 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     private readonly globalStorageUri: vscode.Uri,
     private readonly mcp: McpManager
   ) {
+    this.recorder = new TranscriptRecorder(this.getSettings, this.logger, this.globalStorageUri, () => ({
+      selectedAgentId: this.selectedAgentId,
+      defaultAgent: this.getSettings().defaultAgent,
+      mode: this.mode,
+      thinking: this.selectedThinking,
+      speed: this.selectedSpeed,
+      sessionTokens: this.sessionTokens,
+      sessionCost: this.sessionCost
+    }));
     const settings = this.getSettings();
     // Restore the previous session if present, else fall back to settings defaults.
     const savedHistory = this.state.get<ChatMessage[]>('parley.history');
@@ -274,103 +300,38 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     void this.state.update('parley.conversationId', this.conversationId);
   }
 
+  // ---------- transcript delegation (owner: TranscriptRecorder, decomposition 2/4) ----------
+
   private newConversationId(): string {
-    return 'parley-' + new Date().toISOString().replace(/[:.]/g, '-').replace('Z', '');
+    return TranscriptRecorder.newConversationId();
   }
 
-  /**
-   * Base `.parley` folder: `parley.conversationsDir` if set, else `<workspace>/.parley`,
-   * else the extension's global storage. Holds `conversations/`, `index.json`, `state.json`.
-   */
   private parleyBase(): string {
-    const custom = this.getSettings().conversationsDir;
-    if (custom) {
-      return custom;
-    }
-    const ws = vscode.workspace.workspaceFolders?.[0]?.uri;
-    return ws ? path.join(ws.fsPath, '.parley') : path.join(this.globalStorageUri.fsPath, 'parley');
+    return this.recorder.base();
   }
 
-  /** Reveal folder for the auto-save location (compat with the old name). */
   private conversationsDir(): vscode.Uri {
-    return vscode.Uri.file(transcriptStore.conversationsDir(this.parleyBase()));
+    return this.recorder.conversationsDir();
   }
 
   private currentTitle(): string {
-    const firstUser = this.transcript.find((e) => e.kind === 'user') as { text?: string } | undefined;
-    return (firstUser?.text ?? 'Conversation').replace(/\s+/g, ' ').trim().slice(0, 60) || 'Conversation';
+    return this.recorder.currentTitle();
   }
 
   private transcriptMeta(): TranscriptMeta {
-    const models = [...new Set(this.transcript.flatMap((e) => (e.kind === 'assistant' && e.model ? [e.model] : [])))];
-    return {
-      id: this.conversationId,
-      title: this.currentTitle(),
-      createdAt: this.conversationStartedAt,
-      exportedAt: new Date().toISOString(),
-      models: models.length > 0 ? models : [this.selectedAgentId || this.getSettings().defaultAgent],
-      mode: this.mode,
-      thinking: this.selectedThinking,
-      speed: this.selectedSpeed,
-      messages: this.transcript.filter((e) => e.kind === 'user' || e.kind === 'assistant').length,
-      sessionTokens: this.sessionTokens,
-      estimatedCostUsd: this.sessionCost
-    };
+    return this.recorder.meta();
   }
 
-  /** Append one transcript event in memory and (best-effort) to its on-disk JSONL log. */
   private appendTranscript(entry: TranscriptEntry): TranscriptEntry {
-    this.transcript.push(entry);
-    if (this.getSettings().autoSaveConversations) {
-      void transcriptStore
-        .appendEvent(this.parleyBase(), this.conversationId, entry)
-        .catch((error) =>
-          this.logger.debug(`transcript append failed: ${error instanceof Error ? error.message : 'error'}`)
-        );
-    }
-    return entry;
+    return this.recorder.append(entry);
   }
 
-  /** Rewrite the canonical JSONL (used after an in-place status change, e.g. Apply/Dismiss). */
   private syncTranscriptFile(): void {
-    if (!this.getSettings().autoSaveConversations) {
-      return;
-    }
-    void transcriptStore
-      .writeEvents(this.parleyBase(), this.conversationId, this.transcript)
-      .catch((error) =>
-        this.logger.debug(`transcript sync failed: ${error instanceof Error ? error.message : 'error'}`)
-      );
+    this.recorder.syncFile();
   }
 
-  /** Write the human-readable .md, update the index, and persist Parley params. Best-effort. */
-  private async autosaveConversation(): Promise<void> {
-    if (!this.getSettings().autoSaveConversations || this.transcript.length === 0) {
-      return;
-    }
-    const base = this.parleyBase();
-    const meta = this.transcriptMeta();
-    try {
-      await transcriptStore.ensureGitignore(base);
-      await transcriptStore.writeMarkdown(base, this.conversationId, transcriptToMarkdown(meta, this.transcript));
-      await transcriptStore.upsertIndex(base, {
-        id: this.conversationId,
-        title: meta.title,
-        savedAt: meta.exportedAt ?? meta.createdAt,
-        model: meta.models[0] ?? '',
-        events: this.transcript.length
-      });
-      await transcriptStore.writeState(base, {
-        lastConversationId: this.conversationId,
-        selectedAgentId: this.selectedAgentId,
-        mode: this.mode,
-        thinking: this.selectedThinking,
-        speed: this.selectedSpeed,
-        updatedAt: meta.exportedAt
-      });
-    } catch (error) {
-      this.logger.warn(`Could not auto-save conversation: ${error instanceof Error ? error.message : 'unknown'}`);
-    }
+  private autosaveConversation(): Promise<void> {
+    return this.recorder.autosave();
   }
 
   /** Save & archive the current conversation, then reset to a fresh one. */
