@@ -56,7 +56,7 @@ export function resolveStylePrompt(styles: readonly OutputStyle[], id: string | 
 
 /** Build a custom style from a file's id + raw contents (pure — capped like project rules). Undefined if the body is empty. */
 export function styleFromFile(id: string, raw: string): OutputStyle | undefined {
-  const { description, body } = parseStyleFile(raw);
+  const { description, body } = parseFrontmatter(raw);
   const trimmed = body.trim();
   if (!trimmed) {
     return undefined;
@@ -69,8 +69,9 @@ export function styleFromFile(id: string, raw: string): OutputStyle | undefined 
   };
 }
 
-/** Extract an optional `description:` and the body from simple `---` frontmatter. */
-function parseStyleFile(raw: string): { description: string; body: string } {
+/** Extract an optional `description:` and the body from simple `---` frontmatter.
+ *  Shared by output styles and custom slash commands. */
+export function parseFrontmatter(raw: string): { description: string; body: string } {
   const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(raw);
   if (!match) {
     return { description: '', body: raw };

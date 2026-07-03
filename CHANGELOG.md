@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.79.0
+
+### Improved — custom slash commands: descriptions, $SELECTION, global commands
+
+- **`description:` frontmatter** in a custom command's `.md` file now shows in the composer's slash menu (instead of the generic "custom command"), same format as output styles.
+- **`$SELECTION` placeholder** — expands to the active editor's selected text at run time ($SELECTION is expanded before `$ARGS`, so arguments containing the literal string stay intact). Empty selection expands to nothing.
+- **Global commands**: `~/.parley/commands/` and `~/.claude/commands/` are now scanned in addition to the workspace dirs; workspace commands shadow global ones on a name clash. Commands also work with no folder open.
+- Fixed a latent lookup bug: a command discovered in `.claude/commands` could previously be *run* from a same-named file in `.parley/commands` — each command now remembers exactly which file it came from. Frontmatter is stripped from the prompt body. New shared loader `src/config/customCommands.ts` (unit-tested), reusing the output-styles frontmatter parser.
+
 ## 0.78.0
 
 ### Changed — every icon popup is now a concise in-panel dropdown (like the history panel)

@@ -2,7 +2,8 @@ import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import type { ChatMode, ParleySettings } from '../config/settings';
-import { loadOutputStyles, resolveStylePrompt } from '../config/outputStyles';
+import { loadOutputStyles, parseFrontmatter, resolveStylePrompt } from '../config/outputStyles';
+import { CustomCommand, expandCommandBody, scanCustomCommands } from '../config/customCommands';
 import { redactContextAttachments, summarizeFindings } from '../context/secretScanner';
 import {
   collectCommandContext,
@@ -62,9 +63,6 @@ import type {
 const PROJECT_RULES_FILES = ['.parleyrules', 'AGENTS.md', '.cursorrules'];
 // Directory rules (one file per rule, optional glob frontmatter — Cursor-compatible).
 const RULES_DIRS = ['.parley/rules', '.cursor/rules'];
-// User-defined slash commands: a `name.md` here becomes `/name` whose body is the prompt
-// (with `$ARGS` replaced by anything typed after the command).
-const CUSTOM_COMMAND_DIRS = ['.parley/commands', '.claude/commands'];
 // Non-file mentions surfaced by the @ autocomplete so they are discoverable in the UI
 // (they resolve in resolveMentions, not from the file list).
 const SPECIAL_MENTIONS: ReadonlyArray<{ path: string; hint: string }> = [
@@ -253,7 +251,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private sessionCost = 0;
   private highUsageWarned = false; // one-shot soft-budget notice per conversation (parley.usageWarnUsd)
   private jsonNext = false; // one-shot: request the next reply as a JSON object (/json)
-  private customCommandNames: string[] = []; // user-defined /commands from .parley|.claude/commands
+  private customCommands: CustomCommand[] = []; // user-defined /commands (workspace + global dirs)
   private embeddingIndex?: EmbeddingIndex; // lazy local semantic index for @codebase
   private attachments: PendingAttachment[] = [];
   // Workspace file/folder candidates for the @-mention autocomplete (short TTL so
@@ -989,7 +987,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         this.history.push({
           role: 'assistant',
           content:
-            '**Slash commands**\n- `/clear` (or `/new`) — start a new conversation\n- `/compact` — summarize to free up context (choose keep-recent or all)\n- `/context` — breakdown of what is filling the context window\n- `/cost` — show this conversation\'s token/cost usage\n- `/model` — switch the model\n- `/init` — create a project rules file (AGENTS.md)\n- `/json` — make the next reply a JSON object\n- `/help` — this list\n\n**Custom commands:** add a `name.md` file under `.parley/commands/` (or `.claude/commands/`) and it becomes `/name` — its text is used as the prompt, with `$ARGS` replaced by anything you type after the command.\n\nMost actions also have commands in the Command Palette (search "Parley").',
+            '**Slash commands**\n- `/clear` (or `/new`) — start a new conversation\n- `/compact` — summarize to free up context (choose keep-recent or all)\n- `/context` — breakdown of what is filling the context window\n- `/cost` — show this conversation\'s token/cost usage\n- `/model` — switch the model\n- `/init` — create a project rules file (AGENTS.md)\n- `/json` — make the next reply a JSON object\n- `/help` — this list\n\n**Custom commands:** add a `name.md` file under `.parley/commands/` or `.claude/commands/` (workspace), or `~/.parley/commands/` / `~/.claude/commands/` (global — workspace wins on a name clash) and it becomes `/name` — its text is the prompt, with `$ARGS` replaced by anything typed after the command and `$SELECTION` by the active editor selection. Optional `description:` frontmatter shows in the slash menu.\n\nMost actions also have commands in the Command Palette (search "Parley").',
           createdAt: new Date().toISOString()
         });
         await this.postState();
@@ -999,53 +997,33 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     }
   }
 
-  /** Scan the workspace for user-defined `/command` markdown files (cached for the slash menu). */
+  /** Scan the workspace + global command dirs for user-defined `/command` markdown files (cached for the slash menu). */
   private async refreshCustomCommands(): Promise<void> {
-    const root = vscode.workspace.workspaceFolders?.[0]?.uri;
-    if (!root) {
-      this.customCommandNames = [];
-      return;
-    }
-    const names = new Set<string>();
-    for (const dir of CUSTOM_COMMAND_DIRS) {
-      try {
-        const entries = await vscode.workspace.fs.readDirectory(vscode.Uri.joinPath(root, dir));
-        for (const [name, type] of entries) {
-          if (type === vscode.FileType.File && name.toLowerCase().endsWith('.md')) {
-            names.add(name.slice(0, -3));
-          }
-        }
-      } catch {
-        // Directory absent — fine.
-      }
-    }
-    this.customCommandNames = [...names].sort((a, b) => a.localeCompare(b));
+    this.customCommands = await scanCustomCommands();
   }
 
-  /** Run a user-defined `/command`: expand its file body (with `$ARGS`) and send it as a turn. */
+  /** Run a user-defined `/command`: expand its file body (`$ARGS`, `$SELECTION`) and send it as a turn. */
   private async runCustomCommand(name: string, input: string): Promise<boolean> {
-    const root = vscode.workspace.workspaceFolders?.[0]?.uri;
-    if (!root) {
-      return false;
-    }
-    const match = this.customCommandNames.find((n) => n.toLowerCase() === name);
+    const match = this.customCommands.find((c) => c.name.toLowerCase() === name);
     if (!match) {
       return false;
     }
-    for (const dir of CUSTOM_COMMAND_DIRS) {
-      try {
-        const body = Buffer.from(
-          await vscode.workspace.fs.readFile(vscode.Uri.joinPath(root, dir, `${match}.md`))
-        ).toString('utf8');
-        const args = input.replace(/^\/\S+\s*/, '').trim();
-        const expanded = /\$ARGS/.test(body) ? body.replace(/\$ARGS/g, args) : args ? `${body}\n\n${args}` : body;
-        await this.runTurn(expanded, this.contextOptions);
-        return true;
-      } catch {
-        // Try the next directory.
-      }
+    let body: string;
+    try {
+      // Re-read at run time so edits since the scan take effect; strip frontmatter.
+      body = parseFrontmatter(Buffer.from(await vscode.workspace.fs.readFile(match.uri)).toString('utf8')).body;
+    } catch {
+      return false;
     }
-    return false;
+    const args = input.replace(/^\/\S+\s*/, '').trim();
+    const editor = vscode.window.activeTextEditor;
+    const selection = editor && !editor.selection.isEmpty ? editor.document.getText(editor.selection) : '';
+    const expanded = expandCommandBody(body, args, selection);
+    if (!expanded.trim()) {
+      return true; // empty command body — nothing to send
+    }
+    await this.runTurn(expanded, this.contextOptions);
+    return true;
   }
 
   /**
@@ -3043,7 +3021,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       selectedAgentId: this.selectedAgentId,
       selectedThinking: this.selectedThinking,
       selectedSpeed: this.selectedSpeed,
-      customCommands: this.customCommandNames,
+      customCommands: this.customCommands.map((c) => ({ name: c.name, description: c.description })),
       contextOptions: this.contextOptions,
       selectionInfo: this.currentSelectionInfo(),
       attachments: this.attachments.map((a) => ({ id: a.id, label: a.label, kind: a.kind }))

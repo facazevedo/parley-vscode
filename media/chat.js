@@ -947,7 +947,14 @@ import hljs from 'highlight.js/lib/common';
       return;
     }
     const q = m[1].toLowerCase();
-    const all = SLASH_COMMANDS.concat(customCommands.map((n) => ({ cmd: '/' + n, desc: 'custom command' })));
+    // Custom entries arrive as {name, description} (older hosts sent plain strings).
+    const all = SLASH_COMMANDS.concat(
+      customCommands.map((c) =>
+        typeof c === 'string'
+          ? { cmd: '/' + c, desc: 'custom command' }
+          : { cmd: '/' + c.name, desc: c.description || 'custom command' }
+      )
+    );
     slashItems = all.filter((c) => c.cmd.slice(1).toLowerCase().startsWith(q));
     slashIndex = 0;
     renderSlash();
