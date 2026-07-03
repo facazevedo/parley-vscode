@@ -7,10 +7,10 @@ A streaming chat sidebar, an agent that reads and edits your workspace, multimod
 and every change diff-reviewed before it touches your files — all inside VS Code.</p>
 
 <p>
-  <a href="CHANGELOG.md"><img alt="Version" src="https://img.shields.io/badge/version-0.71.0-A31F34"></a>
+  <a href="CHANGELOG.md"><img alt="Version" src="https://img.shields.io/badge/version-1.2.0-A31F34"></a>
   <img alt="VS Code" src="https://img.shields.io/badge/VS%20Code-%E2%89%A5%201.92-1F6FEB">
   <a href="https://opensource.org/licenses/MIT"><img alt="License" src="https://img.shields.io/badge/license-MIT-3FB950"></a>
-  <img alt="Tests" src="https://img.shields.io/badge/tests-229%20passing-2EA043">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-323%20passing-2EA043">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-3178C6">
 </p>
 
@@ -20,14 +20,15 @@ and every change diff-reviewed before it touches your files — all inside VS Co
 
 ## Highlights
 
-- **Agentic editing, safely** — six modes from plain chat to full autonomy; every edit is diff-reviewed, checkpointed, and **rewindable** per message.
-- **Any model on the gateway** — Claude, GPT, Gemini and more, switchable per conversation; no vendor lock-in.
-- **Deep context** — `@file` / `@codebase` (lexical or on-device semantic) / `@terminal` / `@git` / `@browser` mentions, plus project rules files.
-- **Multimodal** — attach images, PDFs, audio, and **video** (ffmpeg frames + audio) as context.
-- **Local browser & subagents** — drive a real headless Chromium, or delegate scoped read-only investigations to a nested agent.
+- **Agentic editing, safely** — six modes from plain chat to full autonomy; every edit is diff-reviewed, checkpointed, and **rewindable** per message. `/verify` runs your tests and fixes until green.
+- **Any model on the gateway** — Claude, GPT, Gemini and more, switchable per conversation; `/compare` runs one prompt on two models side by side.
+- **Deep context** — `@file` / `@codebase` (lexical or on-device semantic) / `@terminal` / `@git` / `@browser` mentions, project rules, and **agent-maintained project memory** that compounds across conversations.
+- **Multimodal in & out** — attach images, PDFs, audio, **video**; **🎤 voice input**, **🔊 read-aloud + hands-free voice mode**, and **📷/🎥 screen capture** (screenshot or recording with narration).
+- **Computer use** ⚠ — with your explicit opt-in, `/computer` drives your real mouse & keyboard to do desktop tasks (built-in Windows backend or optional cross-platform nut.js), with a corner-slam kill switch and per-action confirm.
+- **Local browser & parallel subagents** — drive a real headless Chromium, or fan out several scoped read-only investigations at once.
 - **MCP** — connect stdio, streamable-HTTP, and legacy-SSE Model Context Protocol servers.
-- **Safety & privacy first** — sensitive-file filtering, **outbound secret redaction**, a per-segment command allowlist, and honest documentation of gateway limits.
-- **Transparent by design** — full on-disk JSONL transcripts, live cost/context gauges, a `/context` breakdown, and 229 automated tests.
+- **Safety & privacy first** — sensitive-file filtering, **outbound secret redaction**, **prompt-injection defenses** on untrusted content, a per-segment command allowlist, and honest documentation of gateway limits.
+- **Transparent by design** — full on-disk JSONL transcripts, live cost/context gauges + status-bar ticker, a `/context` breakdown, and 323 automated tests. CI packages a GitHub Release on every version tag.
 
 Built around a `ParleyProvider` abstraction, so the UI, context collection, diff review, and safety controls stay independent of the transport.
 
@@ -48,6 +49,11 @@ Built around a `ParleyProvider` abstraction, so the UI, context collection, diff
 - [`@codebase` search (lexical + optional local semantic)](#codebase-search-lexical--optional-local-semantic)
 - [Slash commands (built-in + your own)](#slash-commands-built-in--your-own)
 - [Attachments: image, PDF, audio, video](#attachments-image-pdf-audio-video)
+- [Voice & sound](#voice--sound)
+- [Screen capture](#screen-capture)
+- [Computer use ⚠](#computer-use-)
+- [Reviewing code (branch · staged · diagnostics)](#reviewing-code-branch--staged--diagnostics)
+- [Project memory](#project-memory-agent-maintained)
 - [Web search](#web-search)
 - [MCP servers](#mcp-servers)
 - [Inline completion & inline edit](#inline-completion--inline-edit)
@@ -86,7 +92,8 @@ three are a standalone editor (**Cursor**), OpenAI's coding agent (**Codex**), a
 | Diff‑review + checkpoints / rewind      | ✅                                                  | ✅                | ◐                 | ✅                   |
 | Command execution                       | ✅ allowlist                                        | ✅                | ✅ OS sandbox     | ✅ allowlist/sandbox |
 | Editable plan mode                      | ✅                                                  | ✅                | ◐                 | ✅                   |
-| In‑session subagents                    | ✅ local                                            | ✅                | ✅                | ✅                   |
+| In‑session subagents                    | ✅ local (+ parallel)                               | ✅                | ✅                | ✅                   |
+| Computer use (mouse/keyboard)           | ✅ opt‑in (Win / nut.js)                            | ✗                 | ◐ cloud           | ◐ (beta)             |
 | Background / cloud agents               | ✗ (out of scope)                                    | ✅                | ✅                | ✅                   |
 | **Context & retrieval**                 |                                                     |                   |                   |                      |
 | @‑mentions + codebase retrieval         | ✅                                                  | ✅                | ✅                | ✅                   |
@@ -95,7 +102,7 @@ three are a standalone editor (**Cursor**), OpenAI's coding agent (**Codex**), a
 | MCP                                     | ✅ stdio · HTTP · SSE                               | ✅                | ✅                | ✅ (+ OAuth)         |
 | **Editor UX**                           |                                                     |                   |                   |                      |
 | Inline "Tab" completion (trained model) | ◐ ghost‑text                                        | ✅                | ✗                 | ✗                    |
-| Multimodal input                        | ✅ image · PDF · audio · **video**                  | ◐ image           | ◐ image           | ◐ image · PDF        |
+| Multimodal in / out                     | ✅ image·PDF·audio·**video**·**voice·screen**       | ◐ image           | ◐ image           | ◐ image · PDF        |
 | **Ecosystem & safety**                  |                                                     |                   |                   |                      |
 | Hooks                                   | ✅ (4 events)                                       | ✗                 | ◐                 | ✅                   |
 | Browser control                         | ✅ local Chromium                                   | ◐                 | ◐                 | ✅ (companion)       |
@@ -103,7 +110,7 @@ three are a standalone editor (**Cursor**), OpenAI's coding agent (**Codex**), a
 | Full on‑disk event transcripts          | ✅ (JSONL + export)                                 | ◐                 | ◐                 | ◐                    |
 
 **✅ supported · ◐ partial or different approach · ✗ not available.** Parley's column reflects
-the current code (v0.71.0). Competitor columns reflect publicly documented capabilities as of
+the current code (v1.2.0). Competitor columns reflect publicly documented capabilities as of
 early 2026 and are **best‑effort** — these tools move fast, so check their own docs for the
 latest. Parley's deliberate non‑goals (a trained Tab/next‑edit model, background/cloud agents,
 server‑side embeddings) follow from running on a shared gateway rather than dedicated
@@ -127,12 +134,15 @@ for the API itself**. Touchstone only gates the Parley web app where you create 
 > **Note on on‑demand installs.** To keep the VSIX tiny, two **opt‑in** features fetch
 > their heavy native runtime the first time you use them — nothing is installed unless
 > you turn them on:
+>
 > - the **local semantic `@codebase` index** installs an on‑device embedding runtime
 >   (`@xenova/transformers`, needs `npm` on PATH) into the extension's global storage;
 > - the **browser tools** (`@browser`, `browser_navigate`) install **Playwright** + a
->   headless Chromium the same way.
+>   headless Chromium the same way;
+> - the optional **nut.js** computer-use backend installs the same way, only after you
+>   accept its license in the first-run consent dialog.
 >
-> Both download from the public npm registry into the extension's private global storage
+> These download from the public npm registry into the extension's private global storage
 > (never your project), run fully on your machine, and are off by default. If your
 > environment disallows runtime installs, simply leave these features off — everything
 > else works without them.
@@ -248,8 +258,12 @@ In any tool mode the model runs an OpenAI tool‑calling loop. Built‑in tools:
 | `browser_*`                                          | Drive a local Chromium: `navigate`/`read`/`console`/`click`/`type`/`screenshot` (runs JS; installs on first use) |
 | `web_search`                                         | Search the web (see [Web search](#web-search))                                                                   |
 | `run_subagent`                                       | Delegate a scoped read-only investigation to a subagent (fresh context; returns only its report)                 |
+| `run_subagents`                                      | Run several **independent** read-only investigations **concurrently** (up to 5); reports come back aggregated    |
+| `remember`                                           | Save a durable project fact to `.parley/memory.md` (injected into future conversations)                          |
 | `update_plan`                                        | Maintain the live task checklist                                                                                 |
 | `mcp__<server>__<tool>`                              | Any tools from your configured [MCP servers](#mcp-servers)                                                       |
+
+Custom **subagent types** live in `.parley/agents/*.md` (frontmatter `description:` + optional `model:`; body = the subagent's system prompt); the agent can target one via `run_subagent`/`run_subagents`' `agent` parameter. Code blocks in **Chat**-mode replies also get an **Apply** button, and diagnostics offer **Fix with Parley** in the `Ctrl+.` lightbulb.
 
 **Activity output (Claude‑Code style).** As the agent works you see an **`⏺ action`**
 line followed by a muted **`⎿ result`** line — e.g. `⏺ Reading App.tsx` → `⎿ Read
@@ -390,20 +404,24 @@ Controlled by `parley.codebaseSearch.provider`:
 
 Type **`/`** in the composer for an autocomplete menu.
 
-| Command              | Effect                                                    |
-| -------------------- | --------------------------------------------------------- |
-| `/clear` (or `/new`) | Start a new conversation                                  |
-| `/compact`           | Summarize to free context (choose keep‑recent or all)     |
-| `/cost`              | Show this conversation's token/cost usage                 |
-| `/model`             | Switch the model                                          |
-| `/init`              | Create a project‑rules file (`AGENTS.md`)                 |
-| `/json`              | Make the **next** reply a JSON object (`response_format`) |
-| `/help`              | List commands                                             |
+| Command              | Effect                                                                                                    |
+| -------------------- | --------------------------------------------------------------------------------------------------------- |
+| `/clear` (or `/new`) | Start a new conversation                                                                                  |
+| `/compact`           | Summarize to free context (choose keep‑recent or all)                                                     |
+| `/cost`              | Show this conversation's token/cost usage                                                                 |
+| `/model`             | Switch the model                                                                                          |
+| `/compare [prompt]`  | Run a prompt on a **second model side by side**; adopt either reply (reuses your last message if omitted) |
+| `/verify [command]`  | **Fix until green** — run the project's tests, fix failures, repeat (agent modes)                         |
+| `/computer <task>`   | **Computer use** ⚠ — drive your mouse & keyboard for a desktop task (opt-in; see below)                   |
+| `/init`              | **Analyze the repo** and write a tailored `AGENTS.md` (static template in Chat/Plan mode)                 |
+| `/json`              | Make the **next** reply a JSON object (`response_format`)                                                 |
+| `/help`              | List commands                                                                                             |
 
-**Custom commands:** drop a `name.md` file in **`.parley/commands/`** (or
-`.claude/commands/`) and it becomes **`/name`**. The file body is used as the prompt,
-with **`$ARGS`** replaced by anything you type after the command. Custom commands
-appear in the `/` menu.
+**Custom commands:** drop a `name.md` file in **`.parley/commands/`** or
+`.claude/commands/`, or the global **`~/.parley/commands/`** / `~/.claude/commands/`
+(workspace wins on a name clash), and it becomes **`/name`**. The body is the prompt,
+with **`$ARGS`** replaced by anything typed after the command and **`$SELECTION`** by
+the active editor selection. Optional `description:` frontmatter shows in the `/` menu.
 
 ---
 
@@ -424,6 +442,52 @@ etc.) are refused everywhere — 📎, drops, and right‑click alike:
 | **Video** (mp4, mov, mkv, webm, avi…)                    | Via **ffmpeg** (Parley has no video type): choose **sample frames** (→ images), **extract audio** (→ `input_audio`), or **both**. Needs `ffmpeg`/`ffprobe` on PATH or `parley.video.ffmpegPath`. Tune with `parley.video.maxFrames` / `frameWidth` / `maxAudioSeconds`. Use the 📎 button (ffmpeg reads from disk). |
 
 Attachments show as removable chips and are cleared after sending.
+
+---
+
+## Voice & sound
+
+- **🎤 Voice input** — click the mic to record, click again to transcribe; the text lands at your cursor. Audio is captured and encoded to WAV locally, then transcribed by an audio-capable model (`parley.voice.model`, or the current one).
+- **🔊 Read aloud** — every assistant reply has a speak button (uses your OS text-to-speech voices — free, offline; code blocks are skipped). `parley.voice.autoRead` reads every reply automatically.
+- **🗣 Voice mode** — hands-free: recordings auto-send and replies are read aloud, so you can talk through a problem while reading code.
+- **Completion chime** — `parley.sound.chimeOnDone` plays a soft chime when a turn finishes while the window is unfocused (audio twin of the activity-bar unread badge).
+
+---
+
+## Screen capture
+
+- **📷 Screenshot** — pick any window or screen; one frame attaches as an image for a vision model. "Look at this error dialog / design / graph" without saving a file.
+- **🎥 Screen recording** — records your screen (60s max), sampling frames every few seconds **plus optional mic narration**; on stop, the frames and a `narration.wav` attach to the composer. Narrate a bug while reproducing it, then ask what went wrong. Video-only if the mic is unavailable.
+
+Both use the browser's capture APIs feeding the normal attachment pipeline — no ffmpeg, no files on disk.
+
+---
+
+## Computer use ⚠
+
+`/computer <task>` (or the 🖱️ composer button) lets Parley **control your real mouse and keyboard** to perform a desktop task: it screenshots the screen, decides one action at a time (click / type / key / scroll), executes it, and re-checks until done. This is the most powerful — and most dangerous — capability Parley ships, so it's wrapped in gates:
+
+- **Off by default** — enable `parley.computerUse.enabled`. A **first-run consent** dialog explains the feature and lets you pick a backend.
+- **Backends** (`parley.computerUse.backend`): **built-in** (Windows-only, PowerShell + .NET, no install) or **nut.js** (cross-platform; a native module under its own GPL-3.0 / paid-commercial license, installed on demand into global storage only after you accept its terms).
+- **Escape hatches:** a **corner-slam kill switch** (fling the mouse into any screen corner — works even when VS Code isn't focused), the **Stop** button, a per-run confirm, a step cap (`parley.computerUse.maxSteps`), an in-chat log of every action, and an optional **confirm-each-action** mode (`parley.computerUse.confirmEachAction`). The system prompt refuses destructive/irreversible actions and stops on unexpected screens or on-screen instructions.
+
+> Accuracy depends on the model's visual grounding — Claude models are trained for computer use and do best; others may misclick.
+
+---
+
+## Reviewing code (branch · staged · diagnostics)
+
+- **`Parley: Review Current Branch`** — diffs your branch against its merge-base with `main`/`master` and streams a severity-grouped review **plus a ready-to-paste PR title & description**.
+- **`Parley: Review Staged Changes`** (also in the Source Control ⋯ menu) — reviews exactly what you're about to commit, ending with a suggested commit message.
+- **`@git`** mention — the uncommitted diff, in-chat, for a quick look.
+- **Fix with Parley** — any diagnostic squiggle offers a Quick Fix (`Ctrl+.`) that sends the specific problems + code excerpt to the chat.
+- **Fix Last Terminal Command** — when a terminal command fails, a transient status-bar hint (and `Parley: Fix Last Terminal Command`) sends the command + output to the chat for a fix.
+
+---
+
+## Project memory (agent-maintained)
+
+When the agent learns a durable, non-obvious fact ("integration tests need Docker", "deploys run from `scripts/ship.ps1`", a preference you stated), it saves one line to **`.parley/memory.md`** via the `remember` tool — and every future conversation starts with that memory injected into the system prompt (like project rules). Review or prune it with **`Parley: Open Project Memory`**; it's plain markdown you own. Secrets and task-local trivia are excluded by design.
 
 ---
 
@@ -628,40 +692,45 @@ frontmatter‑less (or `alwaysApply: true`) rules always apply.
 
 ## Command reference
 
-| Command                                         | What it does                                                                   |
-| ----------------------------------------------- | ------------------------------------------------------------------------------ |
-| `Parley: Set API Key`                           | Store/verify your `sk-parley-…` key in SecretStorage                           |
-| `Parley: Open Chat Window`                      | Focus the Parley chat view                                                     |
-| `Parley: New Conversation in Tab`               | Open a parallel, independent conversation as an editor tab                     |
-| `Parley: New Conversation in New Window`        | Same, floated into a separate OS window                                        |
-| `Parley: New Conversation`                      | Save the current chat and start a fresh one                                    |
-| `Parley: Open Past Conversation`                | Reopen an archived conversation                                                |
-| `Parley: Open Conversations Folder`             | Reveal the auto‑saved transcripts                                              |
-| `Parley: Export Conversation`                   | Export to Markdown / plain text / JSON                                         |
-| `Parley: Compact Conversation`                  | Summarize history to free context                                              |
-| `Parley: Regenerate Last Response`              | Re‑run the last user message                                                   |
-| `Parley: Ask About Selection`                   | Ask about the current selection                                                |
-| `Parley: Explain Current File`                  | Explain the active file                                                        |
-| `Parley: Refactor Selection`                    | Refactor the selection (diff‑reviewed)                                         |
-| `Parley: Generate Tests`                        | Generate tests for the current file                                            |
-| `Parley: Fix Diagnostics`                       | Fix reported problems minimally                                                |
-| `Parley: Suggest Terminal Command`              | Suggest a shell command (manual confirm)                                       |
-| `Parley: Edit Selection (Inline)`               | Inline edit (`Ctrl+Alt+K` / `Cmd+Alt+K`)                                       |
-| `Parley: Revert Last Edit` / `Revert All Edits` | Undo checkpointed edits                                                        |
-| `Parley: Generate Image`                        | Generate an image with `gpt-image-1`                                           |
-| `Parley: Generate Commit Message`               | Commit message from the diff → Source Control                                  |
-| `Parley: Rebuild Codebase Index`                | Build the local semantic `@codebase` index                                     |
-| `Parley: Manage Allowed Commands`               | Review/remove commands approved via "Always Allow"                             |
-| `Parley: Select Output Style`                   | Choose how Parley communicates (Default/Concise/Explanatory/Learning + custom) |
-| `Parley: Show Context Breakdown`                | Per-component estimate of what fills the context window (also `/context`)      |
-| `Parley: Reconnect MCP Servers`                 | Restart MCP servers and show status                                            |
-| `Parley: Show Usage`                            | Real billed spend for the current month                                        |
-| `Parley: Set Token Limit`                       | Per‑conversation token budget                                                  |
-| `Parley: Toggle Inline Completion`              | Enable/disable ghost‑text completions                                          |
-| `Parley: Init Project Rules`                    | Scaffold an `AGENTS.md` rules file                                             |
-| `Parley: Run Diagnostics`                       | Probe the live API and report what works                                       |
-| `Parley: Open Debug Log`                        | Open the verbose debug log                                                     |
-| `Parley: Sign Out`                              | Clear the stored API key                                                       |
+| Command                                         | What it does                                                                       |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `Parley: Set API Key`                           | Store/verify your `sk-parley-…` key in SecretStorage                               |
+| `Parley: Open Chat Window`                      | Focus the Parley chat view                                                         |
+| `Parley: New Conversation in Tab`               | Open a parallel, independent conversation as an editor tab                         |
+| `Parley: New Conversation in New Window`        | Same, floated into a separate OS window                                            |
+| `Parley: New Conversation`                      | Save the current chat and start a fresh one                                        |
+| `Parley: Open Past Conversation`                | Reopen an archived conversation                                                    |
+| `Parley: Open Conversations Folder`             | Reveal the auto‑saved transcripts                                                  |
+| `Parley: Export Conversation`                   | Export to Markdown / plain text / JSON                                             |
+| `Parley: Compact Conversation`                  | Summarize history to free context                                                  |
+| `Parley: Regenerate Last Response`              | Re‑run the last user message                                                       |
+| `Parley: Ask About Selection`                   | Ask about the current selection                                                    |
+| `Parley: Explain Current File`                  | Explain the active file                                                            |
+| `Parley: Refactor Selection`                    | Refactor the selection (diff‑reviewed)                                             |
+| `Parley: Generate Tests`                        | Generate tests for the current file                                                |
+| `Parley: Fix Diagnostics`                       | Fix reported problems minimally (also "Fix with Parley" in the `Ctrl+.` lightbulb) |
+| `Parley: Fix Last Terminal Command`             | Send the last failed terminal command + output to the chat for a fix               |
+| `Parley: Suggest Terminal Command`              | Suggest a shell command (manual confirm)                                           |
+| `Parley: Review Current Branch`                 | Review the branch vs its merge-base + draft a PR description                       |
+| `Parley: Review Staged Changes`                 | Review the staged diff before committing (also in the SCM ⋯ menu)                  |
+| `Parley: File Edit History`                     | Every Parley edit to the current file, each openable as a before/after diff        |
+| `Parley: Open Project Memory`                   | Open `.parley/memory.md` to review/prune what the agent has remembered             |
+| `Parley: Edit Selection (Inline)`               | Inline edit (`Ctrl+Alt+K` / `Cmd+Alt+K`)                                           |
+| `Parley: Revert Last Edit` / `Revert All Edits` | Undo checkpointed edits                                                            |
+| `Parley: Generate Image`                        | Generate an image with `gpt-image-1`                                               |
+| `Parley: Generate Commit Message`               | Commit message from the diff → Source Control                                      |
+| `Parley: Rebuild Codebase Index`                | Build the local semantic `@codebase` index                                         |
+| `Parley: Manage Allowed Commands`               | Review/remove commands approved via "Always Allow"                                 |
+| `Parley: Select Output Style`                   | Choose how Parley communicates (Default/Concise/Explanatory/Learning + custom)     |
+| `Parley: Show Context Breakdown`                | Per-component estimate of what fills the context window (also `/context`)          |
+| `Parley: Reconnect MCP Servers`                 | Restart MCP servers and show status                                                |
+| `Parley: Show Usage`                            | Real billed spend for the current month                                            |
+| `Parley: Set Token Limit`                       | Per‑conversation token budget                                                      |
+| `Parley: Toggle Inline Completion`              | Enable/disable ghost‑text completions                                              |
+| `Parley: Init Project Rules`                    | Analyze the repo → tailored `AGENTS.md` (static template in Chat/Plan mode)        |
+| `Parley: Run Diagnostics`                       | Probe the live API and report what works                                           |
+| `Parley: Open Debug Log`                        | Open the verbose debug log                                                         |
+| `Parley: Sign Out`                              | Clear the stored API key                                                           |
 
 ---
 
@@ -691,6 +760,16 @@ frontmatter‑less (or `alwaysApply: true`) rules always apply.
 | `parley.codebaseSearch.provider`          | `lexical`                       | `lexical` or `local` (on‑device semantic)                                |
 | `parley.codebaseSearch.maxFiles`          | `4`                             | Files `@codebase` includes                                               |
 | `parley.commandTimeoutSeconds`            | `300`                           | Timeout for agent shell commands                                         |
+| `parley.verifyCommand`                    | `""`                            | Command `/verify` runs (empty = auto-detect `npm test`)                  |
+| `parley.statusBar.enabled`                | `true`                          | Status-bar ticker: sidebar tokens/cost + working spinner                 |
+| `parley.terminalFixHint.enabled`          | `true`                          | Transient "Fix with Parley" hint when a terminal command fails           |
+| `parley.voice.model`                      | `""`                            | Model for 🎤 transcription (empty = current; needs audio support)        |
+| `parley.voice.autoRead`                   | `false`                         | Read every reply aloud (OS text-to-speech)                               |
+| `parley.sound.chimeOnDone`                | `false`                         | Chime when a turn finishes while unfocused                               |
+| `parley.computerUse.enabled`              | `false`                         | ⚠ Allow `/computer` to control the mouse & keyboard                      |
+| `parley.computerUse.backend`              | `auto`                          | `auto` / `nutjs` / `powershell`                                          |
+| `parley.computerUse.maxSteps`             | `25`                            | Max actions per `/computer` run                                          |
+| `parley.computerUse.confirmEachAction`    | `false`                         | Confirm before every computer-use action                                 |
 | `parley.inlineCompletion.enabled`         | `true`                          | Ghost‑text completions                                                   |
 | `parley.inlineCompletion.model`           | `openai/gpt-5-nano`             | Completion model                                                         |
 | `parley.inlineCompletion.debounceMs`      | `350`                           | Idle delay before a completion                                           |
@@ -771,12 +850,13 @@ npm run package           # @vscode/vsce -> parley-vscode-<version>.vsix
 
 The extension is **bundled with esbuild** into two files: `dist/extension.js` (the
 extension host code) and `dist/webview.js` (the chat UI — `media/chat.js` plus
-`markdown-it` and `highlight.js`), so the VSIX stays small (~350 KB) and
-platform‑agnostic — no `node_modules` is shipped. The one optional runtime dependency
-(`@xenova/transformers`, for the local semantic `@codebase` index) is **not** in the
-package; it's installed on demand into global storage the first time you build the
-index. Press **F5** for an Extension Development Host (run `npm run watch` alongside
-to keep `dist/` fresh).
+`markdown-it` and `highlight.js`), so the VSIX stays small (~310 KB) and
+platform‑agnostic — no `node_modules` is shipped. The optional runtime dependencies
+(`@xenova/transformers` for the local semantic `@codebase` index, `playwright` for the
+browser tools, and `@nut-tree-fork/nut-js` for cross-platform computer use) are **not**
+in the package; each is installed on demand into global storage the first time you use
+that feature. Press **F5** for an Extension Development Host (run `npm run watch`
+alongside to keep `dist/` fresh).
 
 CI (GitHub Actions) typechecks, unit‑tests, bundles/packages, and runs VS Code
 integration tests on every push to `main` (Node 22); a `vX.Y.Z` tag publishes a GitHub
@@ -804,7 +884,10 @@ Marketplace / Open VSX).
 - `src/transcript/` — the full conversation transcript model, pure md/txt renderers, and
   the `.parley` on‑disk store (append‑only JSONL + index + state).
 - `src/completion/` — inline completion provider.
-- `src/context/` — context collection, ignore rules, sensitive‑file filtering.
+- `src/context/` — context collection, ignore rules, sensitive‑file filtering, project memory.
+- `src/computer/` — computer use: the JSON action protocol + parser, the swappable
+  control backends (PowerShell / nut.js), and the dispatcher.
+- `src/parley/untrusted.ts` — prompt-injection framing for untrusted tool/web/screen content.
 - `src/debug/debug.ts` — gated tracing.
 
 Authentication material uses `SecretStorage`; credentials and request headers are
