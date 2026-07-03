@@ -1436,6 +1436,152 @@ import hljs from 'highlight.js/lib/common';
   $('usage').addEventListener('click', () => toggleMenu('usage', openUsageMenu));
   $('compact').addEventListener('click', () => toggleMenu('compact', openCompactMenu));
   attachBtn.addEventListener('click', () => vscode.postMessage({ type: 'attachFiles' }));
+
+  // ---------- Voice input (🎤 → PCM capture → WAV → host transcription) ----------
+  // MediaRecorder emits webm/opus, which the gateway's input_audio doesn't accept —
+  // so capture raw PCM via WebAudio, downsample to 16 kHz mono, and encode WAV here.
+  const micBtn = $('mic');
+  let micState = 'idle'; // idle | recording | busy
+  let micStream = null;
+  let micCtx = null;
+  let micNode = null;
+  let micChunks = [];
+  let micRate = 48000;
+  let micTimer = null;
+  const MIC_MAX_MS = 60000;
+
+  function setMicState(state) {
+    micState = state;
+    if (!micBtn) {
+      return;
+    }
+    micBtn.classList.toggle('recording', state === 'recording');
+    micBtn.disabled = state === 'busy';
+    micBtn.textContent = state === 'recording' ? '⏺' : state === 'busy' ? '…' : '🎤';
+    micBtn.title =
+      state === 'recording'
+        ? 'Recording — click to stop and transcribe (max 60s)'
+        : state === 'busy'
+          ? 'Transcribing…'
+          : 'Voice input (click to record, click again to transcribe)';
+  }
+  function encodeWavBase64(chunks, inRate) {
+    let total = 0;
+    for (const c of chunks) {
+      total += c.length;
+    }
+    const merged = new Float32Array(total);
+    let off = 0;
+    for (const c of chunks) {
+      merged.set(c, off);
+      off += c.length;
+    }
+    // Linear-interpolation resample to 16 kHz mono.
+    const outRate = 16000;
+    const outLen = Math.max(1, Math.floor((merged.length * outRate) / inRate));
+    const pcm = new Int16Array(outLen);
+    for (let i = 0; i < outLen; i++) {
+      const pos = (i * inRate) / outRate;
+      const i0 = Math.floor(pos);
+      const i1 = Math.min(i0 + 1, merged.length - 1);
+      const s = merged[i0] + (merged[i1] - merged[i0]) * (pos - i0);
+      pcm[i] = Math.max(-32768, Math.min(32767, Math.round(s * 32767)));
+    }
+    const bytes = new Uint8Array(44 + pcm.length * 2);
+    const dv = new DataView(bytes.buffer);
+    const writeStr = (o, s) => {
+      for (let i = 0; i < s.length; i++) {
+        bytes[o + i] = s.charCodeAt(i);
+      }
+    };
+    writeStr(0, 'RIFF');
+    dv.setUint32(4, 36 + pcm.length * 2, true);
+    writeStr(8, 'WAVE');
+    writeStr(12, 'fmt ');
+    dv.setUint32(16, 16, true);
+    dv.setUint16(20, 1, true); // PCM
+    dv.setUint16(22, 1, true); // mono
+    dv.setUint32(24, outRate, true);
+    dv.setUint32(28, outRate * 2, true);
+    dv.setUint16(32, 2, true);
+    dv.setUint16(34, 16, true);
+    writeStr(36, 'data');
+    dv.setUint32(40, pcm.length * 2, true);
+    bytes.set(new Uint8Array(pcm.buffer), 44);
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    }
+    return btoa(bin);
+  }
+  function stopMicCapture() {
+    if (micTimer) {
+      clearTimeout(micTimer);
+      micTimer = null;
+    }
+    if (micNode) {
+      try {
+        micNode.disconnect();
+      } catch (e) {
+        /* already gone */
+      }
+      micNode = null;
+    }
+    if (micCtx) {
+      try {
+        micCtx.close();
+      } catch (e) {
+        /* already gone */
+      }
+      micCtx = null;
+    }
+    if (micStream) {
+      micStream.getTracks().forEach((t) => t.stop());
+      micStream = null;
+    }
+  }
+  async function startRecording() {
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e) {
+      vscode.postMessage({ type: 'voiceUnavailable' });
+      return;
+    }
+    micChunks = [];
+    micCtx = new AudioContext();
+    micRate = micCtx.sampleRate;
+    const source = micCtx.createMediaStreamSource(micStream);
+    micNode = micCtx.createScriptProcessor(4096, 1, 1);
+    micNode.onaudioprocess = (e) => {
+      if (micState === 'recording') {
+        micChunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+      }
+    };
+    source.connect(micNode);
+    micNode.connect(micCtx.destination);
+    setMicState('recording');
+    micTimer = setTimeout(() => finishRecording(), MIC_MAX_MS);
+  }
+  function finishRecording() {
+    stopMicCapture();
+    if (micChunks.length === 0) {
+      setMicState('idle');
+      return;
+    }
+    setMicState('busy');
+    const base64 = encodeWavBase64(micChunks, micRate);
+    micChunks = [];
+    vscode.postMessage({ type: 'voiceAudio', base64 });
+  }
+  if (micBtn) {
+    micBtn.addEventListener('click', () => {
+      if (micState === 'idle') {
+        void startRecording();
+      } else if (micState === 'recording') {
+        finishRecording();
+      }
+    });
+  }
   // The header session-cost readout is also a shortcut to the full usage view.
   if (sessionTokEl) {
     sessionTokEl.style.cursor = 'pointer';
@@ -1944,6 +2090,11 @@ import hljs from 'highlight.js/lib/common';
           items: [{ label: 'Change account id…', onPick: () => openUsageAccountInput(msg.accountId || '') }]
         });
       }
+      return;
+    }
+    if (msg.type === 'voiceStatus') {
+      // Transcription finished (the text arrives via a separate insertText) or failed.
+      setMicState('idle');
       return;
     }
     if (msg.type === 'insertText') {

@@ -123,6 +123,8 @@ interface ChatPanelMessage {
     | 'setUsageAccount'
     | 'compareRun'
     | 'comparePick'
+    | 'voiceAudio'
+    | 'voiceUnavailable'
     | 'setApiKey';
   readonly prompt?: string;
   readonly agentId?: string;
@@ -175,6 +177,8 @@ interface ChatPanelMessage {
   readonly otherId?: string;
   /** For 'comparePick': which column ('a' | 'b') to adopt. */
   readonly which?: string;
+  /** For 'voiceAudio': base64 WAV (16 kHz mono PCM) recorded in the webview. */
+  readonly base64?: string;
 }
 
 type RewindChoice = 'convo' | 'files' | 'both';
@@ -754,6 +758,14 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         return;
       case 'openUsage':
         await this.sendUsageInfo();
+        return;
+      case 'voiceAudio':
+        await this.transcribeVoice(message.base64 ?? '');
+        return;
+      case 'voiceUnavailable':
+        void vscode.window.showWarningMessage(
+          'Parley: microphone access is unavailable in this environment (VS Code may prompt for permission on first use — try again after granting it).'
+        );
         return;
       case 'compareRun':
         await this.runCompare(message.prompt ?? '', message.otherId ?? '');
@@ -2211,6 +2223,45 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       // No package.json — fall through.
     }
     return undefined;
+  }
+
+  /**
+   * Voice input: transcribe the webview-recorded WAV via an audio-capable model
+   * and splice the text into the composer at the caret (insertText).
+   */
+  private async transcribeVoice(base64: string): Promise<void> {
+    if (!base64) {
+      this.post({ type: 'voiceStatus', state: 'error' });
+      return;
+    }
+    const settings = this.getSettings();
+    const model = settings.voiceModel || this.selectedAgentId || settings.defaultAgent;
+    const prompt =
+      'Transcribe this audio exactly as spoken, in its original language. Output ONLY the transcription text — no preamble, no quotes, no commentary. If the audio is silent or unintelligible, output nothing.';
+    try {
+      const resp = await this.getProvider().sendMessage({
+        prompt,
+        messages: [{ role: 'user', content: prompt, createdAt: new Date().toISOString() }],
+        context: [],
+        agentId: model,
+        audios: [{ label: 'voice-input.wav', format: 'wav', base64 }]
+      });
+      if (resp.usage) {
+        this.accrueUsage(resp.usage.total, estimateCostUsd(model, resp.usage) ?? 0);
+      }
+      const text = resp.message.content.trim();
+      this.post({ type: 'voiceStatus', state: 'done' });
+      if (text) {
+        this.post({ type: 'insertText', text });
+      }
+      await this.postState(); // refresh header token/cost counters
+    } catch (error) {
+      this.post({ type: 'voiceStatus', state: 'error' });
+      const msg = error instanceof Error ? error.message.split('\n')[0].slice(0, 200) : 'unknown error';
+      void vscode.window.showWarningMessage(
+        `Parley: transcription failed (${msg}). Voice input needs an audio-capable model (OpenAI/Google) — set parley.voice.model if your current model doesn't accept audio.`
+      );
+    }
   }
 
   /** `/compare [prompt]` — offer the model list; the webview picker answers with 'compareRun'. */

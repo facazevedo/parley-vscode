@@ -43,6 +43,8 @@ export interface ParleySettings {
   readonly verifyCommand: string;
   /** Transient "Fix with Parley" status-bar hint when a terminal command fails. */
   readonly terminalFixHintEnabled: boolean;
+  /** Model used to transcribe voice input ('' = the current chat model). */
+  readonly voiceModel: string;
   readonly autoCompactTokens: number;
   readonly autoCompactPercent: number;
   readonly autoSaveConversations: boolean;
@@ -94,6 +96,7 @@ export function getSettings(): ParleySettings {
     statusBarEnabled: config.get<boolean>('statusBar.enabled', true),
     verifyCommand: config.get<string>('verifyCommand', '').trim(),
     terminalFixHintEnabled: config.get<boolean>('terminalFixHint.enabled', true),
+    voiceModel: config.get<string>('voice.model', '').trim(),
     autoCompactTokens: Math.max(0, Math.floor(config.get<number>('autoCompactTokens', 0))),
     autoCompactPercent: clampInt(config.get<number>('autoCompactPercent', 80), 0, 100),
     autoSaveConversations: config.get<boolean>('autoSaveConversations', true),

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.93.0
+
+### New — 🎤 voice input
+
+- A mic button in the composer: click to record (red pulse, 60s max), click again to transcribe — the text lands at your caret, ready to edit or send. Audio is captured as raw PCM in the webview and encoded to 16 kHz mono WAV locally (no MediaRecorder/webm, which the gateway wouldn't accept).
+- Transcription runs through an audio-capable model — the current chat model by default, or pin a cheap one with `parley.voice.model` (OpenAI/Google models accept audio). Tokens/cost accrue to the session counters like everything else; failures surface a clear warning (including the first-use microphone permission case).
+
 ## 0.92.0
 
 ### New — `Parley: Review Staged Changes` (in the Source Control menu)

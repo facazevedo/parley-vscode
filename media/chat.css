@@ -1122,6 +1122,21 @@ button:disabled {
   font-weight: 500;
 }
 
+/* Voice-input mic button: red pulse while recording. */
+#mic.recording {
+  color: var(--vscode-errorForeground, #f66);
+  animation: micpulse 1.2s ease-in-out infinite;
+}
+@keyframes micpulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
 .attachments {
   display: flex;
   flex-wrap: wrap;
