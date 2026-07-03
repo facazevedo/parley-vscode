@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.97.0
+
+### New — 📷 screenshot and 🎥 screen recording into the chat
+
+- **📷 Screenshot**: pick any window or screen (the OS share picker), and one frame lands in the chat as an image attachment — "look at this error dialog / design / graph" without saving a file. Works with vision models like everything else.
+- **🎥 Screen recording**: click to record (red pulse, 60s max, click ⏹ or the OS "stop sharing" bar to finish). While recording, frames are sampled every 4 seconds (up to 12, downscaled to ≤1280px JPEG) and your **mic narration** is captured — "with or without sound": if the mic permission is denied or unavailable, it records video-only. On stop, the frames and a `narration.wav` attach to the composer, ready to send to a vision(+audio) model: narrate a bug while reproducing it, and ask Parley what went wrong.
+- Both are pure webview capture (getDisplayMedia + canvas + the local WAV encoder) feeding the existing attachment pipeline — no ffmpeg, no files on disk, no new permissions beyond the OS pickers.
+
 ## 0.96.0
 
 ### New — voice output, hands-free voice mode, and a completion chime

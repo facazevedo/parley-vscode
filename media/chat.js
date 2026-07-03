@@ -1672,6 +1672,185 @@ import hljs from 'highlight.js/lib/common';
       }
     });
   }
+  // ---------- Screen capture (📷 one frame, 🎥 frames + mic narration) ----------
+  // getDisplayMedia lets the user pick any window/screen; a single frame becomes an
+  // image attachment, a recording becomes sampled frames (vision) + a WAV narration
+  // (both through the existing pasteFile attachment path — no new host plumbing).
+  const shotBtn = $('shot');
+  const recBtn = $('rec');
+  const REC_MAX_MS = 60000;
+  const REC_FRAME_EVERY_MS = 4000;
+  const REC_MAX_FRAMES = 12;
+  let recState = 'idle'; // idle | recording
+  let recStream = null;
+  let recVideo = null;
+  let recFrames = [];
+  let recFrameTimer = null;
+  let recStopTimer = null;
+  let recMicStream = null;
+  let recMicCtx = null;
+  let recMicNode = null;
+  let recMicChunks = [];
+  let recMicRate = 48000;
+
+  function frameFrom(video) {
+    const maxW = 1280;
+    const w = video.videoWidth || maxW;
+    const h = video.videoHeight || Math.round((maxW * 9) / 16);
+    const scale = Math.min(1, maxW / w);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(w * scale));
+    canvas.height = Math.max(1, Math.round(h * scale));
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', 0.75);
+  }
+  function videoElementFor(stream) {
+    return new Promise((resolve) => {
+      const v = document.createElement('video');
+      v.srcObject = stream;
+      v.muted = true;
+      v.onloadedmetadata = () => {
+        const p = v.play();
+        if (p && p.then) {
+          p.then(() => resolve(v)).catch(() => resolve(v));
+        } else {
+          resolve(v);
+        }
+      };
+    });
+  }
+  async function takeScreenshot() {
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+    } catch (e) {
+      return; // picker cancelled or capture unavailable
+    }
+    try {
+      const v = await videoElementFor(stream);
+      await new Promise((r) => setTimeout(r, 300)); // let the first frame paint
+      vscode.postMessage({ type: 'pasteFile', dataUri: frameFrom(v), name: 'screenshot.jpg' });
+    } finally {
+      stream.getTracks().forEach((t) => t.stop());
+    }
+  }
+  async function startScreenRecording() {
+    try {
+      recStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+    } catch (e) {
+      return; // picker cancelled
+    }
+    try {
+      recMicStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e) {
+      recMicStream = null; // no mic permission — record video-only
+    }
+    recFrames = [];
+    recMicChunks = [];
+    recVideo = await videoElementFor(recStream);
+    const snap = () => {
+      if (recState === 'recording' && recFrames.length < REC_MAX_FRAMES) {
+        try {
+          recFrames.push(frameFrom(recVideo));
+        } catch (e) {
+          /* frame not ready */
+        }
+      }
+    };
+    recState = 'recording';
+    setTimeout(snap, 350);
+    recFrameTimer = setInterval(snap, REC_FRAME_EVERY_MS);
+    if (recMicStream) {
+      recMicCtx = new AudioContext();
+      recMicRate = recMicCtx.sampleRate;
+      const src = recMicCtx.createMediaStreamSource(recMicStream);
+      recMicNode = recMicCtx.createScriptProcessor(4096, 1, 1);
+      recMicNode.onaudioprocess = (e) => {
+        if (recState === 'recording') {
+          recMicChunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+        }
+      };
+      src.connect(recMicNode);
+      recMicNode.connect(recMicCtx.destination);
+    }
+    if (recBtn) {
+      recBtn.classList.add('recording');
+      recBtn.textContent = '⏹';
+      recBtn.title = 'Stop recording and attach frames + narration';
+    }
+    recStopTimer = setTimeout(() => stopScreenRecording(), REC_MAX_MS);
+    const track = recStream.getVideoTracks()[0];
+    if (track) {
+      track.onended = () => stopScreenRecording(); // user ended sharing via the OS/browser bar
+    }
+  }
+  function stopScreenRecording() {
+    if (recState !== 'recording') {
+      return;
+    }
+    recState = 'idle';
+    clearInterval(recFrameTimer);
+    clearTimeout(recStopTimer);
+    try {
+      if (recVideo && recFrames.length < REC_MAX_FRAMES) {
+        recFrames.push(frameFrom(recVideo)); // closing frame
+      }
+    } catch (e) {
+      /* stream already gone */
+    }
+    if (recMicNode) {
+      try {
+        recMicNode.disconnect();
+      } catch (e) {
+        /* already gone */
+      }
+      recMicNode = null;
+    }
+    if (recMicCtx) {
+      try {
+        recMicCtx.close();
+      } catch (e) {
+        /* already gone */
+      }
+      recMicCtx = null;
+    }
+    if (recMicStream) {
+      recMicStream.getTracks().forEach((t) => t.stop());
+      recMicStream = null;
+    }
+    if (recStream) {
+      recStream.getTracks().forEach((t) => t.stop());
+      recStream = null;
+    }
+    recVideo = null;
+    if (recBtn) {
+      recBtn.classList.remove('recording');
+      recBtn.textContent = '🎥';
+      recBtn.title = 'Record your screen (frames + mic narration; click again to stop, max 60s)';
+    }
+    recFrames.forEach((dataUri, i) => {
+      vscode.postMessage({ type: 'pasteFile', dataUri, name: 'screencap-' + (i + 1) + '.jpg' });
+    });
+    if (recMicChunks.length) {
+      const base64 = encodeWavBase64(recMicChunks, recMicRate);
+      vscode.postMessage({ type: 'pasteFile', dataUri: 'data:audio/wav;base64,' + base64, name: 'narration.wav' });
+    }
+    recFrames = [];
+    recMicChunks = [];
+  }
+  if (shotBtn) {
+    shotBtn.addEventListener('click', () => void takeScreenshot());
+  }
+  if (recBtn) {
+    recBtn.addEventListener('click', () => {
+      if (recState === 'idle') {
+        void startScreenRecording();
+      } else {
+        stopScreenRecording();
+      }
+    });
+  }
+
   if (voiceModeBtn) {
     voiceModeBtn.addEventListener('click', () => {
       voiceMode = !voiceMode;

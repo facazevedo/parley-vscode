@@ -1168,8 +1168,9 @@ button:disabled {
   border-radius: 5px;
 }
 
-/* Voice-input mic button: red pulse while recording. */
-#mic.recording {
+/* Voice-input mic + screen-record buttons: red pulse while recording. */
+#mic.recording,
+#rec.recording {
   color: var(--vscode-errorForeground, #f66);
   animation: micpulse 1.2s ease-in-out infinite;
 }
