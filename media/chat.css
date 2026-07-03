@@ -550,6 +550,69 @@ button:disabled {
 }
 
 /* Inline diff card for applied edits */
+/* End-of-turn changed-files summary card */
+.changescard {
+  margin: 4px 0 12px;
+  border: 1px solid var(--vscode-editorWidget-border, rgba(127, 127, 127, 0.3));
+  border-radius: 8px;
+  overflow: hidden;
+}
+.changeshead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 0.84em;
+  background: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.12));
+  border-bottom: 1px solid var(--vscode-editorWidget-border, rgba(127, 127, 127, 0.3));
+}
+.changeslabel {
+  font-weight: 600;
+}
+.changescounts {
+  white-space: nowrap;
+}
+.diffadd {
+  color: var(--vscode-gitDecoration-addedResourceForeground, #4b9e4b);
+}
+.diffdel {
+  color: var(--vscode-gitDecoration-deletedResourceForeground, #c74e4e);
+}
+.reviewbtn {
+  font-size: 0.9em;
+  padding: 2px 12px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 4px;
+  background: var(--vscode-button-secondaryBackground, rgba(127, 127, 127, 0.25));
+  color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+  cursor: pointer;
+}
+.reviewbtn:hover {
+  background: var(--vscode-button-secondaryHoverBackground, rgba(127, 127, 127, 0.4));
+}
+.changeslist {
+  padding: 2px 0;
+}
+.changesrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px;
+  font-size: 0.82em;
+}
+.changespath {
+  flex: 1;
+  font-family: var(--vscode-editor-font-family, monospace);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.9;
+}
+.changesrowcounts {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 .diffcard {
   margin: 0 0 10px;
   border: 1px solid var(--vscode-editorWidget-border, rgba(127, 127, 127, 0.3));

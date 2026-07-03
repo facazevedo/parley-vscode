@@ -686,6 +686,63 @@ import hljs from 'highlight.js/lib/common';
     card.append(head, list);
     history.append(card);
   }
+  // End-of-turn "N files changed +X −Y" summary card with a Review action.
+  function renderChangesCard(entry) {
+    const files = entry.files || [];
+    const card = document.createElement('div');
+    card.className = 'changescard';
+
+    const head = document.createElement('div');
+    head.className = 'changeshead';
+    const label = document.createElement('span');
+    label.className = 'changeslabel';
+    label.textContent = files.length + ' file' + (files.length === 1 ? '' : 's') + ' changed';
+    const counts = document.createElement('span');
+    counts.className = 'changescounts';
+    const add = document.createElement('span');
+    add.className = 'diffadd';
+    add.textContent = '+' + (entry.added || 0);
+    const del = document.createElement('span');
+    del.className = 'diffdel';
+    del.textContent = '−' + (entry.removed || 0);
+    counts.append(add, document.createTextNode(' '), del);
+    const grow = document.createElement('span');
+    grow.className = 'grow';
+    const review = document.createElement('button');
+    review.type = 'button';
+    review.className = 'reviewbtn';
+    review.textContent = 'Review';
+    review.title = 'Open each changed file as a before/after diff';
+    review.addEventListener('click', () =>
+      vscode.postMessage({ type: 'reviewChanges', paths: files.map((f) => f.path) })
+    );
+    head.append(label, counts, grow, review);
+
+    const list = document.createElement('div');
+    list.className = 'changeslist';
+    files.forEach((f) => {
+      const row = document.createElement('div');
+      row.className = 'changesrow';
+      const p = document.createElement('span');
+      p.className = 'changespath';
+      p.textContent = f.path;
+      const c = document.createElement('span');
+      c.className = 'changesrowcounts';
+      c.innerHTML = '';
+      const a = document.createElement('span');
+      a.className = 'diffadd';
+      a.textContent = '+' + f.added;
+      const d = document.createElement('span');
+      d.className = 'diffdel';
+      d.textContent = '−' + f.removed;
+      c.append(a, document.createTextNode(' '), d);
+      row.append(p, c);
+      list.append(row);
+    });
+
+    card.append(head, list);
+    history.append(card);
+  }
   function renderTranscript(entries, pendingIds) {
     history.replaceChildren();
     pendingIds = pendingIds || [];
@@ -754,6 +811,8 @@ import hljs from 'highlight.js/lib/common';
         renderStaticDiffCard(e, pendingIds);
       } else if (e.kind === 'plan') {
         renderStaticPlan(e.steps || []);
+      } else if (e.kind === 'changes') {
+        renderChangesCard(e);
       } else if (e.kind === 'note') {
         const c = bubble('assistant', renderMd(e.text));
         c.parentNode.classList.add('note');

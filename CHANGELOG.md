@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.77.0
+
+### New — end-of-turn "changed files" summary with a Review action
+
+- When a turn edits files, Parley now shows a summary card — **"N files changed +X −Y"** with a per-file breakdown and a **Review** button — instead of the old plain-text "Changed N files" note. Counts are the true net diff of each file (its pre-turn checkpoint vs. its current contents). **Review** opens each changed file as a before/after diff (checkpointed original ↔ current). The card is part of the transcript, so it persists on reload and appears in Markdown/plain-text exports.
+
 ## 0.76.0
 
 ### New — manage conversations from the history panel; click the meter to compact

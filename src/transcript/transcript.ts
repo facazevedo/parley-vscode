@@ -38,6 +38,13 @@ export type TranscriptEntry =
       at: string;
     }
   | { kind: 'plan'; steps: Array<{ text: string; status: string }>; at: string }
+  | {
+      kind: 'changes';
+      files: Array<{ path: string; added: number; removed: number }>;
+      added: number;
+      removed: number;
+      at: string;
+    }
   | { kind: 'note'; text: string; images?: string[]; at: string };
 
 /**
@@ -160,6 +167,14 @@ export function transcriptToMarkdown(meta: TranscriptMeta, entries: readonly Tra
         }
         lines.push('');
         break;
+      case 'changes':
+        lines.push(
+          `**Changed ${e.files.length} file${e.files.length === 1 ? '' : 's'}** (+${e.added} −${e.removed})`,
+          '',
+          ...e.files.map((f) => `- \`${f.path}\` (+${f.added} −${f.removed})`),
+          ''
+        );
+        break;
       case 'note':
         lines.push(`_${e.text}_`, '');
         break;
@@ -206,6 +221,13 @@ export function transcriptToPlainText(meta: TranscriptMeta, entries: readonly Tr
         for (const s of e.steps) {
           const box = s.status === 'done' ? '[x]' : s.status === 'in_progress' ? '[~]' : '[ ]';
           lines.push(`    ${box} ${s.text}`);
+        }
+        lines.push('');
+        break;
+      case 'changes':
+        lines.push(`  Changed ${e.files.length} file(s)  (+${e.added} -${e.removed})`);
+        for (const f of e.files) {
+          lines.push(`    ${f.path}  (+${f.added} -${f.removed})`);
         }
         lines.push('');
         break;

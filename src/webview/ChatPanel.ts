@@ -17,6 +17,8 @@ import { terminalSnapshot } from '../context/terminalLog';
 import { isSensitiveFile } from '../context/sensitiveFileFilter';
 import { loadIgnoreMatcher, type IgnoreMatcher } from '../context/ignoreRules';
 import type { CheckpointStore } from '../diff/checkpoints';
+import { formatUnifiedDiff } from '../diff/lineDiff';
+import { decodeText } from '../diff/fileFormat';
 import type { Logger } from '../logging/logger';
 import { SYSTEM_PROMPT } from '../parley/ParleyClient';
 import type { ParleyProvider } from '../parley/ParleyProvider';
@@ -94,6 +96,7 @@ interface ChatPanelMessage {
     | 'renameConversation'
     | 'archiveConversation'
     | 'deleteConversation'
+    | 'reviewChanges'
     | 'copyText'
     | 'openLink'
     | 'mentionQuery'
@@ -123,6 +126,8 @@ interface ChatPanelMessage {
   readonly contextOptions?: ContextOptions;
   /** For 'historyList': 'repo' (default) or 'all' — which conversations to list. */
   readonly scope?: string;
+  /** For 'reviewChanges': workspace-relative paths to open as diffs. */
+  readonly paths?: string[];
   /** For 'openConversation': the `.parley` base dir the conversation lives under. */
   readonly base?: string;
   /** For 'mentionQuery': echo token so the webview can drop stale results. */
@@ -315,7 +320,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       postState: () => this.postState(),
       applyUsage: (tokens, cost) => this.accrueUsage(tokens, cost),
       getSessionTokens: () => this.sessionTokens,
-      runFollowUp: (prompt) => void this.runTurn(prompt, this.contextOptions)
+      runFollowUp: (prompt) => void this.runTurn(prompt, this.contextOptions),
+      recordChangesSummary: (cpStart) => this.recordChangesSummary(cpStart)
     });
     const settings = this.getSettings();
     // Restore the previous session if present, else fall back to settings defaults.
@@ -642,6 +648,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
           message.id ?? '',
           message.scope === 'all' ? 'all' : 'repo'
         );
+        return;
+      case 'reviewChanges':
+        await this.reviewChanges(message.paths ?? []);
         return;
       case 'agentChanged':
         this.selectedAgentId = message.agentId ?? this.selectedAgentId;
@@ -1127,6 +1136,68 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     await vscode.window.showInformationMessage(
       count > 0 ? `Parley reverted ${count} edit${count === 1 ? '' : 's'}.` : 'Parley: nothing to revert.'
     );
+  }
+
+  /**
+   * End-of-turn changed-files summary: for every file written since `cpStart`, diff
+   * the oldest checkpointed original against the file's current bytes to get net
+   * +/- counts, and record a `changes` transcript entry (the webview renders it as a
+   * card with a Review button). Also pushes a concise history line so the model and
+   * exports retain a mention. No-op when nothing changed.
+   */
+  public async recordChangesSummary(cpStart: number): Promise<void> {
+    const changed = this.checkpoints.changedFilesSince(cpStart);
+    if (changed.length === 0) {
+      return;
+    }
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+    const files: Array<{ path: string; added: number; removed: number }> = [];
+    let added = 0;
+    let removed = 0;
+    for (const cf of changed) {
+      let current = '';
+      try {
+        current = decodeText(await vscode.workspace.fs.readFile(vscode.Uri.file(cf.fsPath))).text;
+      } catch {
+        current = ''; // file was deleted this turn → counts as all-removed
+      }
+      const d = formatUnifiedDiff(cf.previous ?? '', current);
+      added += d.added;
+      removed += d.removed;
+      const rel = root ? path.relative(root.fsPath, cf.fsPath).replace(/\\/g, '/') : cf.fsPath;
+      files.push({ path: rel && !rel.startsWith('..') ? rel : cf.fsPath, added: d.added, removed: d.removed });
+    }
+    this.appendTranscript({ kind: 'changes', files, added, removed, at: new Date().toISOString() });
+    const note = `✏️ Changed ${files.length} file${files.length === 1 ? '' : 's'} (+${added} −${removed}). Run "Parley: Revert Last Edit" / "Revert All Edits" to undo.`;
+    this.history.push({ role: 'assistant', content: note, createdAt: new Date().toISOString() });
+  }
+
+  /** "Review" on the changes summary: open each changed file as a before/after diff. */
+  private async reviewChanges(paths: readonly string[]): Promise<void> {
+    if (paths.length === 0) {
+      return;
+    }
+    for (const rel of paths.slice(0, 12)) {
+      const uri = (await resolveAcrossRoots(rel)) ?? vscode.Uri.file(rel);
+      const original = this.checkpoints.originalOf(uri.fsPath);
+      try {
+        if (original !== undefined) {
+          // Left = checkpointed original, right = current file → a real before/after diff.
+          const beforeUri = vscode.Uri.parse(`parley-diff:${encodeURIComponent(uri.fsPath)}?${Date.now()}`);
+          this.commandDeps.diffProvider.set(beforeUri, original);
+          await vscode.commands.executeCommand(
+            'vscode.diff',
+            beforeUri,
+            uri,
+            `Parley changes: ${path.basename(uri.fsPath)}`
+          );
+        } else {
+          await vscode.commands.executeCommand('vscode.open', uri);
+        }
+      } catch {
+        // Best-effort — a missing/renamed file just isn't opened.
+      }
+    }
   }
 
   private async runTurn(prompt: string, contextOptions: ContextOptions): Promise<void> {

@@ -34,6 +34,8 @@ export interface TurnRunnerHost {
   getSessionTokens(): number;
   /** Run a queued steering message as a fresh turn once this one finishes. */
   runFollowUp(prompt: string): void;
+  /** Record the end-of-turn changed-files summary (files written since checkpoint `cpStart`). */
+  recordChangesSummary(cpStart: number): Promise<void>;
 }
 
 /** A fully-prepared turn: the panel assembles context/attachments; the runner drives the loop. */
@@ -351,12 +353,8 @@ export class AgentTurnRunner {
         continuation = decision.next.continuation;
       }
 
-      const changed = this.host.checkpoints.changedSince(cpStart);
-      if (changed.length > 0) {
-        const note = `✏️ Changed ${changed.length} file${changed.length === 1 ? '' : 's'}: ${changed.join(', ')}\n_Run "Parley: Revert Last Edit" or "Parley: Revert All Edits" to undo._`;
-        this.host.history.push({ role: 'assistant', content: note, createdAt: new Date().toISOString() });
-        this.host.recorder.append({ kind: 'note', text: note, at: new Date().toISOString() });
-      }
+      // End-of-turn changed-files summary card (per-file +/- counts + a Review action).
+      await this.host.recordChangesSummary(cpStart);
       this.busy = false;
       this.starting = false;
       this.abortController = undefined;

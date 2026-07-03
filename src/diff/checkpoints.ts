@@ -135,6 +135,32 @@ export class CheckpointStore {
     return [...new Set(names)];
   }
 
+  /**
+   * Files written at/after stack position `start`, each with the OLDEST pre-edit
+   * content captured in this window — so a caller can diff it against the file's
+   * current bytes for a net +/- summary of the turn.
+   */
+  public changedFilesSince(start: number): Array<{ fsPath: string; previous?: string }> {
+    const oldest = new Map<string, string | undefined>();
+    for (let i = Math.max(0, start); i < this.stack.length; i += 1) {
+      const cp = this.stack[i];
+      if (!oldest.has(cp.fsPath)) {
+        oldest.set(cp.fsPath, cp.previous);
+      }
+    }
+    return [...oldest.entries()].map(([fsPath, previous]) => ({ fsPath, previous }));
+  }
+
+  /** The oldest checkpointed pre-edit content still held for a path (for a review diff). */
+  public originalOf(fsPath: string): string | undefined {
+    for (const cp of this.stack) {
+      if (cp.fsPath === fsPath) {
+        return cp.previous;
+      }
+    }
+    return undefined;
+  }
+
   /** Revert every checkpointed write (most-recent first). Returns how many were reverted. */
   public revertAll(): Promise<number> {
     // One queued critical section for the whole drain, so a concurrent apply cannot
