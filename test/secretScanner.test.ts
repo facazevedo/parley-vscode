@@ -57,6 +57,23 @@ test('PEM redaction removes the key BODY and footer, not just the header (regres
   assert.equal(scanForSecrets(pem).filter((f) => f.type === 'private key block').length, 1);
 });
 
+test('two distinct PEM blocks in one file are both fully redacted (non-greedy per-block)', () => {
+  // A file with more than one key must have EACH block redacted — not just the first,
+  // and not one greedy blob that swallows the text between them.
+  const k1 = '-----BEGIN RSA PRIVATE KEY-----\nAAAAbodyoneAAAA\n-----END RSA PRIVATE KEY-----';
+  const k2 = '-----BEGIN EC PRIVATE KEY-----\nBBBBbodytwoBBBB\n-----END EC PRIVATE KEY-----';
+  const between = '\n\n# ordinary config line kept verbatim\n\n';
+  const { text, findings } = redactSecrets(k1 + between + k2);
+  assert.ok(!text.includes('AAAAbodyoneAAAA'), 'first key body removed');
+  assert.ok(!text.includes('BBBBbodytwoBBBB'), 'second key body removed');
+  assert.ok(text.includes('# ordinary config line kept verbatim'), 'text between keys is preserved (non-greedy)');
+  assert.equal(
+    findings.find((f) => f.type === 'private key block')?.count,
+    2,
+    'both blocks counted as separate findings'
+  );
+});
+
 test('redactSecrets is a no-op on clean text (same string, no findings)', () => {
   const clean = 'export const timeout = 30_000;';
   const { text, findings } = redactSecrets(clean);

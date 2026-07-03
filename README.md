@@ -124,6 +124,19 @@ The extension talks to Parley's **OpenAI‑compatible API** at
 `https://parley.api.mit.edu/v1` directly — **no browser/Touchstone step is needed
 for the API itself**. Touchstone only gates the Parley web app where you create the key.
 
+> **Note on on‑demand installs.** To keep the VSIX tiny, two **opt‑in** features fetch
+> their heavy native runtime the first time you use them — nothing is installed unless
+> you turn them on:
+> - the **local semantic `@codebase` index** installs an on‑device embedding runtime
+>   (`@xenova/transformers`, needs `npm` on PATH) into the extension's global storage;
+> - the **browser tools** (`@browser`, `browser_navigate`) install **Playwright** + a
+>   headless Chromium the same way.
+>
+> Both download from the public npm registry into the extension's private global storage
+> (never your project), run fully on your machine, and are off by default. If your
+> environment disallows runtime installs, simply leave these features off — everything
+> else works without them.
+
 ---
 
 ## Install
