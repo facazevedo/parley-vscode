@@ -39,6 +39,8 @@ export interface ParleySettings {
   readonly usageWarnUsd: number;
   /** Status-bar ticker with the sidebar conversation's tokens/cost. */
   readonly statusBarEnabled: boolean;
+  /** The shell command `/verify` runs ('' = auto-detect). */
+  readonly verifyCommand: string;
   readonly autoCompactTokens: number;
   readonly autoCompactPercent: number;
   readonly autoSaveConversations: boolean;
@@ -88,6 +90,7 @@ export function getSettings(): ParleySettings {
     tokenLimit: Math.max(0, Math.floor(config.get<number>('tokenLimit', 0))),
     usageWarnUsd: Math.max(0, config.get<number>('usageWarnUsd', 0) || 0),
     statusBarEnabled: config.get<boolean>('statusBar.enabled', true),
+    verifyCommand: config.get<string>('verifyCommand', '').trim(),
     autoCompactTokens: Math.max(0, Math.floor(config.get<number>('autoCompactTokens', 0))),
     autoCompactPercent: clampInt(config.get<number>('autoCompactPercent', 80), 0, 100),
     autoSaveConversations: config.get<boolean>('autoSaveConversations', true),

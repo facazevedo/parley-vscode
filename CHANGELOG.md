@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.87.0
+
+### New — `/verify`: fix until green
+
+- **`/verify`** (agent modes only) runs the project's check command, and on failure the agent reads the output, makes the smallest safe fix, and re-runs — looping until the command passes or it explains what's blocking. Explicitly instructed never to weaken or delete tests to force a pass. All the usual safety rails apply: command approval in Ask/Edit modes, checkpointed (revertible) edits, bounded rounds, and Stop.
+- Command resolution: `/verify <command>` inline → `parley.verifyCommand` setting → auto-detect (`npm test` when the workspace `package.json` has a real test script). In Chat/Plan mode it politely points you to an agent mode instead.
+
 ## 0.86.0
 
 ### New — Parley editor submenu + getting-started walkthrough

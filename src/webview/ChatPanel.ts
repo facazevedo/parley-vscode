@@ -1015,6 +1015,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       case 'compare':
         await this.startCompare(input);
         return true;
+      case 'verify':
+        await this.startVerify(input);
+        return true;
       case 'context':
         await this.showContextBreakdown();
         return true;
@@ -1049,7 +1052,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         this.history.push({
           role: 'assistant',
           content:
-            '**Slash commands**\n- `/clear` (or `/new`) — start a new conversation\n- `/compact` — summarize to free up context (choose keep-recent or all)\n- `/context` — breakdown of what is filling the context window\n- `/cost` — show this conversation\'s token/cost usage\n- `/model` — switch the model\n- `/compare [prompt]` — run a prompt on a second model, side by side (reuses your last message if omitted)\n- `/init` — create a project rules file (AGENTS.md)\n- `/json` — make the next reply a JSON object\n- `/help` — this list\n\n**Custom commands:** add a `name.md` file under `.parley/commands/` or `.claude/commands/` (workspace), or `~/.parley/commands/` / `~/.claude/commands/` (global — workspace wins on a name clash) and it becomes `/name` — its text is the prompt, with `$ARGS` replaced by anything typed after the command and `$SELECTION` by the active editor selection. Optional `description:` frontmatter shows in the slash menu.\n\n**Custom subagents:** add a `name.md` under `.parley/agents/` (frontmatter `description:` and optional `model:`; body = its extra system prompt) and the agent can delegate read-only investigations to it via run_subagent.\n\nMost actions also have commands in the Command Palette (search "Parley").',
+            '**Slash commands**\n- `/clear` (or `/new`) — start a new conversation\n- `/compact` — summarize to free up context (choose keep-recent or all)\n- `/context` — breakdown of what is filling the context window\n- `/cost` — show this conversation\'s token/cost usage\n- `/model` — switch the model\n- `/compare [prompt]` — run a prompt on a second model, side by side (reuses your last message if omitted)\n- `/verify [command]` — run the project tests and fix failures until green (agent modes only)\n- `/init` — create a project rules file (AGENTS.md)\n- `/json` — make the next reply a JSON object\n- `/help` — this list\n\n**Custom commands:** add a `name.md` file under `.parley/commands/` or `.claude/commands/` (workspace), or `~/.parley/commands/` / `~/.claude/commands/` (global — workspace wins on a name clash) and it becomes `/name` — its text is the prompt, with `$ARGS` replaced by anything typed after the command and `$SELECTION` by the active editor selection. Optional `description:` frontmatter shows in the slash menu.\n\n**Custom subagents:** add a `name.md` under `.parley/agents/` (frontmatter `description:` and optional `model:`; body = its extra system prompt) and the agent can delegate read-only investigations to it via run_subagent.\n\nMost actions also have commands in the Command Palette (search "Parley").',
           createdAt: new Date().toISOString()
         });
         await this.postState();
@@ -2143,6 +2146,64 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       return;
     }
     await this.compactConversation(pick === KEEP ? 4 : 0);
+  }
+
+  /**
+   * `/verify [command]` — fix-until-green: the agent runs the project's check
+   * command, fixes failures, and re-runs until it passes (bounded by the usual
+   * tool-round/auto-continue limits; Stop and checkpoints apply as always).
+   */
+  private async startVerify(input: string): Promise<void> {
+    const pushNote = async (text: string): Promise<void> => {
+      this.history.push({ role: 'assistant', content: text, createdAt: new Date().toISOString() });
+      this.appendTranscript({ kind: 'note', text, at: new Date().toISOString() });
+      await this.postState();
+    };
+    if (this.mode === 'chat' || this.mode === 'plan') {
+      await pushNote(
+        '🧪 `/verify` needs an agent mode that can run commands and edit files — switch to **Ask before edits**, **Edit automatically**, **Auto**, or **Full access** first.'
+      );
+      return;
+    }
+    const args = input.replace(/^\/\S+\s*/, '').trim();
+    let cmd = args || this.getSettings().verifyCommand;
+    if (!cmd) {
+      cmd = (await this.detectTestCommand()) ?? '';
+    }
+    if (!cmd) {
+      await pushNote(
+        '🧪 No test command found — run `/verify <command>` (e.g. `/verify pytest -q`) or set `parley.verifyCommand`.'
+      );
+      return;
+    }
+    const prompt =
+      `Verify the project and fix it until it passes ("fix until green").\n\n` +
+      `1. Run the check command with run_command: \`${cmd}\`\n` +
+      `2. If it fails, read the failure output carefully, inspect the relevant files, and make the SMALLEST safe fix. Do not weaken or delete tests to make them pass — fix the code under test (only fix a test when it is genuinely wrong, and say so).\n` +
+      `3. Re-run the command and repeat until it passes.\n` +
+      `4. Finish with a short summary: what failed, what you changed (files), and the tail of the final passing output.\n\n` +
+      `If the same failure persists after several attempts, or the failure is environmental (missing dependency, no network), stop and explain what is blocking instead of thrashing.`;
+    await this.runTurn(prompt, this.contextOptions);
+  }
+
+  /** Best-effort test-command detection for `/verify` (npm test when package.json has a real test script). */
+  private async detectTestCommand(): Promise<string | undefined> {
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+    if (!root) {
+      return undefined;
+    }
+    try {
+      const raw = Buffer.from(await vscode.workspace.fs.readFile(vscode.Uri.joinPath(root, 'package.json'))).toString(
+        'utf8'
+      );
+      const pkg = JSON.parse(raw) as { scripts?: Record<string, string> };
+      if (pkg.scripts?.test && !/no test specified/i.test(pkg.scripts.test)) {
+        return 'npm test';
+      }
+    } catch {
+      // No package.json — fall through.
+    }
+    return undefined;
   }
 
   /** `/compare [prompt]` — offer the model list; the webview picker answers with 'compareRun'. */

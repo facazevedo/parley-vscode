@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.86.0",
+  "version": "0.87.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -509,6 +509,11 @@
           "default": 0,
           "minimum": 0,
           "markdownDescription": "Show a one-time warning in the conversation once its **estimated** spend crosses this many US dollars (a soft budget — the turn still continues). **`0` disables it (default).** For your real billed spend, use the 💰 button or `Parley: Show Usage`."
+        },
+        "parley.verifyCommand": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "The shell command `/verify` runs to check the project (e.g. `npm test`, `pytest -q`, `cargo test`). Leave empty to auto-detect (`npm test` when the workspace `package.json` has a `test` script) or pass one inline: `/verify cargo test`."
         },
         "parley.statusBar.enabled": {
           "type": "boolean",
