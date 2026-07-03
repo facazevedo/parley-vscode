@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.84.0
+
+### New — status-bar cost ticker + unread-reply badge
+
+- **Status bar**: a right-side item shows the sidebar conversation's session tokens and estimated cost (`✦ 12k · ~$0.42`), flipping to a spinner ("Parley working…") while a turn runs — including during subagent activity, which the webview header previously under-reported live. Click it to focus the chat. Toggle with `parley.statusBar.enabled` (default on). Tab conversations don't drive it — they're visible editors with their own header.
+- **Activity-bar badge**: when a reply finishes while the Parley view is hidden, the Parley icon gets a numbered badge (like unread counts); it accumulates per finished turn and clears the moment you open the view.
+
 ## 0.83.0
 
 ### New — custom subagents (`.parley/agents/*.md`)

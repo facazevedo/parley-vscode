@@ -270,6 +270,11 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private promptHistory: string[] = [];
   // Per-turn snapshot of `.parley/agents` custom subagent types (loaded in runTurn).
   private subagentTypes: readonly SubagentType[] = [];
+  // Assigned by extension.ts for the SIDEBAR panel only — drives the status-bar ticker.
+  public statusSink?: (s: { sessionTokens: number; sessionCostUsd: number; busy: boolean }) => void;
+  // The sidebar view (typed, unlike `view`) — for the unread-replies badge.
+  private sidebarView?: vscode.WebviewView;
+  private unreadTurns = 0;
   private embeddingIndex?: EmbeddingIndex; // lazy local semantic index for @codebase
   private attachments: PendingAttachment[] = [];
   // Workspace file/folder candidates for the @-mention autocomplete (short TTL so
@@ -572,6 +577,15 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   public resolveWebviewView(webviewView: vscode.WebviewView): void {
     ChatPanel.activeInstance = this;
     this.view = webviewView;
+    this.sidebarView = webviewView;
+    this.disposables.push(
+      webviewView.onDidChangeVisibility(() => {
+        if (webviewView.visible) {
+          this.unreadTurns = 0;
+          webviewView.badge = undefined;
+        }
+      })
+    );
     const webview = webviewView.webview;
     webview.options = {
       enableScripts: true,
@@ -866,7 +880,13 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         `Parley: this conversation is at ~${formatUsd(this.sessionCost)} (threshold ${formatUsd(warnUsd)}).`
       );
     }
+    this.notifyStatus();
     return { sessionTokens: this.sessionTokens, sessionCostUsd: this.sessionCost };
+  }
+
+  /** Push tokens/cost/busy to the status-bar ticker (sidebar instance only). */
+  private notifyStatus(): void {
+    this.statusSink?.({ sessionTokens: this.sessionTokens, sessionCostUsd: this.sessionCost, busy: this.busy });
   }
 
   /** Exact prompt-token count for the current history via the gateway, falling back to the heuristic. */
@@ -1470,6 +1490,15 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       useStream,
       turnTools
     });
+
+    // A reply finished while the sidebar is hidden → badge the activity-bar icon.
+    if (this.sidebarView && !this.sidebarView.visible) {
+      this.unreadTurns += 1;
+      this.sidebarView.badge = {
+        value: this.unreadTurns,
+        tooltip: `${this.unreadTurns} Parley repl${this.unreadTurns === 1 ? 'y' : 'ies'} finished while the view was hidden`
+      };
+    }
 
     // Plan mode: open the plan as an editable document and offer to build it
     // (Claude-Code style — your edited version is what gets implemented).
@@ -3077,6 +3106,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
 
   private async postState(): Promise<void> {
     this.save();
+    this.notifyStatus(); // busy flips and counter resets all funnel through here
     const hasKey = Boolean(await this.commandDeps.auth.getToken());
     const model = this.selectedAgentId || this.getSettings().defaultAgent;
     const window = contextWindowFor(model);

@@ -17,6 +17,7 @@ import { registerSignOutCommand } from './commands/signOut';
 import { registerSuggestTerminalCommand } from './commands/suggestTerminalCommand';
 import { registerToggleInlineCompletionCommand } from './commands/toggleInlineCompletion';
 import { ParleyInlineCompletionProvider } from './completion/inlineCompletionProvider';
+import { ParleyStatusBar } from './statusBar';
 import { activateRecentEdits } from './completion/recentEdits';
 import { activateTerminalLog } from './context/terminalLog';
 import { getSettings } from './config/settings';
@@ -54,6 +55,9 @@ export function activate(context: vscode.ExtensionContext): void {
   activateRecentEdits(context); // recent-edit context for ghost-text completions
   void mcp.start(settings.mcpServers);
 
+  const statusBar = new ParleyStatusBar(() => settings.statusBarEnabled);
+  context.subscriptions.push(statusBar);
+
   const refreshConfiguration = (): void => {
     const prevMcp = JSON.stringify(settings.mcpServers);
     settings = getSettings();
@@ -63,6 +67,7 @@ export function activate(context: vscode.ExtensionContext): void {
     if (JSON.stringify(settings.mcpServers) !== prevMcp) {
       void mcp.start(settings.mcpServers);
     }
+    statusBar.refresh();
   };
 
   context.subscriptions.push(
@@ -95,6 +100,8 @@ export function activate(context: vscode.ExtensionContext): void {
   );
   // Route prompt-style commands into the chat panel so replies stream in-conversation.
   commandDeps.runPrompt = (prompt, options) => chatPanel.submitExternalPrompt(prompt, options);
+  // Only the sidebar conversation drives the status-bar ticker (tab chats are visible editors).
+  chatPanel.statusSink = (s) => statusBar.update(s);
   // Generated images render inline in the chat (in whichever chat is active).
   commandDeps.showImage = (dataUri, label) => (ChatPanel.current ?? chatPanel).showGeneratedImage(dataUri, label);
   // Palette commands act on the last-focused chat (sidebar or tab).

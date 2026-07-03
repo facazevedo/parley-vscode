@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.83.0",
+  "version": "0.84.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -415,6 +415,11 @@
           "default": 0,
           "minimum": 0,
           "markdownDescription": "Show a one-time warning in the conversation once its **estimated** spend crosses this many US dollars (a soft budget — the turn still continues). **`0` disables it (default).** For your real billed spend, use the 💰 button or `Parley: Show Usage`."
+        },
+        "parley.statusBar.enabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show a status-bar item with the sidebar conversation's session tokens and estimated cost (and a spinner while Parley is working). Click it to open the chat."
         },
         "parley.autoCompactTokens": {
           "type": "number",
