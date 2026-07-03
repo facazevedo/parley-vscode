@@ -99,6 +99,7 @@ interface ChatPanelMessage {
     | 'openLink'
     | 'mentionQuery'
     | 'applyChange'
+    | 'applyCodeBlock'
     | 'dismissChange'
     | 'reviewChange'
     | 'unqueue'
@@ -155,6 +156,8 @@ interface ChatPanelMessage {
   readonly confirmed?: boolean;
   /** For 'setUsageAccount': the account id entered in the webview usage popover. */
   readonly accountId?: string;
+  /** For 'applyCodeBlock': the fence language (informational). */
+  readonly lang?: string;
 }
 
 type RewindChoice = 'convo' | 'files' | 'both';
@@ -252,6 +255,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private highUsageWarned = false; // one-shot soft-budget notice per conversation (parley.usageWarnUsd)
   private jsonNext = false; // one-shot: request the next reply as a JSON object (/json)
   private customCommands: CustomCommand[] = []; // user-defined /commands (workspace + global dirs)
+  // Last real editor, for actions invoked while the webview has focus (activeTextEditor
+  // can be transiently undefined then).
+  private lastActiveEditor?: vscode.TextEditor;
   private embeddingIndex?: EmbeddingIndex; // lazy local semantic index for @codebase
   private attachments: PendingAttachment[] = [];
   // Workspace file/folder candidates for the @-mention autocomplete (short TTL so
@@ -410,6 +416,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         // `undefined` also fires transiently when focus moves to a webview — keep the
         // last known selection then instead of flickering the pill away.
         if (editor) {
+          this.lastActiveEditor = editor;
           postSelection();
         }
       }),
@@ -766,6 +773,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         await this.executor.applyPendingChange(message.id ?? '');
         return;
       }
+      case 'applyCodeBlock':
+        await this.applyCodeBlock(message.text ?? '');
+        return;
       case 'dismissChange': {
         if (this.executor.rejectApproval(message.id ?? '')) {
           return;
@@ -1024,6 +1034,42 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     }
     await this.runTurn(expanded, this.contextOptions);
     return true;
+  }
+
+  /**
+   * "Apply" on a chat code block: propose replacing the editor's selection (or
+   * inserting at the cursor) with the block, via the existing proposed-change
+   * card — previewed in-chat, applied through checkpoints (revertible).
+   */
+  private async applyCodeBlock(code: string): Promise<void> {
+    if (!code) {
+      return;
+    }
+    const editor = vscode.window.activeTextEditor ?? this.lastActiveEditor;
+    if (!editor || editor.document.isClosed || editor.document.uri.scheme !== 'file') {
+      void vscode.window.showWarningMessage('Parley: focus a file editor to apply a code block.');
+      return;
+    }
+    if (!vscode.workspace.getWorkspaceFolder(editor.document.uri)) {
+      void vscode.window.showWarningMessage('Parley: can only apply code blocks to files inside the workspace.');
+      return;
+    }
+    // The apply pipeline reads/writes disk — sync the buffer first so the diff is truthful.
+    if (editor.document.isDirty) {
+      await editor.document.save();
+    }
+    const doc = editor.document;
+    const original = doc.getText();
+    const sel = editor.selection;
+    const start = doc.offsetAt(sel.start);
+    const end = doc.offsetAt(sel.end);
+    // Replacing a selection: drop the block's trailing newline to avoid a spurious blank line.
+    const snippet = sel.isEmpty ? code : code.replace(/\n$/, '');
+    const proposed = original.slice(0, start) + snippet + original.slice(end);
+    if (proposed === original) {
+      return;
+    }
+    this.executor.postProposedChange({ filePath: doc.uri.fsPath, originalText: original, proposedText: proposed });
   }
 
   /**

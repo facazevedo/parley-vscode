@@ -231,14 +231,32 @@ import hljs from 'highlight.js/lib/common';
     }
     return html;
   }
+  // Fence languages where "apply to editor" makes no sense (prose, terminal output, diffs).
+  const SKIP_APPLY_LANGS = new Set(['diff', 'text', 'plaintext', 'txt', 'console', 'output', 'markdown', 'md']);
   function enhanceContent(contentEl) {
-    // Copy button on each fenced block. The button lives outside the scrollable <pre>
-    // so it stays pinned while long code lines are scrolled horizontally.
+    // Copy (and Apply) buttons on each fenced block. The buttons live outside the
+    // scrollable <pre> so they stay pinned while long code lines are scrolled horizontally.
     contentEl.querySelectorAll('pre').forEach((pre) => {
       const wrapper = document.createElement('div');
       wrapper.className = 'codeblock';
       pre.parentNode.insertBefore(wrapper, pre);
       wrapper.appendChild(pre);
+
+      const codeEl = pre.querySelector('code');
+      const codeText = codeEl ? codeEl.textContent : pre.textContent;
+      const lang = ((/language-([\w#+-]+)/.exec(codeEl ? codeEl.className : '') || [])[1] || '').toLowerCase();
+      if (codeText.trim() && !SKIP_APPLY_LANGS.has(lang)) {
+        const apply = document.createElement('button');
+        apply.type = 'button';
+        apply.className = 'applycode';
+        apply.title = 'Apply to editor (replaces the selection, or inserts at the cursor)';
+        apply.setAttribute('aria-label', 'Apply code to editor');
+        apply.textContent = 'Apply';
+        apply.addEventListener('click', () => {
+          vscode.postMessage({ type: 'applyCodeBlock', text: codeText, lang });
+        });
+        wrapper.appendChild(apply);
+      }
 
       const btn = document.createElement('button');
       btn.type = 'button';
@@ -247,8 +265,7 @@ import hljs from 'highlight.js/lib/common';
       btn.setAttribute('aria-label', 'Copy code');
       btn.innerHTML = COPY_SVG;
       btn.addEventListener('click', () => {
-        const code = pre.querySelector('code');
-        vscode.postMessage({ type: 'copyText', text: code ? code.textContent : pre.textContent });
+        vscode.postMessage({ type: 'copyText', text: codeText });
         btn.classList.add('copied');
         btn.innerHTML = '✓';
         setTimeout(() => {

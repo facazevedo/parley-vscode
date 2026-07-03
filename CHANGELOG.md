@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.80.0
+
+### New — Apply button on chat code blocks
+
+- Fenced code blocks in assistant replies now have an **Apply** button next to Copy: it proposes replacing the active editor's selection (or inserting at the cursor when nothing is selected) with the block, shown as the usual in-chat diff card — you preview the exact change and confirm, and the edit goes through checkpoints (`Parley: Revert Last Edit` works). Model-free and instant: what you see in the diff is exactly what's written.
+- Skipped for prose/terminal fences (`text`, `diff`, `console`, `markdown`, …). If the target file has unsaved changes it is saved first so the diff is truthful. Editors outside the workspace (or no editor) get a clear warning instead of a card.
+
 ## 0.79.0
 
 ### Improved — custom slash commands: descriptions, $SELECTION, global commands
