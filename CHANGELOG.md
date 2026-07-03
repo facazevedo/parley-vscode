@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.0
+
+### Hardened — computer-use safety (kill switch + confirm-each-action)
+
+- **Corner-slam kill switch**: during a `/computer` run, fling your mouse into any screen corner to abort immediately — this works even when VS Code isn't the focused window (where the Stop button is out of reach). It's polled between actions and every 250ms during the settle wait, on both backends (nut.js reads the cursor in-process; PowerShell via `GetCursorPos`).
+- **Confirm-each-action mode** (`parley.computerUse.confirmEachAction`, off by default): approve every click/type/key before it runs — training wheels for building trust in the feature.
+- The start banner now names both escape hatches. These close the biggest safety gap in the most powerful capability Parley ships.
+
+_Milestone: 1.0.0 marks a stable, documented surface — see the refreshed README for the full feature set built across 0.78–1.0._
+
 ## 0.99.1
 
 ### New — 🖱️ computer-control button in the composer

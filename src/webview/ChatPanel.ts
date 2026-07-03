@@ -2363,10 +2363,34 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     }
 
     const maxSteps = this.getSettings().computerUseMaxSteps;
+    const confirmEach = this.getSettings().computerUseConfirmEach;
     const model = this.selectedAgentId || this.getSettings().defaultAgent;
     const systemExtra = COMPUTER_USE_SYSTEM;
     const historyLines: string[] = [];
-    await note(`🖥 Computer use started: _${task}_`);
+    // Corner-slam kill switch: fling the pointer into any screen corner to abort,
+    // even when VS Code isn't focused (the Stop button can't be reached then).
+    const cornerSlam = async (shot: { left: number; top: number; realW: number; realH: number }): Promise<boolean> => {
+      if (!backend.getCursor) {
+        return false;
+      }
+      let pos: { x: number; y: number };
+      try {
+        pos = await backend.getCursor();
+      } catch {
+        return false;
+      }
+      const t = 8;
+      const corners = [
+        [shot.left, shot.top],
+        [shot.left + shot.realW, shot.top],
+        [shot.left, shot.top + shot.realH],
+        [shot.left + shot.realW, shot.top + shot.realH]
+      ];
+      return corners.some(([cx, cy]) => Math.abs(pos.x - cx) <= t && Math.abs(pos.y - cy) <= t);
+    };
+    await note(
+      `🖥 Computer use started: _${task}_\n\n**Kill switch:** fling your mouse into any screen corner to abort${confirmEach ? '' : ', or press Stop'}.`
+    );
 
     await this.turns.runExternal(async (signal) => {
       let consecutiveErrors = 0;
@@ -2432,6 +2456,21 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         if (action.type === 'done' || action.type === 'abort') {
           return;
         }
+        if (await cornerSlam(shot)) {
+          await note('🖥 Kill switch — stopped (mouse in a screen corner).');
+          return;
+        }
+        if (confirmEach) {
+          const go = await vscode.window.showWarningMessage(
+            `Parley wants to: ${desc}. Allow this action?`,
+            { modal: true },
+            'Do it'
+          );
+          if (go !== 'Do it') {
+            await note('🖥 Computer use stopped (action not confirmed).');
+            return;
+          }
+        }
         try {
           await backend.runAction(action, (x, y) => ({
             x: Math.round(shot.left + x * (shot.realW / shot.shownW)),
@@ -2443,8 +2482,22 @@ export class ChatPanel implements vscode.WebviewViewProvider {
           );
           return;
         }
-        // Let the UI settle before the next capture; also a beat for the user to react.
-        await new Promise((r) => setTimeout(r, action.type === 'wait' ? action.ms : 700));
+        // Settle before the next capture, polling the kill switch so a corner-slam
+        // aborts within the wait window rather than only at the next loop top.
+        const settleMs = action.type === 'wait' ? action.ms : 700;
+        const deadline = Date.now() + settleMs;
+        let killed = false;
+        while (Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 250));
+          if (signal.aborted || (await cornerSlam(shot))) {
+            killed = true;
+            break;
+          }
+        }
+        if (killed) {
+          await note('🖥 Kill switch — stopped.');
+          return;
+        }
       }
       await note(`🖥 Reached the ${maxSteps}-step limit — stopping. Re-run \`/computer\` to continue.`);
     });

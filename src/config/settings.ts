@@ -55,6 +55,8 @@ export interface ParleySettings {
   readonly computerUseMaxSteps: number;
   /** Which control backend `/computer` uses: 'auto' | 'nutjs' | 'powershell'. */
   readonly computerUseBackend: string;
+  /** Confirm each computer-use action before it runs (training wheels). */
+  readonly computerUseConfirmEach: boolean;
   readonly autoCompactTokens: number;
   readonly autoCompactPercent: number;
   readonly autoSaveConversations: boolean;
@@ -112,6 +114,7 @@ export function getSettings(): ParleySettings {
     computerUseEnabled: config.get<boolean>('computerUse.enabled', false),
     computerUseMaxSteps: Math.max(1, Math.min(100, config.get<number>('computerUse.maxSteps', 25))),
     computerUseBackend: config.get<string>('computerUse.backend', 'auto'),
+    computerUseConfirmEach: config.get<boolean>('computerUse.confirmEachAction', false),
     autoCompactTokens: Math.max(0, Math.floor(config.get<number>('autoCompactTokens', 0))),
     autoCompactPercent: clampInt(config.get<number>('autoCompactPercent', 80), 0, 100),
     autoSaveConversations: config.get<boolean>('autoSaveConversations', true),

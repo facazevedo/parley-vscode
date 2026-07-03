@@ -185,5 +185,26 @@ export async function runAction(action: CuAction, map: CoordMap): Promise<void> 
   await runPowerShell(INPUT_SCRIPT, env, 10000);
 }
 
+const CURSOR_SCRIPT = `
+$sig = @'
+using System;
+using System.Runtime.InteropServices;
+public static class PCur {
+  [StructLayout(LayoutKind.Sequential)] public struct P { public int X; public int Y; }
+  [DllImport("user32.dll")] public static extern bool GetCursorPos(out P p);
+}
+'@
+Add-Type -TypeDefinition $sig
+$p = New-Object PCur+P
+[void][PCur]::GetCursorPos([ref]$p)
+Write-Output "$($p.X) $($p.Y)"
+`;
+
+/** Current cursor position (real pixels) for the corner-slam kill switch. */
+async function getCursor(): Promise<{ x: number; y: number }> {
+  const out = (await runPowerShell(CURSOR_SCRIPT, {}, 5000)).trim().split(/\s+/).map(Number);
+  return { x: out[0] || 0, y: out[1] || 0 };
+}
+
 /** Built-in Windows backend (no dependency). */
-export const powershellBackend: ControlBackend = { name: 'PowerShell', captureScreen, runAction };
+export const powershellBackend: ControlBackend = { name: 'PowerShell', captureScreen, runAction, getCursor };

@@ -207,7 +207,12 @@ function backendFrom(nut: Nut): ControlBackend {
     }
   };
 
-  return { name: 'nut.js', captureScreen, runAction };
+  const getCursor = async (): Promise<{ x: number; y: number }> => {
+    const p = await mouse.getPosition();
+    return { x: p.x, y: p.y };
+  };
+
+  return { name: 'nut.js', captureScreen, runAction, getCursor };
 }
 
 /** Load the nut.js backend if installed; null otherwise. */

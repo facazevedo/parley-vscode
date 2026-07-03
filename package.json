@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.99.1",
+  "version": "1.0.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -582,6 +582,11 @@
           ],
           "default": "auto",
           "markdownDescription": "Which backend drives the mouse/keyboard for `/computer`: **auto** (prefer nut.js if installed, else built-in Windows PowerShell), **nutjs** (cross-platform; installed on demand under its own GPL-3.0/commercial license), or **powershell** (built-in, Windows only, no install)."
+        },
+        "parley.computerUse.confirmEachAction": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Ask for confirmation before **every** computer-use action (training wheels). Off by default; the corner-slam kill switch and Stop button always work regardless."
         },
         "parley.voice.autoRead": {
           "type": "boolean",

@@ -27,4 +27,6 @@ export interface ControlBackend {
   readonly name: string;
   captureScreen(): Promise<Screenshot>;
   runAction(action: CuAction, map: CoordMap): Promise<void>;
+  /** Current cursor position in real screen pixels — powers the corner-slam kill switch. */
+  getCursor?(): Promise<{ x: number; y: number }>;
 }
