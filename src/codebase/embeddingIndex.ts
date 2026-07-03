@@ -1,4 +1,3 @@
-import { spawn } from 'child_process';
 import { createHash } from 'crypto';
 import { promises as fsp } from 'fs';
 import { chunkText } from './chunk';
@@ -7,6 +6,7 @@ import { pathToFileURL } from 'url';
 import * as vscode from 'vscode';
 import type { Logger } from '../logging/logger';
 import { dbg } from '../debug/debug';
+import { runNpmInstall } from '../util/runtimeInstall';
 import {
   parseIndex,
   planBuild,
@@ -93,25 +93,19 @@ export class EmbeddingIndex {
         title: 'Parley: installing the local embedding runtime (one-time, this may take a few minutes)…',
         cancellable: false
       },
+      // Preflights npm and time-boxes the install so a locked-down/offline machine
+      // fails with an actionable message instead of a spinner that never resolves.
       () =>
-        new Promise<void>((resolve, reject) => {
-          const child = spawn(
-            'npm',
-            ['install', `@xenova/transformers@${TRANSFORMERS_VERSION}`, '--no-audit', '--no-fund', '--loglevel=error'],
-            { cwd: this.runtimeDir, shell: true }
-          );
-          let stderr = '';
-          child.stderr?.on('data', (d) => {
-            stderr += d.toString();
-          });
-          child.on('error', (err) => reject(new Error(`Could not run npm (is it on your PATH?): ${err.message}`)));
-          child.on('close', (code) => {
-            if (code === 0) {
-              resolve();
-            } else {
-              reject(new Error(`npm install exited with code ${code}. ${stderr.slice(-400)}`));
-            }
-          });
+        runNpmInstall({
+          dir: this.runtimeDir,
+          args: [
+            'install',
+            `@xenova/transformers@${TRANSFORMERS_VERSION}`,
+            '--no-audit',
+            '--no-fund',
+            '--loglevel=error'
+          ],
+          what: 'local embedding runtime'
         })
     );
   }

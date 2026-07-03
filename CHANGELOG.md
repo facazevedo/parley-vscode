@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.74.0
+
+### New — opt-in error reporting
+
+- **`Parley: Report an Issue`** — a privacy-first, user-in-the-loop error channel. Extension errors are captured into a small in-memory ring (bounded, and run through the secret scanner + home-path stripping before storage), and the command assembles a report — environment + recent sanitized errors — that you **review** in an editor tab, then choose to **copy** or open as a **prefilled GitHub issue**. Nothing is ever transmitted automatically; there is no telemetry endpoint. This gives maintainers real diagnostics without compromising the privacy stance (telemetry stays off by default).
+
+### Hardened — on-demand runtime installs on locked-down machines
+
+- The two opt-in features that fetch a native runtime on first use (the local `@codebase` embedding index and the browser tools) now **preflight that `npm` is actually runnable** and **time-box the install** (5 min for the embedding runtime, 10 min for Chromium). On a machine with no `npm`, no network, or a blocking proxy, they now fail fast with an actionable message ("this feature is optional; everything else works") instead of a progress notification that spins forever. Shared, tested helper (`src/util/runtimeInstall.ts`).
+
 ## 0.73.0
 
 ### New — usage visibility

@@ -1,4 +1,3 @@
-import { spawn } from 'child_process';
 import { promises as fsp } from 'fs';
 import * as path from 'path';
 import { pathToFileURL } from 'url';
@@ -6,6 +5,7 @@ import * as vscode from 'vscode';
 import type { Logger } from '../logging/logger';
 import { dbg } from '../debug/debug';
 import { browserError, clampText } from './browserText';
+import { runNpmInstall } from '../util/runtimeInstall';
 
 /**
  * Local browser automation for the agent's `browser_*` tools and the `@browser`
@@ -90,24 +90,16 @@ export class BrowserManager {
         title: 'Parley: installing the local browser runtime (one-time, downloads Chromium — a few minutes)…',
         cancellable: false
       },
+      // Preflights npm and time-boxes the install (Chromium is a large download) so a
+      // locked-down/offline machine fails with an actionable message, not a dead spinner.
       () =>
-        new Promise<void>((resolve, reject) => {
-          const child = spawn(
-            'npm',
-            ['install', `playwright@${PLAYWRIGHT_VERSION}`, '--no-audit', '--no-fund', '--loglevel=error'],
-            {
-              cwd: this.runtimeDir,
-              shell: true,
-              // Keep the downloaded browsers inside the runtime dir so they're self-contained.
-              env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: path.join(this.runtimeDir, 'browsers') }
-            }
-          );
-          let stderr = '';
-          child.stderr?.on('data', (d) => (stderr += d.toString()));
-          child.on('error', (err) => reject(new Error(`Could not run npm (is it on your PATH?): ${err.message}`)));
-          child.on('close', (code) =>
-            code === 0 ? resolve() : reject(new Error(`npm install exited with code ${code}. ${stderr.slice(-400)}`))
-          );
+        runNpmInstall({
+          dir: this.runtimeDir,
+          args: ['install', `playwright@${PLAYWRIGHT_VERSION}`, '--no-audit', '--no-fund', '--loglevel=error'],
+          what: 'local browser runtime',
+          // Keep the downloaded browsers inside the runtime dir so they're self-contained.
+          env: { PLAYWRIGHT_BROWSERS_PATH: path.join(this.runtimeDir, 'browsers') },
+          timeoutMs: 10 * 60_000
         })
     );
   }

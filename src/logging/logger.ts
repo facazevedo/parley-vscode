@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { LogLevel } from '../config/settings';
+import { recordError } from './errorReporter';
 
 const rank: Record<LogLevel, number> = {
   error: 0,
@@ -18,6 +19,9 @@ export class Logger implements vscode.Disposable {
 
   public error(message: string, error?: unknown): void {
     this.write('error', message, error);
+    // Feed the opt-in error channel (in-memory, sanitized) so "Parley: Report an Issue"
+    // has recent diagnostics. Never leaves the machine without the user submitting it.
+    recordError(message, error);
   }
 
   public warn(message: string): void {

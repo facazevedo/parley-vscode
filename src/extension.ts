@@ -12,6 +12,7 @@ import { registerRunDiagnosticsCommand } from './commands/runDiagnostics';
 import { registerRefactorSelectionCommand } from './commands/refactorSelection';
 import { registerSetApiKeyCommand } from './commands/setApiKey';
 import { registerShowUsageCommand } from './commands/showUsage';
+import { registerReportIssueCommand } from './commands/reportIssue';
 import { registerSignOutCommand } from './commands/signOut';
 import { registerSuggestTerminalCommand } from './commands/suggestTerminalCommand';
 import { registerToggleInlineCompletionCommand } from './commands/toggleInlineCompletion';
@@ -265,6 +266,7 @@ export function activate(context: vscode.ExtensionContext): void {
   registerGenerateCommitMessageCommand(context, commandDeps);
   registerToggleInlineCompletionCommand(context);
   registerShowUsageCommand(context, commandDeps);
+  registerReportIssueCommand(context, commandDeps);
   registerRunDiagnosticsCommand(context, commandDeps);
   registerInitProjectRulesCommand(context);
   registerSignOutCommand(context, commandDeps);
