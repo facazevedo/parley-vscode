@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.98.0
+
+### New — `/computer`: agentic computer use (⚠ off by default, Windows)
+
+- `/computer <task>` lets Parley **control your real mouse and keyboard** to do a desktop task: it screenshots the screen, decides one action at a time (click / type / key / scroll / wait), executes it, and re-checks — looping until done or the step cap. "Open Notepad and type my meeting notes", "fill this form from the data in that file", etc.
+- **Zero new dependencies**: screen capture and input injection use built-in PowerShell + .NET / `user32.dll`, driven through the extension's hardened spawn path. Typed text is passed via environment variables, never interpolated into the script — a typed string can't inject PowerShell. Screenshots are downscaled to ≤1280px and coordinates mapped back to real pixels (multi-monitor aware).
+- **Safety first**: gated behind `parley.computerUse.enabled` (off by default), a modal confirm before every run, the **Stop** button aborts mid-loop, a step cap (`parley.computerUse.maxSteps`, default 25), an in-chat action log of every step, and a system prompt that refuses destructive/irreversible actions and stops on unexpected screens or on-screen instructions (prompt-injection defense). The JSON action parser is unit-tested and never throws on malformed model output.
+
 ## 0.97.0
 
 ### New — 📷 screenshot and 🎥 screen recording into the chat

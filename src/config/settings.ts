@@ -49,6 +49,10 @@ export interface ParleySettings {
   readonly voiceAutoRead: boolean;
   /** Play a soft chime when a turn finishes while the window is unfocused. */
   readonly chimeOnDone: boolean;
+  /** Allow `/computer` to control the real mouse and keyboard (off by default). */
+  readonly computerUseEnabled: boolean;
+  /** Max steps in one `/computer` run. */
+  readonly computerUseMaxSteps: number;
   readonly autoCompactTokens: number;
   readonly autoCompactPercent: number;
   readonly autoSaveConversations: boolean;
@@ -103,6 +107,8 @@ export function getSettings(): ParleySettings {
     voiceModel: config.get<string>('voice.model', '').trim(),
     voiceAutoRead: config.get<boolean>('voice.autoRead', false),
     chimeOnDone: config.get<boolean>('sound.chimeOnDone', false),
+    computerUseEnabled: config.get<boolean>('computerUse.enabled', false),
+    computerUseMaxSteps: Math.max(1, Math.min(100, config.get<number>('computerUse.maxSteps', 25))),
     autoCompactTokens: Math.max(0, Math.floor(config.get<number>('autoCompactTokens', 0))),
     autoCompactPercent: clampInt(config.get<number>('autoCompactPercent', 80), 0, 100),
     autoSaveConversations: config.get<boolean>('autoSaveConversations', true),

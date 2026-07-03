@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.97.0",
+  "version": "0.98.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -560,6 +560,18 @@
           "type": "string",
           "default": "",
           "markdownDescription": "Model used to transcribe 🎤 voice input (must accept audio — OpenAI or Google models). Leave empty to use the current chat model. Example: `openai/gpt-5-nano`."
+        },
+        "parley.computerUse.enabled": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "**⚠ Powerful — off by default.** Allow `/computer <task>` to control your real **mouse and keyboard** to perform a desktop task: Parley captures the screen, decides one action at a time, and clicks/types on your actual desktop (Windows only). It always asks for confirmation before starting and the **Stop** button aborts it. Only enable this if you understand that an AI agent will be driving your computer."
+        },
+        "parley.computerUse.maxSteps": {
+          "type": "number",
+          "default": 25,
+          "minimum": 1,
+          "maximum": 100,
+          "markdownDescription": "Maximum number of actions in a single `/computer` run before it stops on its own."
         },
         "parley.voice.autoRead": {
           "type": "boolean",
