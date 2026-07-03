@@ -11,16 +11,34 @@ import { formatRecentEdits, pushEdit, type RecentEdit } from './recentEditsCore'
  */
 
 const MAX_EDITS = 5;
+// Only mirror documents up to this size — a full-text snapshot per keystroke would
+// add latency on huge files; above it we still record edits, just without `before`.
+const MAX_MIRROR_CHARS = 100_000;
 const edits: RecentEdit[] = [];
+// Per-document text as it was BEFORE the change currently being processed, so we can
+// recover the pre-edit line (VS Code fires the change event AFTER applying it).
+const mirror = new Map<string, string[]>();
 
 export function activateRecentEdits(context: vscode.ExtensionContext): void {
+  const drop = (uri: vscode.Uri): void => void mirror.delete(uri.toString());
   context.subscriptions.push(
+    vscode.workspace.onDidCloseTextDocument((d) => drop(d.uri)),
     vscode.workspace.onDidChangeTextDocument((e) => {
+      const key = e.document.uri.toString();
       if (e.document.uri.scheme !== 'file' || e.contentChanges.length === 0 || isSensitiveFile(e.document.uri.fsPath)) {
         return;
       }
       const change = e.contentChanges[e.contentChanges.length - 1];
       const line = change.range.start.line;
+      // Pre-edit line text from the mirror (captured before this event applied).
+      const prevLines = mirror.get(key);
+      const before = prevLines && line < prevLines.length ? prevLines[line].trim().slice(0, 160) : undefined;
+      // Refresh the mirror to the post-edit state for the next change.
+      if (e.document.getText().length <= MAX_MIRROR_CHARS) {
+        mirror.set(key, sliceLines(e.document));
+      } else {
+        mirror.delete(key);
+      }
       let text: string;
       try {
         text = e.document.lineAt(Math.min(line, e.document.lineCount - 1)).text.trim();
@@ -31,9 +49,18 @@ export function activateRecentEdits(context: vscode.ExtensionContext): void {
         return;
       }
       const file = path.basename(e.document.uri.fsPath);
-      pushEdit(edits, { file, line, text: text.slice(0, 160) }, MAX_EDITS);
+      pushEdit(edits, { file, line, text: text.slice(0, 160), before }, MAX_EDITS);
     })
   );
+}
+
+/** Snapshot a document's lines (bounded) for the pre-edit mirror. */
+function sliceLines(doc: vscode.TextDocument): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < doc.lineCount; i += 1) {
+    out.push(doc.lineAt(i).text);
+  }
+  return out;
 }
 
 /** Recent edit lines outside `excludeFsPath` (the file being completed), oldest first. */

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.0
+
+### Improved — diff-aware inline completion
+
+- Ghost-text completion already fed the model your recent edits elsewhere; now those hints are **deltas, not snapshots**. Instead of `auth.ts:42: const x = 2`, the model sees `auth.ts:42: const x = 1 → const x = 2` — the actual before→after change, a much stronger signal for predicting what you're typing next (Cursor-Tab style).
+- Implemented with a bounded per-document text mirror (files ≤100k chars) so the pre-edit line can be recovered when VS Code reports a change; a keystroke burst on one line keeps the true pre-burst original rather than an intermediate. Falls back to the plain snapshot when the prior text isn't known.
+
 ## 1.2.0
 
 ### New — parallel subagents (`run_subagents`)
