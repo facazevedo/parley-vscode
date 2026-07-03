@@ -18,7 +18,7 @@ import { terminalSnapshot } from '../context/terminalLog';
 import { loadProjectMemory } from '../context/projectMemory';
 import { findExistingRulesFile, writeRulesTemplate } from '../commands/initProjectRules';
 import { UNTRUSTED_SYSTEM_NOTE, wrapUntrusted } from '../parley/untrusted';
-import { describeAction, parseAction } from '../computer/actions';
+import { describeAction, extractJsonObject, parseAction } from '../computer/actions';
 import { resolveBackend, type BackendPref, type ControlBackend } from '../computer/control';
 import { installNutJs, isNutInstalled } from '../computer/nutControl';
 import { isSensitiveFile } from '../context/sensitiveFileFilter';
@@ -191,6 +191,8 @@ interface ChatPanelMessage {
 
 const COMPUTER_USE_SYSTEM = [
   'You are controlling a Windows desktop through screenshots. Each turn you receive one screenshot and must reply with EXACTLY ONE action as a JSON object — no prose, no code fence, just the object.',
+  '',
+  'Always include a short "reason" field (one sentence) describing what you see and why you are taking this action — it is shown to the user so they can follow along.',
   '',
   'Actions:',
   '- {"action":"click","x":N,"y":N,"button":"left"|"right"|"double"} — click at pixel (x,y) in the screenshot',
@@ -2411,6 +2413,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
           await note('🖥 Computer use stopped.');
           return;
         }
+        this.post({ type: 'status', text: `🖥 Step ${step}: capturing the screen…` });
         let shot;
         try {
           shot = await backend.captureScreen();
@@ -2422,7 +2425,10 @@ export class ChatPanel implements vscode.WebviewViewProvider {
           `Task: ${task}\n\n` +
           `The screenshot is ${shot.shownW}×${shot.shownH} pixels — give all coordinates within it.\n` +
           (historyLines.length ? `Actions so far:\n${historyLines.join('\n')}\n\n` : '') +
-          `Look at the screenshot and return the SINGLE next action as JSON. When the task is complete, return {"action":"done","summary":"…"}.`;
+          `Look at the screenshot and decide the SINGLE next action. Include a short "reason" describing what you see and why. When the task is complete, return {"action":"done","summary":"…"}.`;
+        // The model call is non-streamed and can take a while (esp. Opus + a large
+        // screenshot) — show a status so it's clearly working, not stuck.
+        this.post({ type: 'status', text: `🖥 Step ${step}: analyzing the screen…` });
         let reply: string;
         try {
           const resp = await this.getProvider().sendMessage(
@@ -2463,8 +2469,19 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         }
         consecutiveErrors = 0;
         const desc = describeAction(action);
+        // Surface the model's stated reasoning so the loop is transparent, not a black box.
+        let reason = '';
+        try {
+          const o = JSON.parse(extractJsonObject(reply) || '{}') as { reason?: unknown; thought?: unknown };
+          reason = String(o.reason ?? o.thought ?? '')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 240);
+        } catch {
+          // no reason field — fine
+        }
         historyLines.push(`Step ${step}: ${desc}`);
-        await note(`🖥 Step ${step}: ${desc}`);
+        await note(`🖥 Step ${step}: ${desc}${reason ? `\n_${reason}_` : ''}`);
         if (action.type === 'done' || action.type === 'abort') {
           return;
         }

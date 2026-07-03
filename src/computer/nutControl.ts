@@ -76,6 +76,43 @@ function pngSize(buf: Buffer): { w: number; h: number } {
   return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
 }
 
+const MAX_SHOWN_WIDTH = 1280;
+
+/**
+ * Downscale a screenshot PNG to <=MAX_SHOWN_WIDTH using jimp (a nut.js dependency
+ * already on disk — no new install). Best-effort across jimp v0/v1 APIs; returns
+ * the original buffer unchanged on any failure, so capture never breaks. A smaller
+ * image dramatically cuts upload + model latency for the computer-use loop.
+ */
+async function downscalePng(buf: Buffer, globalStorageDir: string): Promise<Buffer> {
+  try {
+    const req = createRequire(path.join(nutInstallDir(globalStorageDir), 'package.json'));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- jimp has no types here
+    const mod: any = req('jimp');
+    // jimp v1 exports { Jimp }; v0 exports the class itself (has static read()).
+    const Jimp = mod.Jimp ?? (typeof mod.read === 'function' ? mod : (mod.default ?? mod));
+    const img = await Jimp.read(buf);
+    const w: number = img.bitmap?.width ?? 0;
+    if (!w || w <= MAX_SHOWN_WIDTH) {
+      return buf; // already small enough
+    }
+    try {
+      img.resize({ w: MAX_SHOWN_WIDTH }); // jimp v1 (object arg)
+    } catch {
+      img.resize(MAX_SHOWN_WIDTH, -1); // jimp v0 (width, AUTO=-1)
+    }
+    // v0 exposes the promise API as getBufferAsync (getBuffer is callback-style);
+    // v1 exposes getBuffer as a promise. Prefer getBufferAsync when present.
+    const out =
+      typeof img.getBufferAsync === 'function'
+        ? await img.getBufferAsync('image/png')
+        : await img.getBuffer('image/png');
+    return Buffer.isBuffer(out) ? out : Buffer.from(out);
+  } catch {
+    return buf; // jimp missing or API mismatch — keep full-res
+  }
+}
+
 function buildKeyList(nut: Nut, spec: string): unknown[] {
   const Key = nut.Key;
   const map: Record<string, unknown> = {
@@ -128,7 +165,7 @@ function buildKeyList(nut: Nut, spec: string): unknown[] {
 }
 
 /** Build a ControlBackend from a loaded nut.js module. */
-function backendFrom(nut: Nut): ControlBackend {
+function backendFrom(nut: Nut, globalStorageDir: string): ControlBackend {
   const { screen, mouse, keyboard, Point, Button, FileType } = nut;
   // Snappy but not instant, so on-screen UI keeps up.
   try {
@@ -142,18 +179,29 @@ function backendFrom(nut: Nut): ControlBackend {
     const dir = os.tmpdir();
     const name = `parley-cu-${process.pid}-${Math.floor(process.hrtime()[1])}`;
     const file: string = await screen.capture(name, FileType.PNG, dir);
-    const buf = await fs.promises.readFile(file);
+    const fullBuf = await fs.promises.readFile(file);
     fs.promises.unlink(file).catch(() => undefined);
-    const { w: pngW, h: pngH } = pngSize(buf);
-    let realW = pngW;
-    let realH = pngH;
+    const fullSize = pngSize(fullBuf);
+    let realW = fullSize.w;
+    let realH = fullSize.h;
     try {
       realW = await screen.width();
       realH = await screen.height();
     } catch {
       // fall back to the PNG's own pixel size (scale 1)
     }
-    return { left: 0, top: 0, realW, realH, shownW: pngW, shownH: pngH, base64: buf.toString('base64') };
+    // Downscale what the model sees; coordinates map from shown → real via the caller.
+    const shownBuf = await downscalePng(fullBuf, globalStorageDir);
+    const shown = pngSize(shownBuf);
+    return {
+      left: 0,
+      top: 0,
+      realW,
+      realH,
+      shownW: shown.w,
+      shownH: shown.h,
+      base64: shownBuf.toString('base64')
+    };
   };
 
   const runAction = async (action: CuAction, mapCoord: CoordMap): Promise<void> => {
@@ -222,7 +270,7 @@ export function loadNutBackend(globalStorageDir: string): ControlBackend | null 
     return null;
   }
   try {
-    return backendFrom(nut);
+    return backendFrom(nut, globalStorageDir);
   } catch {
     return null;
   }

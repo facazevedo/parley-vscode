@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.7.0
+
+### Improved — computer use: visible progress, reasoning, and much lower latency
+
+- **You can now see what it's doing between actions.** The loop shows a live status line for each phase — "🖥 Step N: capturing the screen…" then "…analyzing the screen…" — so a slow model call reads as *working*, not stuck.
+- **The model's reasoning is surfaced.** Each step now asks the model for a short `reason` ("the Overlays dropdown is top-right; clicking it to open") and shows it under the action in the chat, so the loop is transparent rather than a black box.
+- **Big speedup on the nut.js backend.** Screenshots are now downscaled to 1280px before being sent to the model (was full-resolution — e.g. ~2 MB at 4K/HiDPI, now ~360 KB), which sharply cuts upload and inference time per step. Done with jimp (already bundled by nut.js — no new dependency) and fully guarded: any failure falls back to the full-resolution image. The PowerShell backend already downscaled.
+
 ## 1.6.1
 
 ### Fixed — mode button contrast
