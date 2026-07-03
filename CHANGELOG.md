@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.8.0
+
+### New — `/screenshot`: capture your screen straight into the chat
+
+- **`/screenshot`** grabs your whole screen with **no OS picker** and attaches it to the composer as an image — then just type your question and send. This is what `/computer "paste a screenshot here"` was reaching for: computer use is a mouse/keyboard control loop with no clipboard or attachment access, so it can't do this; `/screenshot` uses the same screen-capture backend directly.
+- Read-only (pixels only, no input injection), so it needs no computer-use consent — just a capture backend (nut.js if installed, else the built-in Windows one). For a specific window or region, the **📷** button (OS picker) remains the right tool.
+
 ## 1.7.0
 
 ### Improved — computer use: visible progress, reasoning, and much lower latency

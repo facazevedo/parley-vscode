@@ -1082,6 +1082,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       case 'computer':
         await this.startComputerUse(input);
         return true;
+      case 'screenshot':
+        await this.startScreenshot();
+        return true;
       case 'context':
         await this.showContextBreakdown();
         return true;
@@ -1116,7 +1119,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         this.history.push({
           role: 'assistant',
           content:
-            '**Slash commands**\n- `/clear` (or `/new`) — start a new conversation\n- `/compact` — summarize to free up context (choose keep-recent or all)\n- `/context` — breakdown of what is filling the context window\n- `/cost` — show this conversation\'s token/cost usage\n- `/model` — switch the model\n- `/compare [prompt]` — run a prompt on a second model, side by side (reuses your last message if omitted)\n- `/verify [command]` — run the project tests and fix failures until green (agent modes only)\n- `/computer <task>` — control your mouse & keyboard to do a desktop task (Windows; enable `parley.computerUse.enabled`)\n- `/init` — analyze the repo and write a tailored AGENTS.md rules file (template in Chat/Plan mode)\n- `/json` — make the next reply a JSON object\n- `/help` — this list\n\n**Custom commands:** add a `name.md` file under `.parley/commands/` or `.claude/commands/` (workspace), or `~/.parley/commands/` / `~/.claude/commands/` (global — workspace wins on a name clash) and it becomes `/name` — its text is the prompt, with `$ARGS` replaced by anything typed after the command and `$SELECTION` by the active editor selection. Optional `description:` frontmatter shows in the slash menu.\n\n**Custom subagents:** add a `name.md` under `.parley/agents/` (frontmatter `description:` and optional `model:`; body = its extra system prompt) and the agent can delegate read-only investigations to it via run_subagent.\n\nMost actions also have commands in the Command Palette (search "Parley").',
+            '**Slash commands**\n- `/clear` (or `/new`) — start a new conversation\n- `/compact` — summarize to free up context (choose keep-recent or all)\n- `/context` — breakdown of what is filling the context window\n- `/cost` — show this conversation\'s token/cost usage\n- `/model` — switch the model\n- `/compare [prompt]` — run a prompt on a second model, side by side (reuses your last message if omitted)\n- `/verify [command]` — run the project tests and fix failures until green (agent modes only)\n- `/computer <task>` — control your mouse & keyboard to do a desktop task (Windows; enable `parley.computerUse.enabled`)\n- `/screenshot` — capture your whole screen and attach it (no picker)\n- `/init` — analyze the repo and write a tailored AGENTS.md rules file (template in Chat/Plan mode)\n- `/json` — make the next reply a JSON object\n- `/help` — this list\n\n**Custom commands:** add a `name.md` file under `.parley/commands/` or `.claude/commands/` (workspace), or `~/.parley/commands/` / `~/.claude/commands/` (global — workspace wins on a name clash) and it becomes `/name` — its text is the prompt, with `$ARGS` replaced by anything typed after the command and `$SELECTION` by the active editor selection. Optional `description:` frontmatter shows in the slash menu.\n\n**Custom subagents:** add a `name.md` under `.parley/agents/` (frontmatter `description:` and optional `model:`; body = its extra system prompt) and the agent can delegate read-only investigations to it via run_subagent.\n\nMost actions also have commands in the Command Palette (search "Parley").',
           createdAt: new Date().toISOString()
         });
         await this.postState();
@@ -2259,6 +2262,38 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       `## Gotchas — anything non-obvious (env vars, codegen steps, platform quirks)\n\n` +
       `Keep it under ~120 lines — this file is sent with EVERY AI request in this workspace, so concision matters. After writing it, summarize what you included.`;
     await this.runTurn(prompt, this.contextOptions);
+  }
+
+  /**
+   * `/screenshot` — capture the whole screen (no OS picker) and attach it to the
+   * composer as an image, ready to ask about. Read-only: unlike `/computer` this
+   * only grabs pixels, so it needs no mouse/keyboard consent — just a capture
+   * backend (nut.js if installed, else the built-in Windows one). For a specific
+   * window/region, the 📷 button (OS picker) is the better tool.
+   */
+  public async startScreenshot(): Promise<void> {
+    const note = async (text: string): Promise<void> => {
+      this.history.push({ role: 'assistant', content: text, createdAt: new Date().toISOString() });
+      this.appendTranscript({ kind: 'note', text, at: new Date().toISOString() });
+      await this.postState();
+    };
+    const backend = resolveBackend(
+      (this.getSettings().computerUseBackend as BackendPref) || 'auto',
+      this.globalStorageUri.fsPath
+    );
+    if (!backend) {
+      await note(
+        '📸 Screen capture needs the built-in Windows backend or nut.js installed. On macOS/Linux, use the 📷 button (which uses the OS picker), or enable computer use once to install nut.js.'
+      );
+      return;
+    }
+    try {
+      const shot = await backend.captureScreen();
+      await this.addPastedFile(`data:image/png;base64,${shot.base64}`, 'screen.png');
+      await note('📸 Captured your screen and attached it — type your question and send.');
+    } catch (error) {
+      await note(`📸 Screen capture failed: ${error instanceof Error ? error.message.split('\n')[0] : 'unknown'}.`);
+    }
   }
 
   /**

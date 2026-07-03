@@ -1073,6 +1073,7 @@ import hljs from 'highlight.js/lib/common';
     { cmd: '/compare', desc: 'Run your last prompt on a second model, side by side' },
     { cmd: '/verify', desc: 'Run the project tests and fix failures until green' },
     { cmd: '/computer', desc: 'Control your mouse & keyboard to do a desktop task (Windows)' },
+    { cmd: '/screenshot', desc: 'Capture your whole screen and attach it (no picker)' },
     { cmd: '/init', desc: 'Analyze the repo and write AGENTS.md project rules' },
     { cmd: '/json', desc: 'Make the next reply a JSON object' },
     { cmd: '/help', desc: 'List slash commands' }
