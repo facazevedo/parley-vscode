@@ -5,6 +5,7 @@ import { registerExplainFileCommand } from './commands/explainFile';
 import { registerFixDiagnosticsCommand } from './commands/fixDiagnostics';
 import { registerGenerateCommitMessageCommand } from './commands/generateCommitMessage';
 import { registerReviewBranchCommand } from './commands/reviewBranch';
+import { registerFileEditHistoryCommand } from './commands/fileEditHistory';
 import { registerGenerateImageCommand } from './commands/generateImage';
 import { registerGenerateTestsCommand } from './commands/generateTests';
 import { registerInitProjectRulesCommand } from './commands/initProjectRules';
@@ -273,6 +274,7 @@ export function activate(context: vscode.ExtensionContext): void {
   registerGenerateImageCommand(context, commandDeps);
   registerGenerateCommitMessageCommand(context, commandDeps);
   registerReviewBranchCommand(context, commandDeps);
+  registerFileEditHistoryCommand(context, commandDeps);
   registerToggleInlineCompletionCommand(context);
   registerShowUsageCommand(context, commandDeps);
   registerReportIssueCommand(context, commandDeps);

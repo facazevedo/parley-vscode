@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.89.0
+
+### New — `Parley: File Edit History`
+
+- "What did the agent do to this file?" — answerable outside the chat. The command (also in right-click → Parley) lists every checkpointed Parley edit to the current file **across all conversations** (newest first, with the edit label, timestamp, and conversation title) and opens a **before ⇄ after diff** for the one you pick. "After" is reconstructed from the next-newer checkpoint (or the file's current content for the latest edit).
+- Note: VS Code's Timeline provider API is still proposed-only, so this ships as a command + context-menu entry rather than a Timeline lane; if that API stabilizes, these same checkpoints can feed it directly. Checkpoint logs live in `.parley/checkpoints/` and persist until reverted or rewound.
+
 ## 0.88.0
 
 ### New — `Parley: Review Current Branch`
