@@ -359,6 +359,7 @@ special mentions below:
 | `@path/to/file`    | Attach that file's contents (fuzzy autocomplete as you type)                        |
 | `@file.ts#12-40`   | Attach only lines 12–40 of the file (also `#12` or `#L12-L40`)                      |
 | `@path/to/folder/` | Attach a listing of the folder                                                      |
+| `@sym:<name>`      | Find a function/class/symbol by name via the language server; attaches its source   |
 | `@codebase`        | Retrieve the most relevant files for your question (see below)                      |
 | `@git`             | Attach the uncommitted diff (vs HEAD)                                               |
 | `@terminal`        | Attach recent integrated-terminal commands + output (shell integration)             |

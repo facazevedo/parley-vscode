@@ -85,7 +85,8 @@ const SPECIAL_MENTIONS: ReadonlyArray<{ path: string; hint: string }> = [
   { path: 'codebase', hint: 'most relevant files for your question' },
   { path: 'git', hint: 'uncommitted diff vs HEAD' },
   { path: 'terminal', hint: 'recent terminal commands + output' },
-  { path: 'browser', hint: 'open a URL and attach the rendered page (add the URL after)' }
+  { path: 'browser', hint: 'open a URL and attach the rendered page (add the URL after)' },
+  { path: 'sym:', hint: 'a function/class/symbol by name (language server) — type the name after' }
 ];
 
 interface ChatPanelMessage {
@@ -3599,6 +3600,12 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       this.post({ type: 'mentionResults', items: [], seq });
       return;
     }
+    // @sym:<name> — language-server workspace symbols, resolved to @file#range mentions
+    // (so the existing range attacher pulls in the symbol's lines at send time).
+    if (/^sym:/i.test(query.trimStart())) {
+      await this.sendSymbolMentions(query.trimStart().slice(4).trim(), seq);
+      return;
+    }
     // Match on the path part only — a typed '#12-40' range isn't part of the name.
     const cleaned = query
       .split('#')[0]
@@ -3632,6 +3639,63 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     }
     const items = [...special, ...ranked.map((p) => ({ path: p }))].slice(0, 8);
     this.post({ type: 'mentionResults', items, seq });
+  }
+
+  /**
+   * `@sym:<name>` autocomplete — query the workspace symbol provider (language
+   * server) and return each match as a `@<relPath>#<start>-<end>` mention plus a
+   * descriptive hint. Selecting one inserts that file+range mention, which the
+   * existing resolver expands to the symbol's source at send time.
+   */
+  private async sendSymbolMentions(name: string, seq?: number): Promise<void> {
+    if (name.length < 2) {
+      // Guide the user until there's enough to search.
+      this.post({
+        type: 'mentionResults',
+        seq,
+        items: [{ path: 'sym:', hint: 'keep typing a function/class/symbol name…' }]
+      });
+      return;
+    }
+    let symbols: vscode.SymbolInformation[] = [];
+    try {
+      symbols =
+        (await vscode.commands.executeCommand<vscode.SymbolInformation[]>(
+          'vscode.executeWorkspaceSymbolProvider',
+          name
+        )) ?? [];
+    } catch {
+      symbols = [];
+    }
+    const kindName = (k: vscode.SymbolKind): string => vscode.SymbolKind[k]?.toLowerCase() ?? 'symbol';
+    const items: Array<{ path: string; hint: string }> = [];
+    const seen = new Set<string>();
+    for (const s of symbols) {
+      if (s.location.uri.scheme !== 'file') {
+        continue;
+      }
+      const rel = toolRelPath(s.location.uri);
+      if (isSensitiveFile(rel) || /\s/.test(rel)) {
+        continue; // space-delimited mentions can't carry paths with spaces
+      }
+      const start = s.location.range.start.line + 1;
+      const end = Math.max(start, s.location.range.end.line + 1);
+      const path = `${rel}#${start}-${end}`;
+      if (seen.has(path)) {
+        continue;
+      }
+      seen.add(path);
+      const container = s.containerName ? `${s.containerName}.` : '';
+      items.push({ path, hint: `${container}${s.name} · ${kindName(s.kind)} · ${rel}` });
+      if (items.length >= 8) {
+        break;
+      }
+    }
+    this.post({
+      type: 'mentionResults',
+      seq,
+      items: items.length > 0 ? items : [{ path: 'sym:', hint: `no symbols matching "${name}"` }]
+    });
   }
 
   /**

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.0
+
+### New — `@sym:` mention (find a symbol by name)
+
+- Type **`@sym:name`** in the composer to search your workspace's **functions, classes, and other symbols** via the language server, then attach the chosen symbol's source. "Explain `@sym:resolveMentions`" pulls in exactly that function, no matter which file it lives in.
+- Implemented as sugar over the existing file+range mentions: a picked symbol inserts a `@path#startLine-endLine` mention, so the existing resolver attaches its lines at send time — no new resolution path, no new attachment type. The `@` autocomplete lists `@sym:` alongside the other special mentions.
+
 ## 1.3.0
 
 ### Improved — diff-aware inline completion

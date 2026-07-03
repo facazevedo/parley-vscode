@@ -1042,10 +1042,24 @@ import hljs from 'highlight.js/lib/common';
     const pos = prompt.selectionStart;
     const before = prompt.value.slice(0, mentionStart);
     const after = prompt.value.slice(pos);
-    const insert = '@' + mentionPath(item) + ' ';
+    const p = mentionPath(item);
+    // A prefix like "sym:" isn't a finished mention — keep the caret right after it
+    // (no trailing space) so the user types the symbol name and the dropdown continues.
+    const isPrefix = p.endsWith(':');
+    const insert = '@' + p + (isPrefix ? '' : ' ');
     prompt.value = before + insert + after;
     const caret = before.length + insert.length;
     prompt.setSelectionRange(caret, caret);
+    if (isPrefix) {
+      prompt.focus();
+      // Re-open the dropdown for the prefix so the next keystroke queries immediately.
+      const cm = currentMention();
+      if (cm) {
+        mentionStart = cm.start;
+        vscode.postMessage({ type: 'mentionQuery', query: cm.query, seq: ++mentionSeq });
+      }
+      return;
+    }
     hideMentions();
     prompt.focus();
   }
