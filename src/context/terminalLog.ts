@@ -16,13 +16,46 @@ const MAX_OUTPUT_CHARS = 8000;
 const entries: TerminalEntry[] = [];
 let registered = false;
 
-/** Register the shell-integration listener (no-op when the API is unavailable). */
+export interface FailedCommand {
+  readonly command: string;
+  readonly exitCode: number;
+  readonly terminal: string;
+  readonly at: string;
+}
+
+let lastFailure: FailedCommand | undefined;
+let failureListener: ((failure: FailedCommand) => void) | undefined;
+
+/** Subscribe to non-zero command exits (one listener; used for the "Fix with Parley" hint). */
+export function onCommandFailed(listener: (failure: FailedCommand) => void): void {
+  failureListener = listener;
+}
+
+/** The most recent failed command, with its captured output looked up at call time. */
+export function lastFailedCommand(): (FailedCommand & { output: string }) | undefined {
+  if (!lastFailure) {
+    return undefined;
+  }
+  // The output stream is recorded by the start-listener's read loop, which finishes
+  // independently of the end event — resolve it lazily so it has had time to land.
+  const match = [...entries].reverse().find((e) => e.command === lastFailure!.command);
+  return { ...lastFailure, output: match?.output ?? '' };
+}
+
+/** Register the shell-integration listeners (no-op when the API is unavailable). */
 export function activateTerminalLog(context: vscode.ExtensionContext): void {
   const win = vscode.window as unknown as {
     onDidStartTerminalShellExecution?: (
       listener: (e: {
         terminal: vscode.Terminal;
         execution: { commandLine: { value: string }; read(): AsyncIterable<string> };
+      }) => void
+    ) => vscode.Disposable;
+    onDidEndTerminalShellExecution?: (
+      listener: (e: {
+        terminal: vscode.Terminal;
+        execution: { commandLine: { value: string } };
+        exitCode: number | undefined;
       }) => void
     ) => vscode.Disposable;
   };
@@ -56,6 +89,22 @@ export function activateTerminalLog(context: vscode.ExtensionContext): void {
       })();
     })
   );
+  if (typeof win.onDidEndTerminalShellExecution === 'function') {
+    context.subscriptions.push(
+      win.onDidEndTerminalShellExecution((e) => {
+        // 130/SIGINT is the user cancelling, not a failure worth flagging.
+        if (e.exitCode === undefined || e.exitCode === 0 || e.exitCode === 130) {
+          return;
+        }
+        const command = e.execution.commandLine?.value ?? '';
+        if (!command.trim()) {
+          return;
+        }
+        lastFailure = { command, exitCode: e.exitCode, terminal: e.terminal.name, at: new Date().toISOString() };
+        failureListener?.(lastFailure);
+      })
+    );
+  }
 }
 
 /** Formatted recent terminal activity for the `@terminal` mention (most recent last). */

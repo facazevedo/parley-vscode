@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.91.0
+
+### New — "Fix with Parley" when a terminal command fails
+
+- When an integrated-terminal command exits non-zero (captured via shell integration), a **transient status-bar hint** — ⚠ *Fix with Parley* — appears for 30 seconds; clicking it sends the command, exit code, and captured output into the chat for a diagnosis and fix (in agent modes, Parley can edit the offending files directly). Ctrl+C cancellations (exit 130) are ignored. Toggle with `parley.terminalFixHint.enabled`.
+- The command **`Parley: Fix Last Terminal Command`** works any time, hint or not. The terminal twin of the diagnostics lightbulb.
+
 ## 0.90.0
 
 ### New — agent-maintained project memory
