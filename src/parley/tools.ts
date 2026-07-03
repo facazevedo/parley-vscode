@@ -6,6 +6,7 @@ import * as vscode from 'vscode';
 import { execFile, type ExecFileException } from 'child_process';
 import { isSensitiveFile, sensitiveExcludeGlobs } from '../context/sensitiveFileFilter';
 import { decodeText } from '../diff/fileFormat';
+import { wrapUntrusted } from './untrusted';
 import type { ToolCall, ToolDefinition } from './types';
 
 const MAX_FILE_CHARS = 20000;
@@ -966,7 +967,8 @@ async function fetchUrl(url: string): Promise<string> {
         .replace(/<[^>]+>/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
-      return text.length > MAX_FETCH_CHARS ? `${text.slice(0, MAX_FETCH_CHARS)}\n\n[truncated]` : text;
+      const body = text.length > MAX_FETCH_CHARS ? `${text.slice(0, MAX_FETCH_CHARS)}\n\n[truncated]` : text;
+      return wrapUntrusted(`web page (${url})`, body);
     }
     return `Error: too many redirects fetching ${url}.`;
   } catch (error) {

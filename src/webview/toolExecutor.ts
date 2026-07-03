@@ -26,6 +26,7 @@ import { resolveThinking, type ThinkingLevel } from '../parley/thinking';
 import { SUBAGENT_TOOLS, assertInsideWorkspace, resolveAcrossRoots, runAgentTool } from '../parley/tools';
 import type { ToolCall } from '../parley/types';
 import { rememberFact } from '../context/projectMemory';
+import { wrapUntrusted } from '../parley/untrusted';
 import { webSearch } from '../web/webSearch';
 import type { TranscriptRecorder } from './transcriptRecorder';
 
@@ -250,9 +251,10 @@ export class ToolExecutor {
       case 'browser_navigate':
         return b.navigate(String(a.url ?? ''));
       case 'browser_read':
-        return b.read(a.selector ? String(a.selector) : undefined);
+        // Rendered page text is untrusted — frame it as data, not instructions.
+        return wrapUntrusted('rendered web page', await b.read(a.selector ? String(a.selector) : undefined));
       case 'browser_console':
-        return b.consoleOutput(a.errors_only === true);
+        return wrapUntrusted('browser console output', await b.consoleOutput(a.errors_only === true));
       case 'browser_click':
         return a.selector ? b.click(String(a.selector)) : 'Error: selector is required.';
       case 'browser_type':
@@ -272,11 +274,12 @@ export class ToolExecutor {
       return 'Error: arguments were not valid JSON.';
     }
     const s = this.host.getSettings();
-    return webSearch(query, {
+    const results = await webSearch(query, {
       provider: s.webSearchProvider,
       apiKey: s.webSearchApiKey,
       googleCx: s.webSearchGoogleCx
     });
+    return wrapUntrusted('web search results', results);
   }
 
   /** Persist a durable project fact to `.parley/memory.md` (injected into future turns). */

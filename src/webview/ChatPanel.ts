@@ -17,6 +17,7 @@ import { parseRuleFile, ruleApplies } from '../context/rulesDir';
 import { terminalSnapshot } from '../context/terminalLog';
 import { loadProjectMemory } from '../context/projectMemory';
 import { findExistingRulesFile, writeRulesTemplate } from '../commands/initProjectRules';
+import { UNTRUSTED_SYSTEM_NOTE, wrapUntrusted } from '../parley/untrusted';
 import { describeAction, parseAction } from '../computer/actions';
 import { resolveBackend, type BackendPref, type ControlBackend } from '../computer/control';
 import { installNutJs, isNutInstalled } from '../computer/nutControl';
@@ -1734,6 +1735,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         'For any task with more than a couple of steps, call the `update_plan` tool first with the high-level steps, then update it (one step `in_progress` at a time, mark steps `done` as you finish) so the user can follow your progress.\n\n' +
         'When a task needs broad read-only reconnaissance first — mapping how a subsystem works, finding every usage of a pattern across many files, comparing several implementations — delegate that investigation to `run_subagent` with a SELF-CONTAINED brief (it cannot see this conversation) instead of flooding your own context with dozens of reads; then act on its report.\n\n' +
         'IMPORTANT — always communicate in plain text as you work: before each tool call, write a short sentence saying what you are about to do and why; after finishing a logical chunk, summarize what changed. This per-step narration is expected and helpful — the brevity guidance is about not padding the WHOLE response (restating the question, filler intros/outros), not about skipping these. Do NOT paste raw reasoning notes-to-self (fragments like "Need to…", "Use python? read __all__.") into your reply — write clear sentences for the user. NEVER reply with only tool calls and no text, and never return an empty message.\n\n' +
+        UNTRUSTED_SYSTEM_NOTE +
+        '\n\n' +
         'When the entire task is genuinely finished, your final message MUST end with a summary section formatted EXACTLY like this:\n' +
         '**SUMMARY**\n' +
         '- <what you did — one bullet per item>\n' +
@@ -3322,28 +3325,30 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       const browser = getBrowserManager(this.globalStorageUri, this.logger);
       const rendered = await browser.navigate(url);
       const errors = rendered.startsWith('Error') ? '' : `\n\nConsole:\n${browser.consoleOutput(true)}`;
-      const content = `${rendered}${errors}`.slice(0, cap);
+      const raw = `${rendered}${errors}`.slice(0, cap);
+      const content = rendered.startsWith('Error') ? raw : wrapUntrusted(`rendered web page (${url})`, raw);
       out.push({
         id: 'mention-browser',
         kind: 'user-file',
         label: `@browser ${url}`,
         content,
         characterCount: content.length,
-        truncated: rendered.length + errors.length > content.length
+        truncated: rendered.length + errors.length > raw.length
       });
     }
 
     // @terminal — recent integrated-terminal commands and their output (shell integration).
     if (/(?:^|\s)@terminal\b/i.test(prompt)) {
       const snap = terminalSnapshot();
-      const content = snap.slice(0, cap);
+      const sliced = snap.slice(0, cap);
+      const content = wrapUntrusted('terminal output', sliced);
       out.push({
         id: 'mention-terminal',
         kind: 'user-file',
         label: '@terminal (recent output)',
         content,
         characterCount: content.length,
-        truncated: snap.length > content.length
+        truncated: snap.length > sliced.length
       });
     }
 
