@@ -365,6 +365,38 @@ export const AGENT_TOOLS: readonly ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'run_subagents',
+      description:
+        'Like run_subagent, but launches SEVERAL scoped read-only investigations CONCURRENTLY and returns all their reports together — use it when you have multiple INDEPENDENT things to investigate at once (e.g. "how does auth work", "where are the API routes", "what does the build config do"), to cut deep-reconnaissance time. Each task must be fully self-contained. Runs up to 5 in parallel. Do not use it for dependent steps where one investigation needs another\'s result.',
+      parameters: {
+        type: 'object',
+        properties: {
+          tasks: {
+            type: 'array',
+            description: 'Independent investigation briefs to run in parallel (max 5).',
+            items: {
+              type: 'object',
+              properties: {
+                task: {
+                  type: 'string',
+                  description: 'A complete, self-contained investigation brief.'
+                },
+                agent: {
+                  type: 'string',
+                  description: 'Optional custom agent type (see run_subagent). Omit for the default investigator.'
+                }
+              },
+              required: ['task']
+            }
+          }
+        },
+        required: ['tasks']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'remember',
       description:
         "Save one durable, non-obvious fact about this project to persistent memory (`.parley/memory.md`), so future conversations start knowing it. Use it when you learn something that took effort to discover and will matter again: build/test quirks ('integration tests need Docker running'), key file locations, project conventions, environment requirements, or explicit user preferences about how to work in this repo. Do NOT store things that are obvious from the code, one-off details for the current task, or anything secret (keys, tokens, passwords). One concise sentence per call.",
@@ -435,7 +467,10 @@ export const READ_ONLY_TOOLS: readonly ToolDefinition[] = AGENT_TOOLS.filter(
  */
 export const SUBAGENT_TOOLS: readonly ToolDefinition[] = READ_ONLY_TOOLS.filter(
   (tool) =>
-    tool.function.name !== 'run_subagent' && tool.function.name !== 'update_plan' && tool.function.name !== 'remember'
+    tool.function.name !== 'run_subagent' &&
+    tool.function.name !== 'run_subagents' &&
+    tool.function.name !== 'update_plan' &&
+    tool.function.name !== 'remember'
 );
 
 /**

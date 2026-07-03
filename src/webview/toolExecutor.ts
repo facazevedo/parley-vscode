@@ -182,6 +182,9 @@ export class ToolExecutor {
     if (call.name === 'run_subagent') {
       return this.toolSubagent(call);
     }
+    if (call.name === 'run_subagents') {
+      return this.toolSubagents(call);
+    }
     return runAgentTool(call);
   }
 
@@ -200,6 +203,52 @@ export class ToolExecutor {
     } catch {
       return 'Error: arguments were not valid JSON.';
     }
+    if (!task) {
+      return 'Error: task is required.';
+    }
+    return this.runOneSubagent(task, agentName);
+  }
+
+  /** Run several subagents concurrently and return their reports, labeled and aggregated. */
+  private async toolSubagents(call: ToolCall): Promise<string> {
+    let tasks: Array<{ task: string; agent: string }> = [];
+    try {
+      const parsed = JSON.parse(call.arguments || '{}') as { tasks?: unknown };
+      if (Array.isArray(parsed.tasks)) {
+        tasks = parsed.tasks
+          .map((t) => {
+            const o = (t ?? {}) as { task?: unknown; agent?: unknown };
+            return { task: String(o.task ?? '').trim(), agent: String(o.agent ?? '').trim() };
+          })
+          .filter((t) => t.task);
+      }
+    } catch {
+      return 'Error: arguments were not valid JSON.';
+    }
+    if (tasks.length === 0) {
+      return 'Error: provide a non-empty "tasks" array, each item with a self-contained "task".';
+    }
+    // Cap fan-out so a runaway call can't spawn dozens of concurrent model loops.
+    const MAX_PARALLEL = 5;
+    const capped = tasks.slice(0, MAX_PARALLEL);
+    const reports = await Promise.all(
+      capped.map((t, i) =>
+        this.runOneSubagent(t.task, t.agent).catch(
+          (e) => `Error: subagent ${i + 1} failed — ${e instanceof Error ? e.message : 'unknown'}`
+        )
+      )
+    );
+    const overflow =
+      tasks.length > MAX_PARALLEL
+        ? `\n\n(Note: ${tasks.length - MAX_PARALLEL} extra task(s) were dropped — max ${MAX_PARALLEL} per call.)`
+        : '';
+    return (
+      capped.map((t, i) => `## Subagent ${i + 1}: ${t.task.slice(0, 80)}\n${reports[i]}`).join('\n\n---\n\n') + overflow
+    );
+  }
+
+  /** One nested read-only investigation with a fresh context; returns its report text. */
+  private async runOneSubagent(task: string, agentName: string): Promise<string> {
     const p = this.host.getSubagentParams();
     const types = this.host.getSubagentTypes();
     const type = agentName ? types.find((t) => t.id.toLowerCase() === agentName.toLowerCase()) : undefined;

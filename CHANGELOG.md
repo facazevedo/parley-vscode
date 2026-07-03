@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0
+
+### New — parallel subagents (`run_subagents`)
+
+- The agent can now launch **several independent read-only investigations at once** with a new `run_subagents` tool (array of self-contained tasks, up to 5 concurrent via `Promise.all`), instead of running them one after another with `run_subagent`. For deep reconnaissance — "map auth", "find all API routes", "understand the build" — this cuts wall-clock to the slowest single investigation rather than their sum.
+- Each task can target a custom `.parley/agents` type and its own model; reports come back labeled and aggregated. Failures are isolated per task, usage accrues to the session counters, and the whole batch is depth-1 (subagents still can't spawn subagents). Single `run_subagent` is unchanged for dependent, one-at-a-time work.
+
 ## 1.1.0
 
 ### Hardened — prompt-injection defenses for untrusted content
