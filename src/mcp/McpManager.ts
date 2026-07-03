@@ -1,4 +1,5 @@
 import { spawn } from 'child_process';
+import { spawnResolved } from '../util/childProcess';
 import type { Logger } from '../logging/logger';
 import type { ToolDefinition } from '../parley/types';
 import { dbg } from '../debug/debug';
@@ -320,10 +321,12 @@ class StdioTransport implements McpTransport {
   ) {}
 
   public start(): Promise<void> {
-    const proc = spawn(this.cfg.command!, this.cfg.args ?? [], {
+    // spawnResolved resolves `npx`/`uvx`/`.cmd` shims on Windows without the
+    // `shell:true`+args form (DEP0190 + unescaped-arg concatenation); it quotes each
+    // configured arg for the Windows command line and spawns directly on POSIX.
+    const proc = spawnResolved(this.cfg.command!, this.cfg.args ?? [], {
       env: { ...process.env, ...(this.cfg.env ?? {}) },
       stdio: ['pipe', 'pipe', 'pipe'],
-      shell: process.platform === 'win32', // so `npx`/`uvx` resolve on Windows
       windowsHide: true
     });
     this.proc = proc;
@@ -366,8 +369,8 @@ class StdioTransport implements McpTransport {
     }
     try {
       if (process.platform === 'win32' && proc.pid) {
-        // spawn() uses shell:true on Windows, so proc.kill() would only kill the
-        // cmd.exe wrapper and orphan the real server — kill the whole tree.
+        // spawnResolved goes through the shell on Windows, so `proc` is the cmd.exe
+        // wrapper — proc.kill() would orphan the real server. Kill the whole tree.
         spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { windowsHide: true });
       } else {
         proc.kill();

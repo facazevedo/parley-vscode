@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.74.1
+
+### Hardened — child-process spawning (removes Node DEP0190; shrinks injection surface)
+
+- Every child-process spawn that needed a shell to resolve Windows `.cmd`/`.bat` shims previously used `spawn(cmd, argsArray, { shell: true })`, which Node deprecates (DEP0190) because array args are concatenated into the shell line **unescaped**. A new shared helper (`src/util/childProcess.ts` → `spawnResolved`) fixes this: on POSIX it spawns the binary directly with no shell; on Windows it passes a single, explicitly **quoted** command string (no args array), so shims still resolve but nothing is concatenated unescaped. Applied to the npm runtime installs (`runtimeInstall.ts`) and — more importantly, since it takes user config — the **MCP stdio transport** (`McpManager.ts`). This also means a workspace-configured MCP command's arguments are quoted rather than injected. (The DEP0190 you may still see during `npm run test:integration` comes from the `@vscode/test-electron` dev harness, not shipped code.)
+
 ## 0.74.0
 
 ### New — opt-in error reporting

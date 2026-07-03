@@ -1,4 +1,4 @@
-import { spawn } from 'child_process';
+import { spawnResolved } from './childProcess';
 
 /**
  * Shared helper for the two opt-in features that fetch a native runtime on first use
@@ -6,9 +6,8 @@ import { spawn } from 'child_process';
  * are the hard case: `npm` may be absent, or the install may hang forever behind a
  * proxy/firewall with no network. So we (1) preflight that `npm` actually runs, and
  * (2) time-box the install so it fails with an actionable message instead of a
- * progress spinner that never resolves. Package specs are hardcoded constants at the
- * call sites (never user input), so `shell: true` — needed to resolve `npm.cmd` on
- * Windows — introduces no injection surface.
+ * progress spinner that never resolves. All child spawns go through spawnResolved,
+ * which resolves `npm.cmd` on Windows without the DEP0190 `shell:true`+args form.
  */
 
 const NPM_PROBE_TIMEOUT_MS = 5000;
@@ -30,7 +29,7 @@ export async function isNpmAvailable(): Promise<boolean> {
       }
     };
     try {
-      const child = spawn('npm', ['--version'], { shell: true, windowsHide: true });
+      const child = spawnResolved('npm', ['--version'], { windowsHide: true });
       const timer = setTimeout(() => {
         try {
           child.kill();
@@ -87,9 +86,8 @@ export async function runNpmInstall(opts: NpmInstallOptions): Promise<void> {
         fn();
       }
     };
-    const child = spawn('npm', [...opts.args], {
+    const child = spawnResolved('npm', [...opts.args], {
       cwd: opts.dir,
-      shell: true,
       windowsHide: true,
       env: opts.env ? { ...process.env, ...opts.env } : process.env
     });
