@@ -273,7 +273,7 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 /** Workspace-wide keys every chat shares (the command allowlist must not fragment per tab). */
-const SHARED_MEMENTO_KEYS = new Set(['parley.allowedCommands']);
+const SHARED_MEMENTO_KEYS = new Set(['parley.allowedCommands', 'parley.promptHistory']);
 
 /** A Memento view whose keys are namespaced, so tab conversations don't share sidebar state. */
 function prefixedMemento(base: vscode.Memento, prefix: string): vscode.Memento {

@@ -258,6 +258,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   // Last real editor, for actions invoked while the webview has focus (activeTextEditor
   // can be transiently undefined then).
   private lastActiveEditor?: vscode.TextEditor;
+  // Previously sent prompts (newest last) for terminal-style ArrowUp recall in the composer.
+  private promptHistory: string[] = [];
   private embeddingIndex?: EmbeddingIndex; // lazy local semantic index for @codebase
   private attachments: PendingAttachment[] = [];
   // Workspace file/folder candidates for the @-mention autocomplete (short TTL so
@@ -372,6 +374,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     this.mode = normalizeMode(this.state.get<string>('parley.mode', settings.defaultMode));
     this.sessionTokens = this.state.get<number>('parley.sessionTokens', 0);
     this.sessionCost = this.state.get<number>('parley.sessionCost', 0);
+    this.promptHistory = this.state.get<string[]>('parley.promptHistory', []);
     this.conversationId = this.state.get<string>('parley.conversationId', '') || this.newConversationId();
     this.contextOptions = {
       ...DEFAULT_CONTEXT_OPTIONS,
@@ -800,6 +803,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       case 'send':
         if (message.prompt?.trim()) {
           const text = message.prompt.trim();
+          this.recordPromptHistory(text);
           if (this.busy) {
             // Steering: don't refuse — queue it for the next round boundary.
             this.turns.queueSteering(text);
@@ -1005,6 +1009,18 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       default:
         return this.runCustomCommand(cmd, input);
     }
+  }
+
+  /** Remember a sent prompt for ArrowUp recall (cap 50, consecutive dupes collapsed). */
+  private recordPromptHistory(text: string): void {
+    if (!text || this.promptHistory[this.promptHistory.length - 1] === text) {
+      return;
+    }
+    this.promptHistory.push(text);
+    if (this.promptHistory.length > 50) {
+      this.promptHistory.splice(0, this.promptHistory.length - 50);
+    }
+    void this.state.update('parley.promptHistory', this.promptHistory);
   }
 
   /** Scan the workspace + global command dirs for user-defined `/command` markdown files (cached for the slash menu). */
@@ -3068,6 +3084,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       selectedThinking: this.selectedThinking,
       selectedSpeed: this.selectedSpeed,
       customCommands: this.customCommands.map((c) => ({ name: c.name, description: c.description })),
+      promptHistory: this.promptHistory,
       contextOptions: this.contextOptions,
       selectionInfo: this.currentSelectionInfo(),
       attachments: this.attachments.map((a) => ({ id: a.id, label: a.label, kind: a.kind }))

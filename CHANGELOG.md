@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.82.0
+
+### New — terminal-style prompt history in the composer
+
+- **ArrowUp** in an empty composer recalls your previous prompts (newest first); **ArrowDown** walks back toward the newest and then restores whatever you had typed; **Esc** exits recall and restores your draft. Typing exits recall and keeps the recalled text for editing.
+- Careful not to fight existing keys: the slash menu and @-mention menu still own the arrows while open, and in a multi-line draft ArrowUp only recalls from the first line (ArrowDown from the last) — otherwise the cursor moves normally.
+- History persists across reloads (last 50 prompts, consecutive duplicates collapsed, stored per workspace) and is shared between the sidebar and tab conversations.
+
 ## 0.81.0
 
 ### New — "Fix with Parley" in the lightbulb menu

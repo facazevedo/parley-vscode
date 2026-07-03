@@ -983,11 +983,22 @@ import hljs from 'highlight.js/lib/common';
   }
 
   // ---------- Composer ----------
+  // Terminal-style prompt recall: ArrowUp/Down in the (empty) composer cycles
+  // previously sent prompts. Fed from the host's persisted list via the state
+  // message, plus an optimistic local append on send.
+  let sentPrompts = []; // newest last
+  let recallIndex = -1; // -1 = not navigating; 0 = newest
+  let recallDraft = ''; // in-progress text stashed when recall starts
   function sendPrompt() {
     const value = prompt.value.trim();
     if (!value) {
       return;
     }
+    if (sentPrompts[sentPrompts.length - 1] !== value) {
+      sentPrompts.push(value);
+    }
+    recallIndex = -1;
+    recallDraft = '';
     const msg = { type: 'send', prompt: value };
     if (editingOrdinal !== null && !busy) {
       msg.editOrdinal = editingOrdinal;
@@ -1004,6 +1015,7 @@ import hljs from 'highlight.js/lib/common';
     sendPrompt();
   });
   prompt.addEventListener('input', () => {
+    recallIndex = -1; // typing exits history recall (keeps the text)
     updateSlash();
     if (slashOpen()) {
       hideMentions();
@@ -1073,6 +1085,36 @@ import hljs from 'highlight.js/lib/common';
         hideMentions();
         return;
       }
+    }
+    // Prompt-history recall (menus are closed past this point — their branches returned).
+    if (e.key === 'ArrowUp' && sentPrompts.length) {
+      const onFirstLine = prompt.value.slice(0, prompt.selectionStart).indexOf('\n') === -1;
+      if (onFirstLine && (recallIndex >= 0 || prompt.value === '')) {
+        e.preventDefault();
+        if (recallIndex === -1) {
+          recallDraft = prompt.value;
+        }
+        recallIndex = Math.min(recallIndex + 1, sentPrompts.length - 1);
+        prompt.value = sentPrompts[sentPrompts.length - 1 - recallIndex];
+        prompt.setSelectionRange(prompt.value.length, prompt.value.length);
+        return;
+      }
+    }
+    if (e.key === 'ArrowDown' && recallIndex >= 0) {
+      const onLastLine = prompt.value.indexOf('\n', prompt.selectionEnd) === -1;
+      if (onLastLine) {
+        e.preventDefault();
+        recallIndex -= 1;
+        prompt.value = recallIndex === -1 ? recallDraft : sentPrompts[sentPrompts.length - 1 - recallIndex];
+        prompt.setSelectionRange(prompt.value.length, prompt.value.length);
+        return;
+      }
+    }
+    if (e.key === 'Escape' && recallIndex >= 0) {
+      e.preventDefault();
+      prompt.value = recallDraft;
+      recallIndex = -1;
+      return;
     }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -2003,6 +2045,9 @@ import hljs from 'highlight.js/lib/common';
       .querySelectorAll('.mp-speed button')
       .forEach((b) => b.classList.toggle('active', b.dataset.speed === speed));
     customCommands = msg.customCommands || [];
+    if (msg.promptHistory && recallIndex === -1) {
+      sentPrompts = msg.promptHistory; // don't yank entries mid-navigation
+    }
     renderAttachments(msg.attachments);
 
     stopBtn.style.display = msg.busy ? '' : 'none';
