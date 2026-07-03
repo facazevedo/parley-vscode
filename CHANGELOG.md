@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.83.0
+
+### New — custom subagents (`.parley/agents/*.md`)
+
+- Define your own subagent types: a `security-reviewer.md` under `.parley/agents/` becomes an agent type the model can delegate to via `run_subagent`'s new optional `agent` parameter. Frontmatter `description:` is what the model reads when choosing; optional `model:` runs that subagent on a different (e.g. cheaper or stronger) model; the body is the subagent's extra system prompt.
+- The `run_subagent` tool schema is rebuilt every turn, so adding/editing an agent file takes effect on the next message. The custom prompt is **appended** to the built-in read-only investigator preamble — custom agents can shape focus and reporting style but stay read-only (no file edits, no commands, no recursion), and an unknown `agent` value falls back to the default investigator with a corrective note instead of wasting the round.
+- Subagent token/cost accounting is now attributed to the model that actually ran (matters with a `model:` override). Loader + schema builder are unit-tested; `/help` documents the format.
+
 ## 0.82.0
 
 ### New — terminal-style prompt history in the composer

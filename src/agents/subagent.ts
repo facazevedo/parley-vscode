@@ -40,6 +40,8 @@ export interface SubagentOptions {
   readonly runTool: (call: ToolCall) => Promise<string>;
   readonly signal?: AbortSignal;
   readonly maxToolRounds?: number;
+  /** Custom agent type: its prompt is appended to the invariant read-only preamble. */
+  readonly role?: { readonly id: string; readonly prompt: string };
   /** One short line per nested tool call, for live progress display. */
   readonly onStep?: (action: string) => void;
   readonly onUsage?: SendMessageOptions['onUsage'];
@@ -60,7 +62,9 @@ export async function runSubagentTask(options: SubagentOptions): Promise<string>
         agentId: options.agentId,
         thinking: options.thinking,
         speed: options.speed,
-        systemExtra: SUBAGENT_SYSTEM
+        systemExtra: options.role
+          ? `${SUBAGENT_SYSTEM}\n\n# Custom role — "${options.role.id}"\n${options.role.prompt}`
+          : SUBAGENT_SYSTEM
       },
       {
         tools: options.tools,

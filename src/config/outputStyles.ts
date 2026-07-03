@@ -70,14 +70,19 @@ export function styleFromFile(id: string, raw: string): OutputStyle | undefined 
 }
 
 /** Extract an optional `description:` and the body from simple `---` frontmatter.
- *  Shared by output styles and custom slash commands. */
-export function parseFrontmatter(raw: string): { description: string; body: string } {
+ *  Shared by output styles, custom slash commands, and custom subagents; the raw
+ *  frontmatter block is returned so callers can pull extra keys (e.g. `model:`). */
+export function parseFrontmatter(raw: string): { description: string; body: string; frontmatter: string } {
   const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(raw);
   if (!match) {
-    return { description: '', body: raw };
+    return { description: '', body: raw, frontmatter: '' };
   }
   const desc = /(^|\n)description:\s*(.+)/i.exec(match[1]);
-  return { description: desc ? desc[2].trim().replace(/^["']|["']$/g, '') : '', body: raw.slice(match[0].length) };
+  return {
+    description: desc ? desc[2].trim().replace(/^["']|["']$/g, '') : '',
+    body: raw.slice(match[0].length),
+    frontmatter: match[1]
+  };
 }
 
 /** Built-in styles plus any `.parley/output-styles/*.md` in the workspace (custom overrides built-in by id). */

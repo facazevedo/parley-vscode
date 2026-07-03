@@ -45,6 +45,7 @@ async function setup(mode = 'edit') {
     getMode: () => curMode,
     getAbortSignal: () => abort,
     getSubagentParams: () => ({}),
+    getSubagentTypes: () => [],
     applyUsage: () => ({ sessionTokens: 0, sessionCostUsd: 0 }),
     post: (m: any) => posts.push(m)
   };

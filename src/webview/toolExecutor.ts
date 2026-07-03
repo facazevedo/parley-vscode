@@ -46,6 +46,8 @@ export interface ToolExecutorHost {
     thinking: ThinkingLevel;
     speed: 'standard' | 'fast';
   };
+  /** The current turn's snapshot of `.parley/agents` custom subagent types. */
+  getSubagentTypes(): readonly { id: string; description: string; prompt: string; model?: string }[];
   /** Add nested-loop usage to the session counters (same sink as the turn runner's). */
   applyUsage(totalTokens: number, costUsd: number): { sessionTokens: number; sessionCostUsd: number };
   post(message: Record<string, unknown>): void;
@@ -185,21 +187,35 @@ export class ToolExecutor {
    */
   private async toolSubagent(call: ToolCall): Promise<string> {
     let task = '';
+    let agentName = '';
     try {
-      task = String((JSON.parse(call.arguments || '{}') as { task?: unknown }).task ?? '').trim();
+      const parsed = JSON.parse(call.arguments || '{}') as { task?: unknown; agent?: unknown };
+      task = String(parsed.task ?? '').trim();
+      agentName = String(parsed.agent ?? '').trim();
     } catch {
       return 'Error: arguments were not valid JSON.';
     }
     const p = this.host.getSubagentParams();
+    const types = this.host.getSubagentTypes();
+    const type = agentName ? types.find((t) => t.id.toLowerCase() === agentName.toLowerCase()) : undefined;
+    // Unknown type: run the default investigator anyway (no wasted round) and tell the model.
+    const unknownNote =
+      agentName && !type
+        ? `Note: unknown agent type "${agentName}" — ran the default investigator. Available: ${
+            types.map((t) => t.id).join(', ') || 'none'
+          }.\n\n`
+        : '';
+    const agentId = type?.model?.trim() || p.agentId;
     const allowed = new Set(SUBAGENT_TOOLS.map((t) => t.function.name));
-    dbg('subagent', `start: ${task.slice(0, 120)}`);
+    dbg('subagent', `start${type ? ` [${type.id}]` : ''}: ${task.slice(0, 120)}`);
     const report = await runSubagentTask({
       task,
       provider: p.provider,
-      agentId: p.agentId,
+      agentId,
       thinking: resolveThinking(p.thinking),
       speed: p.speed,
       tools: SUBAGENT_TOOLS,
+      role: type ? { id: type.id, prompt: type.prompt } : undefined,
       runTool: (nested) =>
         allowed.has(nested.name)
           ? this.run(nested, { subagent: true })
@@ -208,12 +224,13 @@ export class ToolExecutor {
       onStep: (action) =>
         this.host.post({ type: 'toolEvent', name: 'subagent_step', args: JSON.stringify({ action }) }),
       onUsage: (usage) => {
-        // Subagent tokens/cost hit the same session counters as the parent loop.
-        this.host.applyUsage(usage.total, estimateCostUsd(p.agentId, usage) ?? 0);
+        // Subagent tokens/cost hit the same session counters as the parent loop
+        // (attributed to the model that actually ran).
+        this.host.applyUsage(usage.total, estimateCostUsd(agentId, usage) ?? 0);
       }
     });
     dbg('subagent', `done: ${report.length} chars`);
-    return report;
+    return unknownNote + report;
   }
 
   /** Route a browser_* call to the shared BrowserManager (local Playwright). */

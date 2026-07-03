@@ -417,6 +417,46 @@ export const SUBAGENT_TOOLS: readonly ToolDefinition[] = READ_ONLY_TOOLS.filter(
   (tool) => tool.function.name !== 'run_subagent' && tool.function.name !== 'update_plan'
 );
 
+/**
+ * Fold the available custom subagent types into `run_subagent`'s schema: the
+ * description enumerates them and an optional `agent` parameter selects one.
+ * No-op (same array back) when no types are defined.
+ */
+export function withSubagentTypes(
+  tools: readonly ToolDefinition[],
+  types: readonly { id: string; description: string }[]
+): readonly ToolDefinition[] {
+  if (types.length === 0) {
+    return tools;
+  }
+  return tools.map((tool) => {
+    if (tool.function.name !== 'run_subagent') {
+      return tool;
+    }
+    const roster = types.map((t) => `"${t.id}" — ${t.description}`).join('; ');
+    return {
+      ...tool,
+      function: {
+        ...tool.function,
+        description:
+          tool.function.description +
+          ` Agent types available via the optional "agent" parameter: ${roster}. Omit "agent" for the default general investigator.`,
+        parameters: {
+          ...tool.function.parameters,
+          properties: {
+            ...(tool.function.parameters.properties as Record<string, unknown>),
+            agent: {
+              type: 'string',
+              description:
+                'Optional agent type (see the tool description for the list). Omit for the default investigator.'
+            }
+          }
+        }
+      }
+    };
+  });
+}
+
 const MAX_FETCH_CHARS = 12000;
 const MAX_FETCH_REDIRECTS = 5;
 const MAX_READ_LINES = 500;

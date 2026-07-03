@@ -25,7 +25,15 @@ import { SYSTEM_PROMPT } from '../parley/ParleyClient';
 import type { ParleyProvider } from '../parley/ParleyProvider';
 import { extractMentionPaths, parseMentionRange } from '../parley/parsing';
 import { rankMentionPaths } from '../context/fuzzyScore';
-import { AGENT_TOOLS, READ_ONLY_TOOLS, resolveAcrossRoots, runAgentTool, toolRelPath } from '../parley/tools';
+import {
+  AGENT_TOOLS,
+  READ_ONLY_TOOLS,
+  resolveAcrossRoots,
+  runAgentTool,
+  toolRelPath,
+  withSubagentTypes
+} from '../parley/tools';
+import { loadSubagentTypes, SubagentType } from '../config/subagents';
 import { normalizeThinkingLevel, type ThinkingLevel } from '../parley/thinking';
 import { buildChatHtml } from './webviewHtml';
 import { TranscriptRecorder } from './transcriptRecorder';
@@ -260,6 +268,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private lastActiveEditor?: vscode.TextEditor;
   // Previously sent prompts (newest last) for terminal-style ArrowUp recall in the composer.
   private promptHistory: string[] = [];
+  // Per-turn snapshot of `.parley/agents` custom subagent types (loaded in runTurn).
+  private subagentTypes: readonly SubagentType[] = [];
   private embeddingIndex?: EmbeddingIndex; // lazy local semantic index for @codebase
   private attachments: PendingAttachment[] = [];
   // Workspace file/folder candidates for the @-mention autocomplete (short TTL so
@@ -336,6 +346,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         thinking: this.selectedThinking,
         speed: this.selectedSpeed
       }),
+      getSubagentTypes: () => this.subagentTypes,
       applyUsage: (tokens, cost) => this.accrueUsage(tokens, cost),
       post: (m) => this.post(m)
     });
@@ -1001,7 +1012,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         this.history.push({
           role: 'assistant',
           content:
-            '**Slash commands**\n- `/clear` (or `/new`) — start a new conversation\n- `/compact` — summarize to free up context (choose keep-recent or all)\n- `/context` — breakdown of what is filling the context window\n- `/cost` — show this conversation\'s token/cost usage\n- `/model` — switch the model\n- `/init` — create a project rules file (AGENTS.md)\n- `/json` — make the next reply a JSON object\n- `/help` — this list\n\n**Custom commands:** add a `name.md` file under `.parley/commands/` or `.claude/commands/` (workspace), or `~/.parley/commands/` / `~/.claude/commands/` (global — workspace wins on a name clash) and it becomes `/name` — its text is the prompt, with `$ARGS` replaced by anything typed after the command and `$SELECTION` by the active editor selection. Optional `description:` frontmatter shows in the slash menu.\n\nMost actions also have commands in the Command Palette (search "Parley").',
+            '**Slash commands**\n- `/clear` (or `/new`) — start a new conversation\n- `/compact` — summarize to free up context (choose keep-recent or all)\n- `/context` — breakdown of what is filling the context window\n- `/cost` — show this conversation\'s token/cost usage\n- `/model` — switch the model\n- `/init` — create a project rules file (AGENTS.md)\n- `/json` — make the next reply a JSON object\n- `/help` — this list\n\n**Custom commands:** add a `name.md` file under `.parley/commands/` or `.claude/commands/` (workspace), or `~/.parley/commands/` / `~/.claude/commands/` (global — workspace wins on a name clash) and it becomes `/name` — its text is the prompt, with `$ARGS` replaced by anything typed after the command and `$SELECTION` by the active editor selection. Optional `description:` frontmatter shows in the slash menu.\n\n**Custom subagents:** add a `name.md` under `.parley/agents/` (frontmatter `description:` and optional `model:`; body = its extra system prompt) and the agent can delegate read-only investigations to it via run_subagent.\n\nMost actions also have commands in the Command Palette (search "Parley").',
           createdAt: new Date().toISOString()
         });
         await this.postState();
@@ -1432,7 +1443,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     }
 
     // Built-in tools for the mode + any configured MCP tools (MCP excluded from read-only Plan mode).
-    const baseTools = this.mode === 'plan' ? READ_ONLY_TOOLS : AGENT_TOOLS;
+    // Custom subagent types are re-scanned each turn so the run_subagent schema stays current.
+    this.subagentTypes = await loadSubagentTypes();
+    const baseTools = withSubagentTypes(this.mode === 'plan' ? READ_ONLY_TOOLS : AGENT_TOOLS, this.subagentTypes);
     const turnTools = toolsEnabled
       ? this.mode === 'plan'
         ? baseTools
