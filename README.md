@@ -7,10 +7,10 @@ A streaming chat sidebar, an agent that reads and edits your workspace, multimod
 and every change diff-reviewed before it touches your files — all inside VS Code.</p>
 
 <p>
-  <a href="CHANGELOG.md"><img alt="Version" src="https://img.shields.io/badge/version-1.2.0-A31F34"></a>
+  <a href="CHANGELOG.md"><img alt="Version" src="https://img.shields.io/badge/version-1.5.0-A31F34"></a>
   <img alt="VS Code" src="https://img.shields.io/badge/VS%20Code-%E2%89%A5%201.92-1F6FEB">
   <a href="https://opensource.org/licenses/MIT"><img alt="License" src="https://img.shields.io/badge/license-MIT-3FB950"></a>
-  <img alt="Tests" src="https://img.shields.io/badge/tests-323%20passing-2EA043">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-330%20passing-2EA043">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-3178C6">
 </p>
 
@@ -110,7 +110,7 @@ three are a standalone editor (**Cursor**), OpenAI's coding agent (**Codex**), a
 | Full on‑disk event transcripts          | ✅ (JSONL + export)                                 | ◐                 | ◐                 | ◐                    |
 
 **✅ supported · ◐ partial or different approach · ✗ not available.** Parley's column reflects
-the current code (v1.2.0). Competitor columns reflect publicly documented capabilities as of
+the current code (v1.5.0). Competitor columns reflect publicly documented capabilities as of
 early 2026 and are **best‑effort** — these tools move fast, so check their own docs for the
 latest. Parley's deliberate non‑goals (a trained Tab/next‑edit model, background/cloud agents,
 server‑side embeddings) follow from running on a shared gateway rather than dedicated
@@ -539,7 +539,9 @@ keeps working.
 ## Inline completion & inline edit
 
 - **Ghost‑text completion:** as you type, Parley suggests a completion at the cursor
-  (fill‑in‑the‑middle). Toggle with **`Parley: Toggle Inline Completion`**; configure
+  (fill‑in‑the‑middle). It's **diff‑aware** — the model is fed your recent edits as
+  before→after deltas (`was X → now Y`), Cursor‑Tab style, so completions track what
+  you're actually changing. Toggle with **`Parley: Toggle Inline Completion`**; configure
   with `parley.inlineCompletion.*` (use a fast model like `openai/gpt-5-nano`).
 - **Inline edit (`Ctrl+Alt+K` / `Cmd+Alt+K`):** select code, describe the change,
   review the diff before applying. Multi‑change edits offer **Apply All / Choose… /
