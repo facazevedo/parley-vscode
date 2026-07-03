@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.92.0
+
+### New — `Parley: Review Staged Changes` (in the Source Control menu)
+
+- One click from the Source Control view's ··· menu (next to Parley's commit-message generator, now also there): reviews exactly what you're about to commit — staged diff, falling back to the working tree when nothing is staged — reporting bugs, risky edge cases, leftover debug code, and security issues by severity with `file:line` references, and ending with a suggested Conventional Commits message.
+- Completes the git review trio: **staged** (pre-commit) · `@git` mention (working tree, in-chat) · **Review Current Branch** (committed work + PR description).
+
 ## 0.91.0
 
 ### New — "Fix with Parley" when a terminal command fails

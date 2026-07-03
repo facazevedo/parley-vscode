@@ -94,4 +94,50 @@ export function registerReviewBranchCommand(context: vscode.ExtensionContext, de
       await runPromptCommand(deps, prompt, {});
     })
   );
+
+  // Review what's about to be committed — one click from the Source Control view.
+  context.subscriptions.push(
+    vscode.commands.registerCommand('parley.reviewStagedChanges', async () => {
+      const api = await getGitApi();
+      if (!api) {
+        return;
+      }
+      if (api.repositories.length === 0) {
+        await vscode.window.showWarningMessage('Parley: no Git repository found in this workspace.');
+        return;
+      }
+      const repo = await resolveRepository(api.repositories, 'Select the repository whose staged changes to review');
+      if (!repo) {
+        return;
+      }
+      let diff = '';
+      let scope = 'staged';
+      try {
+        diff = await repo.diff(true);
+        if (!diff.trim()) {
+          diff = await repo.diff(false);
+          scope = 'working-tree (nothing staged)';
+        }
+      } catch (error) {
+        await vscode.window.showWarningMessage(
+          `Parley: could not read the git diff (${error instanceof Error ? error.message : 'unknown'}).`
+        );
+        return;
+      }
+      if (!diff.trim()) {
+        await vscode.window.showInformationMessage(
+          'Parley: no changes to review — the working tree is clean. For committed branch work, use "Parley: Review Current Branch".'
+        );
+        return;
+      }
+      const truncated = diff.length > MAX_DIFF_CHARS;
+      const capped = truncated ? `${diff.slice(0, MAX_DIFF_CHARS)}\n[diff truncated]` : diff;
+      const prompt =
+        `Review these ${scope} changes BEFORE they are committed.\n\n` +
+        `Report correctness bugs, risky edge cases, security issues, leftover debug code, and anything that would embarrass this commit — grouped by severity, each with a \`file:line\` reference and a one-line why. Say clearly if it looks good to commit; do not invent nitpicks.\n\n` +
+        `Finish with a one-line Conventional Commits message suggestion for it.\n\n` +
+        `Diff:\n\`\`\`diff\n${capped}\n\`\`\``;
+      await runPromptCommand(deps, prompt, {});
+    })
+  );
 }
