@@ -298,7 +298,7 @@ export function activate(context: vscode.ExtensionContext): void {
   registerShowUsageCommand(context, commandDeps);
   registerReportIssueCommand(context, commandDeps);
   registerRunDiagnosticsCommand(context, commandDeps);
-  registerInitProjectRulesCommand(context);
+  registerInitProjectRulesCommand(context, () => currentChat().startInit());
   registerSignOutCommand(context, commandDeps);
 }
 

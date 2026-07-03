@@ -16,6 +16,7 @@ import { totalCharacters } from '../context/contextPreview';
 import { parseRuleFile, ruleApplies } from '../context/rulesDir';
 import { terminalSnapshot } from '../context/terminalLog';
 import { loadProjectMemory } from '../context/projectMemory';
+import { findExistingRulesFile, writeRulesTemplate } from '../commands/initProjectRules';
 import { isSensitiveFile } from '../context/sensitiveFileFilter';
 import { loadIgnoreMatcher, type IgnoreMatcher } from '../context/ignoreRules';
 import type { CheckpointStore } from '../diff/checkpoints';
@@ -1066,7 +1067,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         await this.pickModel();
         return true;
       case 'init':
-        await vscode.commands.executeCommand('parley.initProjectRules');
+        await this.startInit();
         return true;
       case 'json':
         this.jsonNext = true;
@@ -1081,7 +1082,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         this.history.push({
           role: 'assistant',
           content:
-            '**Slash commands**\n- `/clear` (or `/new`) — start a new conversation\n- `/compact` — summarize to free up context (choose keep-recent or all)\n- `/context` — breakdown of what is filling the context window\n- `/cost` — show this conversation\'s token/cost usage\n- `/model` — switch the model\n- `/compare [prompt]` — run a prompt on a second model, side by side (reuses your last message if omitted)\n- `/verify [command]` — run the project tests and fix failures until green (agent modes only)\n- `/init` — create a project rules file (AGENTS.md)\n- `/json` — make the next reply a JSON object\n- `/help` — this list\n\n**Custom commands:** add a `name.md` file under `.parley/commands/` or `.claude/commands/` (workspace), or `~/.parley/commands/` / `~/.claude/commands/` (global — workspace wins on a name clash) and it becomes `/name` — its text is the prompt, with `$ARGS` replaced by anything typed after the command and `$SELECTION` by the active editor selection. Optional `description:` frontmatter shows in the slash menu.\n\n**Custom subagents:** add a `name.md` under `.parley/agents/` (frontmatter `description:` and optional `model:`; body = its extra system prompt) and the agent can delegate read-only investigations to it via run_subagent.\n\nMost actions also have commands in the Command Palette (search "Parley").',
+            '**Slash commands**\n- `/clear` (or `/new`) — start a new conversation\n- `/compact` — summarize to free up context (choose keep-recent or all)\n- `/context` — breakdown of what is filling the context window\n- `/cost` — show this conversation\'s token/cost usage\n- `/model` — switch the model\n- `/compare [prompt]` — run a prompt on a second model, side by side (reuses your last message if omitted)\n- `/verify [command]` — run the project tests and fix failures until green (agent modes only)\n- `/init` — analyze the repo and write a tailored AGENTS.md rules file (template in Chat/Plan mode)\n- `/json` — make the next reply a JSON object\n- `/help` — this list\n\n**Custom commands:** add a `name.md` file under `.parley/commands/` or `.claude/commands/` (workspace), or `~/.parley/commands/` / `~/.claude/commands/` (global — workspace wins on a name clash) and it becomes `/name` — its text is the prompt, with `$ARGS` replaced by anything typed after the command and `$SELECTION` by the active editor selection. Optional `description:` frontmatter shows in the slash menu.\n\n**Custom subagents:** add a `name.md` under `.parley/agents/` (frontmatter `description:` and optional `model:`; body = its extra system prompt) and the agent can delegate read-only investigations to it via run_subagent.\n\nMost actions also have commands in the Command Palette (search "Parley").',
           createdAt: new Date().toISOString()
         });
         await this.postState();
@@ -2181,6 +2182,47 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       return;
     }
     await this.compactConversation(pick === KEEP ? 4 : 0);
+  }
+
+  /**
+   * `/init` — create the project rules file. In an agent mode the agent ANALYZES
+   * the repository first and writes a tailored AGENTS.md (verified commands, real
+   * architecture, observed conventions); in Chat/Plan mode it falls back to the
+   * static template. An existing rules file is opened instead, never overwritten.
+   */
+  public async startInit(): Promise<void> {
+    const existing = await findExistingRulesFile();
+    if (existing) {
+      await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(existing));
+      void vscode.window.showInformationMessage(
+        `Parley already uses ${path.basename(existing.fsPath)} for project rules.`
+      );
+      return;
+    }
+    if (!vscode.workspace.workspaceFolders?.length) {
+      await vscode.window.showWarningMessage('Parley: open a folder first to create a project rules file.');
+      return;
+    }
+    if (this.mode === 'chat' || this.mode === 'plan') {
+      await writeRulesTemplate();
+      const note =
+        '📝 Created `AGENTS.md` from the template. Tip: in an agent mode (Ask/Edit/Auto/Full), `/init` instead analyzes the repository and writes rules tailored to this project.';
+      this.history.push({ role: 'assistant', content: note, createdAt: new Date().toISOString() });
+      this.appendTranscript({ kind: 'note', text: note, at: new Date().toISOString() });
+      await this.postState();
+      return;
+    }
+    const prompt =
+      `Analyze this repository and CREATE a tailored \`AGENTS.md\` project-rules file at the workspace root.\n\n` +
+      `Explore first (be efficient — delegate broad surveying to run_subagent): the README, manifest/build files (package.json, pyproject.toml, Cargo.toml, Makefile, …), directory layout, test setup, CI workflows, and a few representative source files — enough to describe how THIS project actually works.\n\n` +
+      `Then write AGENTS.md (write_file) containing ONLY verified, project-specific content — no generic advice, no placeholders:\n` +
+      `## Project — what it is, 2-3 lines\n` +
+      `## Build & test — the exact commands (build, test, lint, run) as found in scripts/CI\n` +
+      `## Architecture — key directories/files and what lives where (5-12 bullets)\n` +
+      `## Conventions — code style, naming, patterns, libraries preferred/avoided, as observed in the code\n` +
+      `## Gotchas — anything non-obvious (env vars, codegen steps, platform quirks)\n\n` +
+      `Keep it under ~120 lines — this file is sent with EVERY AI request in this workspace, so concision matters. After writing it, summarize what you included.`;
+    await this.runTurn(prompt, this.contextOptions);
   }
 
   /**

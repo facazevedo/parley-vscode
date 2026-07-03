@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.95.0
+
+### Changed — `/init` now analyzes the repository (Claude-Code style)
+
+- In an agent mode, `/init` (and `Parley: Init Project Rules`) no longer writes a boilerplate template: the agent explores the repo — README, manifests, directory layout, CI, representative sources (delegating broad surveys to a subagent) — and **writes an AGENTS.md tailored to this project**: verified build/test/lint commands, the real architecture map, observed conventions, and gotchas. Capped at ~120 lines since the file rides along with every request.
+- In Chat/Plan mode it still writes the static template (with a tip about the agent version), and an existing rules file is opened, never overwritten — same safety as before.
+
 ## 0.94.0
 
 ### New — content search in the history panel
