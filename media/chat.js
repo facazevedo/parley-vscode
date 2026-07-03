@@ -1842,6 +1842,25 @@ import hljs from 'highlight.js/lib/common';
   if (shotBtn) {
     shotBtn.addEventListener('click', () => void takeScreenshot());
   }
+  // Computer control: if the composer already has a task, run it now; otherwise
+  // prefill "/computer " and focus so the user types the task and presses Enter.
+  const computerBtn = $('computer');
+  if (computerBtn) {
+    computerBtn.addEventListener('click', () => {
+      const text = prompt.value.trim();
+      if (text && !text.startsWith('/')) {
+        prompt.value = '/computer ' + text;
+        sendPrompt();
+        return;
+      }
+      if (!prompt.value.trim()) {
+        prompt.value = '/computer ';
+      }
+      prompt.focus();
+      prompt.setSelectionRange(prompt.value.length, prompt.value.length);
+      hideSlash();
+    });
+  }
   if (recBtn) {
     recBtn.addEventListener('click', () => {
       if (recState === 'idle') {

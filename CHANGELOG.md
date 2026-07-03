@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.99.1
+
+### New — 🖱️ computer-control button in the composer
+
+- Added a computer-control button to the composer toolbar, to the right of the 🎥 screen-record button. Click it with a task already typed to launch it straight away; click it empty to prefill `/computer ` and focus the box so you can type the task and press Enter. Same flow, safety gates, and consent as the `/computer` command.
+
 ## 0.99.0
 
 ### New — optional nut.js backend for computer use (cross-platform)
