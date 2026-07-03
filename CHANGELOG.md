@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.76.0
+
+### New — manage conversations from the history panel; click the meter to compact
+
+- **Rename / archive / delete** any conversation directly in the in-panel history: hover a row for ✎ rename, 🗄 archive, 🗑 delete (with a confirm). Archived conversations are hidden until you toggle **Archived** in the panel header; renames persist (kept in the index and re-applied when the conversation is reopened). Acting on the live conversation works too — deleting it starts a fresh one. Backed by new `store.ts` ops (`renameConversation` / `setConversationArchived` / `deleteConversation`).
+- **Click the context-window meter** (the ◔ ring in the header) to compact the conversation — the same keep-recent / summarize-all prompt as the ⊟ button, now one click from the usage indicator.
+
 ## 0.75.0
 
 ### Changed — in-panel conversation history (was a floating picker)

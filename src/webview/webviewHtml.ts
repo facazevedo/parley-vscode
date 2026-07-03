@@ -51,6 +51,7 @@ export function buildChatHtml(webview: vscode.Webview, extensionUri: vscode.Uri)
             <button type="button" class="hp-scopebtn active" data-scope="repo" title="Conversations saved in this workspace">This repo</button>
             <button type="button" class="hp-scopebtn" data-scope="all" title="Conversations from every workspace you've used Parley in">All repos</button>
           </div>
+          <button type="button" id="historyArchived" class="hp-archbtn" title="Show archived conversations" aria-pressed="false">Archived</button>
           <button type="button" id="historyClose" class="hp-close" title="Close" aria-label="Close history">✕</button>
         </div>
         <input type="text" id="historyFilter" class="hp-filter" placeholder="Filter conversations…" aria-label="Filter conversations">

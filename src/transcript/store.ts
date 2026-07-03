@@ -20,6 +20,8 @@ export interface ConversationIndexEntry {
   savedAt: string;
   model: string;
   events: number;
+  /** Hidden from the default history list until "Show archived" is on. */
+  archived?: boolean;
 }
 
 /** One `.parley` base dir seen by the extension — the registry that powers "All repos". */
@@ -142,6 +144,49 @@ export async function upsertIndex(base: string, entry: ConversationIndexEntry): 
 export async function writeState(base: string, state: Record<string, unknown>): Promise<void> {
   const file = path.join(base, 'state.json');
   await serialize(file, () => atomicWrite(file, JSON.stringify(state, null, 2)));
+}
+
+/** Update one conversation's title in the index (rename). No-op if the id isn't present. */
+export async function renameConversation(base: string, id: string, title: string): Promise<void> {
+  const file = path.join(base, 'index.json');
+  await serialize(file, async () => {
+    const list = await readIndex(base);
+    const entry = list.find((e) => e.id === id);
+    if (entry) {
+      entry.title = title;
+      await atomicWrite(file, JSON.stringify(list.slice(0, 200), null, 2));
+    }
+  });
+}
+
+/** Flag/unflag a conversation as archived (hidden from the default list). No-op if absent. */
+export async function setConversationArchived(base: string, id: string, archived: boolean): Promise<void> {
+  const file = path.join(base, 'index.json');
+  await serialize(file, async () => {
+    const list = await readIndex(base);
+    const entry = list.find((e) => e.id === id);
+    if (entry) {
+      entry.archived = archived;
+      await atomicWrite(file, JSON.stringify(list.slice(0, 200), null, 2));
+    }
+  });
+}
+
+/** Remove a conversation from the index AND delete its transcript files (best-effort). */
+export async function deleteConversation(base: string, id: string): Promise<void> {
+  const idxFile = path.join(base, 'index.json');
+  await serialize(idxFile, async () => {
+    const list = (await readIndex(base)).filter((e) => e.id !== id);
+    await atomicWrite(idxFile, JSON.stringify(list.slice(0, 200), null, 2));
+  });
+  const jsonl = jsonlPath(base, id);
+  await serialize(jsonl, async () => {
+    await fsp.rm(jsonl, { force: true }).catch(() => undefined);
+  });
+  const md = markdownPath(base, id);
+  await serialize(md, async () => {
+    await fsp.rm(md, { force: true }).catch(() => undefined);
+  });
 }
 
 /** Path to the global registry of `.parley` base dirs (lives in the extension's global storage). */

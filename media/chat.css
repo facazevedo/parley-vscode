@@ -815,6 +815,20 @@ button:disabled {
   color: var(--vscode-button-foreground);
   border-color: var(--vscode-button-background);
 }
+.hp-archbtn {
+  font-size: 0.78em;
+  padding: 3px 8px;
+  border: 1px solid var(--vscode-dropdown-border, rgba(127, 127, 127, 0.4));
+  border-radius: 12px;
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+}
+.hp-archbtn[aria-pressed='true'] {
+  background: var(--vscode-button-secondaryBackground, rgba(127, 127, 127, 0.25));
+  color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+  border-color: var(--vscode-focusBorder);
+}
 .hp-close {
   background: transparent;
   border: 0;
@@ -825,6 +839,42 @@ button:disabled {
 }
 .hp-close:hover {
   background: rgba(127, 127, 127, 0.25);
+}
+/* Row layout: title/meta on the left, hover actions (rename/archive/delete) on the right. */
+.hp-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.hp-item-main {
+  flex: 1;
+  min-width: 0;
+}
+.hp-item.archived .hp-item-main {
+  opacity: 0.55;
+}
+.hp-actions {
+  display: none;
+  gap: 2px;
+  flex: none;
+}
+.hp-item:hover .hp-actions,
+.hp-item.active .hp-actions {
+  display: flex;
+}
+.hp-act {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 0.9em;
+  opacity: 0.8;
+}
+.hp-act:hover {
+  background: rgba(127, 127, 127, 0.3);
+  opacity: 1;
 }
 .hp-filter {
   margin: 6px 8px;

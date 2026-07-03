@@ -80,9 +80,10 @@ import hljs from 'highlight.js/lib/common';
     const num = ctxEl.querySelector('.ctxnum');
     ring.style.background = 'conic-gradient(' + color + ' ' + pct + '%, rgba(127,127,127,0.25) 0)';
     num.textContent = known ? pct + '%' : '–';
-    ctxEl.title = known
-      ? 'Context window used: ' + pct + '% (auto-compacts when it fills up)'
-      : 'Context usage (window size unknown for this model)';
+    ctxEl.title =
+      (known
+        ? 'Context window used: ' + pct + '% (auto-compacts when it fills up)'
+        : 'Context usage (window size unknown for this model)') + ' — click to compact now';
     ctxEl.style.display = 'inline-flex';
   }
   let statusBase = '';
@@ -1009,12 +1010,19 @@ import hljs from 'highlight.js/lib/common';
     sessionTokEl.title = 'View usage';
     sessionTokEl.addEventListener('click', () => vscode.postMessage({ type: 'openUsage' }));
   }
+  // Clicking the context-window meter offers to compact the conversation.
+  if (ctxEl) {
+    ctxEl.style.cursor = 'pointer';
+    ctxEl.addEventListener('click', () => vscode.postMessage({ type: 'compact' }));
+  }
 
   // ---------- In-panel conversation history ----------
   const historyPanel = $('historyPanel');
   const historyListEl = $('historyList');
   const historyFilter = $('historyFilter');
+  const historyArchivedBtn = $('historyArchived');
   let historyScope = 'repo';
+  let showArchived = false;
   let historyAllItems = []; // full list from the host for the current scope
   let historyActive = -1; // keyboard-highlighted index within the filtered view
   let historyFiltered = [];
@@ -1052,9 +1060,27 @@ import hljs from 'highlight.js/lib/common';
     const d = new Date(iso);
     return isNaN(d.getTime()) ? '' : d.toLocaleString();
   }
+  function actionButton(label, title, onClick) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'hp-act';
+    b.textContent = label;
+    b.title = title;
+    // mousedown + preventDefault so the row's own select handler doesn't also fire,
+    // and focus stays put; stopPropagation keeps the click-away closer from firing.
+    b.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      onClick();
+    });
+    return b;
+  }
   function renderHistory() {
     const q = (historyFilter.value || '').trim().toLowerCase();
     historyFiltered = historyAllItems.filter((it) => {
+      if (!showArchived && it.archived) {
+        return false;
+      }
       if (!q) {
         return true;
       }
@@ -1075,13 +1101,15 @@ import hljs from 'highlight.js/lib/common';
     historyListEl.replaceChildren(
       ...historyFiltered.map((it, i) => {
         const row = document.createElement('div');
-        row.className = 'hp-item' + (i === historyActive ? ' active' : '');
+        row.className = 'hp-item' + (i === historyActive ? ' active' : '') + (it.archived ? ' archived' : '');
+
+        const main = document.createElement('div');
+        main.className = 'hp-item-main';
         const title = document.createElement('div');
         title.className = 'hp-item-title';
         title.textContent = it.title || 'Conversation';
         const meta = document.createElement('div');
         meta.className = 'hp-item-meta';
-        // The repo badge only adds signal in the All-repos view.
         if (historyScope === 'all' && it.repo) {
           const badge = document.createElement('span');
           badge.className = 'hp-repo';
@@ -1089,16 +1117,34 @@ import hljs from 'highlight.js/lib/common';
           meta.append(badge);
         }
         meta.append(
-          document.createTextNode(`${fmtWhen(it.savedAt)} · ${it.events} events${it.model ? ' · ' + it.model : ''}`)
+          document.createTextNode(
+            `${it.archived ? '🗄 ' : ''}${fmtWhen(it.savedAt)} · ${it.events} events${it.model ? ' · ' + it.model : ''}`
+          )
         );
-        row.append(title, meta);
-        row.addEventListener('mousedown', (e) => {
+        main.append(title, meta);
+        main.addEventListener('mousedown', (e) => {
           e.preventDefault();
           selectHistory(it);
         });
+
+        const actions = document.createElement('div');
+        actions.className = 'hp-actions';
+        actions.append(
+          actionButton('✎', 'Rename', () => historyAction('renameConversation', it)),
+          actionButton(it.archived ? '⇪' : '🗄', it.archived ? 'Unarchive' : 'Archive', () =>
+            historyAction('archiveConversation', it, { value: !it.archived })
+          ),
+          actionButton('🗑', 'Delete', () => historyAction('deleteConversation', it))
+        );
+
+        row.append(main, actions);
         return row;
       })
     );
+  }
+  function historyAction(type, it, extra) {
+    vscode.postMessage(Object.assign({ type, id: it.id, base: it.base, scope: historyScope }, extra || {}));
+    // Rename/delete prompt on the host; the list refreshes via a fresh historyResults.
   }
   function selectHistory(it) {
     if (!it) {
@@ -1117,6 +1163,14 @@ import hljs from 'highlight.js/lib/common';
       });
     });
     $('historyClose').addEventListener('click', () => closeHistory());
+    if (historyArchivedBtn) {
+      historyArchivedBtn.addEventListener('click', () => {
+        showArchived = !showArchived;
+        historyArchivedBtn.setAttribute('aria-pressed', showArchived ? 'true' : 'false');
+        historyActive = -1;
+        renderHistory();
+      });
+    }
     historyFilter.addEventListener('input', () => {
       historyActive = -1;
       renderHistory();

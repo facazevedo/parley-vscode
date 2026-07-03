@@ -91,6 +91,9 @@ interface ChatPanelMessage {
     | 'openHistory'
     | 'historyList'
     | 'openConversation'
+    | 'renameConversation'
+    | 'archiveConversation'
+    | 'deleteConversation'
     | 'copyText'
     | 'openLink'
     | 'mentionQuery'
@@ -617,6 +620,28 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         return;
       case 'openConversation':
         await this.loadConversation(message.base ?? this.parleyBase(), message.id ?? '');
+        return;
+      case 'renameConversation':
+        await this.renameConversationFlow(
+          message.base ?? this.parleyBase(),
+          message.id ?? '',
+          message.scope === 'all' ? 'all' : 'repo'
+        );
+        return;
+      case 'archiveConversation':
+        await this.archiveConversationFlow(
+          message.base ?? this.parleyBase(),
+          message.id ?? '',
+          message.value !== false,
+          message.scope === 'all' ? 'all' : 'repo'
+        );
+        return;
+      case 'deleteConversation':
+        await this.deleteConversationFlow(
+          message.base ?? this.parleyBase(),
+          message.id ?? '',
+          message.scope === 'all' ? 'all' : 'repo'
+        );
         return;
       case 'agentChanged':
         this.selectedAgentId = message.agentId ?? this.selectedAgentId;
@@ -2026,6 +2051,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       model: string;
       events: number;
       repo: string;
+      archived: boolean;
     };
     const items: HistoryItem[] = [];
     for (const { base, repo } of bases) {
@@ -2046,12 +2072,79 @@ export class ChatPanel implements vscode.WebviewViewProvider {
           savedAt: e.savedAt,
           model: e.model,
           events: e.events,
-          repo
+          repo,
+          archived: e.archived === true
         });
       }
     }
     items.sort((a, b) => (a.savedAt < b.savedAt ? 1 : a.savedAt > b.savedAt ? -1 : 0));
     this.post({ type: 'historyResults', scope, items: items.slice(0, 200) });
+  }
+
+  /** Rename a saved (or the live) conversation via an input box, then refresh the list. */
+  private async renameConversationFlow(base: string, id: string, scope: 'repo' | 'all'): Promise<void> {
+    if (!id) {
+      return;
+    }
+    const idx = await transcriptStore.readIndex(base);
+    const current = idx.find((e) => e.id === id);
+    const entered = await vscode.window.showInputBox({
+      title: 'Parley: rename conversation',
+      value: current?.title ?? '',
+      prompt: 'New title for this conversation',
+      validateInput: (v) => (v.trim().length === 0 ? 'Title cannot be empty.' : undefined)
+    });
+    if (entered === undefined) {
+      return; // cancelled
+    }
+    const title = entered.trim().slice(0, 120);
+    await transcriptStore.renameConversation(base, id, title);
+    // If it's the live conversation in this workspace, keep the in-memory title in sync.
+    if (base === this.parleyBase() && id === this.conversationId) {
+      this.recorder.customTitle = title;
+      this.save();
+      if (this.hostPanel) {
+        this.hostPanel.title = `Parley — ${title}`;
+      }
+    }
+    await this.sendHistoryList(scope);
+  }
+
+  /** Archive/unarchive a saved conversation (hides it from the default list), then refresh. */
+  private async archiveConversationFlow(
+    base: string,
+    id: string,
+    archived: boolean,
+    scope: 'repo' | 'all'
+  ): Promise<void> {
+    if (!id) {
+      return;
+    }
+    await transcriptStore.setConversationArchived(base, id, archived);
+    await this.sendHistoryList(scope);
+  }
+
+  /** Delete a conversation (transcript files + index entry) after a confirm, then refresh. */
+  private async deleteConversationFlow(base: string, id: string, scope: 'repo' | 'all'): Promise<void> {
+    if (!id) {
+      return;
+    }
+    const idx = await transcriptStore.readIndex(base);
+    const current = idx.find((e) => e.id === id);
+    const choice = await vscode.window.showWarningMessage(
+      `Delete "${current?.title ?? 'this conversation'}"? This permanently removes its transcript from disk and can't be undone.`,
+      { modal: true },
+      'Delete'
+    );
+    if (choice !== 'Delete') {
+      return;
+    }
+    await transcriptStore.deleteConversation(base, id);
+    // Deleting the live conversation: reset to a fresh one so we're not editing a ghost.
+    if (base === this.parleyBase() && id === this.conversationId) {
+      await this.startNewConversation();
+    }
+    await this.sendHistoryList(scope);
   }
 
   /**
@@ -2070,13 +2163,15 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       );
       return;
     }
+    // Preserve any custom (renamed) title from the index so re-autosave doesn't revert it.
+    const savedTitle = (await transcriptStore.readIndex(base)).find((e) => e.id === id)?.title;
     await this.autosaveConversation();
     this.archiveCurrent();
     this.transcript = transcript;
     this.history.length = 0;
     this.history.push(...transcriptToHistory(transcript));
     this.conversationId = id;
-    this.recorder.customTitle = undefined; // title re-derives from the loaded content
+    this.recorder.customTitle = savedTitle && savedTitle !== 'Conversation' ? savedTitle : undefined;
     this.conversationStartedAt = transcript[0]?.at ?? new Date().toISOString();
     this.attachments = [];
     this.executor.resetConversationState();
