@@ -15,6 +15,7 @@ import {
 import { totalCharacters } from '../context/contextPreview';
 import { parseRuleFile, ruleApplies } from '../context/rulesDir';
 import { terminalSnapshot } from '../context/terminalLog';
+import { loadProjectMemory } from '../context/projectMemory';
 import { isSensitiveFile } from '../context/sensitiveFileFilter';
 import { loadIgnoreMatcher, type IgnoreMatcher } from '../context/ignoreRules';
 import type { CheckpointStore } from '../diff/checkpoints';
@@ -1659,6 +1660,10 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     const stylePrompt = resolveStylePrompt(await loadOutputStyles(), this.getSettings().outputStyle);
     const rules = await this.readProjectRules();
     const rulesSection = rules ? `# Project rules (from the workspace)\n${rules}` : undefined;
+    const memory = await loadProjectMemory();
+    const memorySection = memory
+      ? `# Project memory (facts you saved earlier with the remember tool — trust but verify against current code)\n${memory}`
+      : undefined;
     let modeNote: string | undefined;
     if (this.mode === 'plan') {
       modeNote =
@@ -1692,7 +1697,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         ? `This is a MULTI-ROOT workspace (folders: ${folders.map((f) => f.name).join(', ')}). Tool paths may target any root — prefix with the folder name (e.g. "${folders[1].name}/src/…") when the first root isn't meant. run_command executes in the FIRST root (${folders[0].name}); use "cd <folder> && …" for the others.`
         : undefined;
     return (
-      [env, stylePrompt || undefined, modeNote, multiRootNote, rulesSection].filter(Boolean).join('\n\n') || undefined
+      [env, stylePrompt || undefined, modeNote, multiRootNote, rulesSection, memorySection]
+        .filter(Boolean)
+        .join('\n\n') || undefined
     );
   }
 

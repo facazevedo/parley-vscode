@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.90.0
+
+### New — agent-maintained project memory
+
+- New **`remember` tool**: when the agent learns a durable, non-obvious fact ("integration tests need Docker", "deploys run from scripts/ship.ps1", a preference you stated), it saves one concise sentence to **`.parley/memory.md`** — and every future conversation starts with that memory injected into the system prompt (like project rules, capped at 8k chars). Knowledge now compounds across conversations.
+- Guardrails: exact duplicates are rejected, entries cap at 200 (oldest dropped), the tool description forbids secrets and task-local trivia, subagents can't write memory, and the file is plain markdown you own — **`Parley: Open Project Memory`** opens it for review/pruning (your own prose in the file is preserved when the agent appends).
+
 ## 0.89.0
 
 ### New — `Parley: File Edit History`

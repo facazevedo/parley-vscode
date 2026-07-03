@@ -6,6 +6,7 @@ import { registerFixDiagnosticsCommand } from './commands/fixDiagnostics';
 import { registerGenerateCommitMessageCommand } from './commands/generateCommitMessage';
 import { registerReviewBranchCommand } from './commands/reviewBranch';
 import { registerFileEditHistoryCommand } from './commands/fileEditHistory';
+import { MEMORY_HEADER, memoryUri } from './context/projectMemory';
 import { registerGenerateImageCommand } from './commands/generateImage';
 import { registerGenerateTestsCommand } from './commands/generateTests';
 import { registerInitProjectRulesCommand } from './commands/initProjectRules';
@@ -275,6 +276,22 @@ export function activate(context: vscode.ExtensionContext): void {
   registerGenerateCommitMessageCommand(context, commandDeps);
   registerReviewBranchCommand(context, commandDeps);
   registerFileEditHistoryCommand(context, commandDeps);
+  context.subscriptions.push(
+    vscode.commands.registerCommand('parley.openProjectMemory', async () => {
+      const uri = memoryUri();
+      if (!uri) {
+        await vscode.window.showInformationMessage('Parley: open a workspace to use project memory.');
+        return;
+      }
+      try {
+        await vscode.workspace.fs.stat(uri);
+      } catch {
+        await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(uri, '..'));
+        await vscode.workspace.fs.writeFile(uri, Buffer.from(MEMORY_HEADER, 'utf8'));
+      }
+      await vscode.window.showTextDocument(uri);
+    })
+  );
   registerToggleInlineCompletionCommand(context);
   registerShowUsageCommand(context, commandDeps);
   registerReportIssueCommand(context, commandDeps);

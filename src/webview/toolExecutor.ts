@@ -25,6 +25,7 @@ import { estimateCostUsd } from '../parley/pricing';
 import { resolveThinking, type ThinkingLevel } from '../parley/thinking';
 import { SUBAGENT_TOOLS, assertInsideWorkspace, resolveAcrossRoots, runAgentTool } from '../parley/tools';
 import type { ToolCall } from '../parley/types';
+import { rememberFact } from '../context/projectMemory';
 import { webSearch } from '../web/webSearch';
 import type { TranscriptRecorder } from './transcriptRecorder';
 
@@ -165,6 +166,9 @@ export class ToolExecutor {
     if (call.name === 'run_command') {
       return this.toolRunCommand(call);
     }
+    if (call.name === 'remember') {
+      return this.toolRemember(call);
+    }
     if (call.name === 'update_plan') {
       return this.toolUpdatePlan(call);
     }
@@ -273,6 +277,30 @@ export class ToolExecutor {
       apiKey: s.webSearchApiKey,
       googleCx: s.webSearchGoogleCx
     });
+  }
+
+  /** Persist a durable project fact to `.parley/memory.md` (injected into future turns). */
+  private async toolRemember(call: ToolCall): Promise<string> {
+    let fact = '';
+    try {
+      fact = String((JSON.parse(call.arguments || '{}') as { fact?: unknown }).fact ?? '').trim();
+    } catch {
+      return 'Error: arguments were not valid JSON.';
+    }
+    if (!fact) {
+      return 'Error: fact is required — one concise, durable sentence.';
+    }
+    const result = await rememberFact(fact);
+    switch (result) {
+      case 'added':
+        return `Remembered: "${fact}" (saved to .parley/memory.md — included in future conversations).`;
+      case 'duplicate':
+        return 'Already remembered — no change.';
+      case 'no-workspace':
+        return 'Error: no workspace folder open — nowhere to store project memory.';
+      default:
+        return 'Error: could not write .parley/memory.md.';
+    }
   }
 
   /** Render the agent's task checklist in the chat (Claude-Code / Codex style). */

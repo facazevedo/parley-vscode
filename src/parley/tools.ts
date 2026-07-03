@@ -364,6 +364,24 @@ export const AGENT_TOOLS: readonly ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'remember',
+      description:
+        "Save one durable, non-obvious fact about this project to persistent memory (`.parley/memory.md`), so future conversations start knowing it. Use it when you learn something that took effort to discover and will matter again: build/test quirks ('integration tests need Docker running'), key file locations, project conventions, environment requirements, or explicit user preferences about how to work in this repo. Do NOT store things that are obvious from the code, one-off details for the current task, or anything secret (keys, tokens, passwords). One concise sentence per call.",
+      parameters: {
+        type: 'object',
+        properties: {
+          fact: {
+            type: 'string',
+            description: 'The fact to remember — one concise, self-contained sentence.'
+          }
+        },
+        required: ['fact']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'update_plan',
       description:
         'Maintain a short checklist of the high-level steps for the current task (3-8 items). Call it when you begin a multi-step task and again whenever a step changes status, so the user can follow along. Exactly one step should be "in_progress" at a time.',
@@ -411,10 +429,12 @@ export const READ_ONLY_TOOLS: readonly ToolDefinition[] = AGENT_TOOLS.filter(
 
 /**
  * What a subagent may call: the read-only set minus run_subagent (depth 1 only —
- * no recursive spawning) and update_plan (the plan checklist belongs to the parent).
+ * no recursive spawning), update_plan (the plan checklist belongs to the parent),
+ * and remember (project memory is curated by the parent agent, not side quests).
  */
 export const SUBAGENT_TOOLS: readonly ToolDefinition[] = READ_ONLY_TOOLS.filter(
-  (tool) => tool.function.name !== 'run_subagent' && tool.function.name !== 'update_plan'
+  (tool) =>
+    tool.function.name !== 'run_subagent' && tool.function.name !== 'update_plan' && tool.function.name !== 'remember'
 );
 
 /**
