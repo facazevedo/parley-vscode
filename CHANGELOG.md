@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.0
+
+### New — `Parley: Usage History`
+
+- A webview panel that aggregates the per-conversation token/cost **estimates** Parley already records into an at-a-glance view: total spend/tokens/conversations, a **30-day cost-per-day bar chart**, and a **by-model breakdown** table — across this workspace and every repo in the global registry. Answers "where has my spend gone?" without leaving VS Code.
+- Each conversation's tokens + estimated cost are now persisted in its `.parley` index entry (on autosave), so the view is instant and needs no re-parsing of transcripts. This is the local estimate over time; **`Parley: Show Usage`** remains the authoritative billed figure from the gateway. Pure aggregator is unit-tested.
+
 ## 1.4.0
 
 ### New — `@sym:` mention (find a symbol by name)

@@ -725,7 +725,8 @@ frontmatter‑less (or `alwaysApply: true`) rules always apply.
 | `Parley: Select Output Style`                   | Choose how Parley communicates (Default/Concise/Explanatory/Learning + custom)     |
 | `Parley: Show Context Breakdown`                | Per-component estimate of what fills the context window (also `/context`)          |
 | `Parley: Reconnect MCP Servers`                 | Restart MCP servers and show status                                                |
-| `Parley: Show Usage`                            | Real billed spend for the current month                                            |
+| `Parley: Show Usage`                            | Real billed spend for the current month (from the gateway)                         |
+| `Parley: Usage History`                         | Estimated spend over time — by-day chart + by-model table from saved transcripts   |
 | `Parley: Set Token Limit`                       | Per‑conversation token budget                                                      |
 | `Parley: Toggle Inline Completion`              | Enable/disable ghost‑text completions                                              |
 | `Parley: Init Project Rules`                    | Analyze the repo → tailored `AGENTS.md` (static template in Chat/Plan mode)        |

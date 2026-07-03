@@ -20,6 +20,10 @@ export interface ConversationIndexEntry {
   savedAt: string;
   model: string;
   events: number;
+  /** Session token total for the conversation (for the usage-history view). */
+  tokens?: number;
+  /** Estimated cost in USD for the conversation. */
+  costUsd?: number;
   /** Hidden from the default history list until "Show archived" is on. */
   archived?: boolean;
 }

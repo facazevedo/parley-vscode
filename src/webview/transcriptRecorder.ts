@@ -127,7 +127,9 @@ export class TranscriptRecorder {
         title: meta.title,
         savedAt: meta.exportedAt ?? meta.createdAt,
         model: meta.models[0] ?? '',
-        events: this.entries.length
+        events: this.entries.length,
+        tokens: meta.sessionTokens,
+        costUsd: meta.estimatedCostUsd
       });
       await transcriptStore.writeState(base, {
         lastConversationId: this.conversationId,

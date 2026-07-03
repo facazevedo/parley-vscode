@@ -8,6 +8,7 @@ import { registerReviewBranchCommand } from './commands/reviewBranch';
 import { registerFileEditHistoryCommand } from './commands/fileEditHistory';
 import { MEMORY_HEADER, memoryUri } from './context/projectMemory';
 import { registerFixLastCommandCommand } from './commands/fixLastCommand';
+import { registerUsageHistoryCommand } from './commands/usageHistory';
 import { registerGenerateImageCommand } from './commands/generateImage';
 import { registerGenerateTestsCommand } from './commands/generateTests';
 import { registerInitProjectRulesCommand } from './commands/initProjectRules';
@@ -278,6 +279,7 @@ export function activate(context: vscode.ExtensionContext): void {
   registerReviewBranchCommand(context, commandDeps);
   registerFileEditHistoryCommand(context, commandDeps);
   registerFixLastCommandCommand(context, commandDeps);
+  registerUsageHistoryCommand(context, commandDeps);
   context.subscriptions.push(
     vscode.commands.registerCommand('parley.openProjectMemory', async () => {
       const uri = memoryUri();
