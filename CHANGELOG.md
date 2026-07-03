@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.85.0
+
+### New — `/compare`: side-by-side model comparison
+
+- Type **`/compare`** (reuses your last message) or **`/compare <prompt>`**, pick a second model from the in-panel menu, and Parley runs the same prompt — same system prompt, conversation history, and thinking settings — on your current model and the picked one in parallel (chat-only, no tools). The two replies render side by side in a card (columns stack when the panel is narrow), fully markdown-rendered with the usual code-block Copy/Apply buttons.
+- **"Use this reply"** adopts a column into the conversation as if it were the assistant's answer — follow-ups build on it, the card marks the winner "✓ adopted", and the choice survives reload/fork (the adopted pair is reconstructed into history from the transcript).
+- Runs under the turn lifecycle: the composer shows busy, **Stop** cancels both requests, both responses' tokens/cost hit the session counters (and the status-bar ticker). One side failing still leaves the other adoptable; both failing records a note. Comparisons persist in the transcript and export to Markdown/plain text (with the adopted marker), covered by tests.
+
 ## 0.84.0
 
 ### New — status-bar cost ticker + unread-reply badge

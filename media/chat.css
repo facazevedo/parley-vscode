@@ -580,6 +580,57 @@ button:disabled {
   border-radius: 8px;
   overflow: hidden;
 }
+/* ⚖ /compare — two model replies side by side ("Use this reply" adopts one). */
+.comparecard {
+  margin: 4px 0 12px;
+  border: 1px solid var(--vscode-editorWidget-border, rgba(127, 127, 127, 0.3));
+  border-radius: 8px;
+  overflow: hidden;
+}
+.comparehead {
+  padding: 6px 10px;
+  font-weight: 600;
+  font-size: 12px;
+  border-bottom: 1px solid var(--vscode-editorWidget-border, rgba(127, 127, 127, 0.3));
+}
+.comparecols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.comparecol {
+  padding: 8px 10px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.comparecol + .comparecol {
+  border-left: 1px solid var(--vscode-editorWidget-border, rgba(127, 127, 127, 0.3));
+}
+.comparecol.chosen {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+.comparemodel {
+  font-size: 11px;
+  opacity: 0.8;
+  margin-bottom: 6px;
+  font-weight: 600;
+  word-break: break-all;
+}
+.comparebody.error {
+  color: var(--vscode-errorForeground);
+}
+.comparecol .applybtn {
+  margin-top: 8px;
+}
+@media (max-width: 500px) {
+  .comparecols {
+    grid-template-columns: 1fr;
+  }
+  .comparecol + .comparecol {
+    border-left: none;
+    border-top: 1px solid var(--vscode-editorWidget-border, rgba(127, 127, 127, 0.3));
+  }
+}
 .changeshead {
   display: flex;
   align-items: center;

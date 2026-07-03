@@ -45,7 +45,17 @@ export type TranscriptEntry =
       removed: number;
       at: string;
     }
-  | { kind: 'note'; text: string; images?: string[]; at: string };
+  | { kind: 'note'; text: string; images?: string[]; at: string }
+  | {
+      kind: 'compare';
+      id: string;
+      prompt: string;
+      a: { model: string; text: string; error?: boolean };
+      b: { model: string; text: string; error?: boolean };
+      /** Which reply (if any) was adopted into the conversation. */
+      chosen?: 'a' | 'b';
+      at: string;
+    };
 
 /**
  * Everything before the nth user message (0-based ordinal) — used by "edit & resend"
@@ -178,6 +188,16 @@ export function transcriptToMarkdown(meta: TranscriptMeta, entries: readonly Tra
       case 'note':
         lines.push(`_${e.text}_`, '');
         break;
+      case 'compare':
+        lines.push(`**Model comparison** — _${e.prompt}_`, '');
+        for (const [key, col] of [
+          ['a', e.a],
+          ['b', e.b]
+        ] as const) {
+          lines.push(`### ${col.model}${e.chosen === key ? ' ✓ adopted' : ''}`, '');
+          lines.push(col.error ? `⚠ ${col.text}` : col.text, '');
+        }
+        break;
     }
   }
   return lines.join('\n');
@@ -233,6 +253,17 @@ export function transcriptToPlainText(meta: TranscriptMeta, entries: readonly Tr
         break;
       case 'note':
         lines.push(`  (${e.text})`, '');
+        break;
+      case 'compare':
+        lines.push(`[Comparison] ${e.prompt}`, '');
+        for (const [key, col] of [
+          ['a', e.a],
+          ['b', e.b]
+        ] as const) {
+          lines.push(`--- ${col.model}${e.chosen === key ? ' (adopted)' : ''} ---`, '');
+          lines.push(col.error ? `(error) ${col.text}` : col.text, '');
+        }
+        lines.push('-'.repeat(40), '');
         break;
     }
   }

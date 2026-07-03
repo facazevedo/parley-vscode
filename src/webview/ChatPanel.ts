@@ -42,7 +42,8 @@ import { ToolExecutor, runShellCommand } from './toolExecutor';
 import { audioFormatFromExt, audioFormatFromMime, modelSupportsAudio } from '../parley/audio';
 import { documentProviderFor } from '../parley/files';
 import { contextWindowFor, modelSupportsThinking } from '../parley/models';
-import { formatUsd } from '../parley/pricing';
+import { estimateCostUsd, formatUsd } from '../parley/pricing';
+import { resolveThinking } from '../parley/thinking';
 import { armDebugFile } from '../debug/debug';
 import { runHookEvent } from '../hooks/hooks';
 import { getBrowserManager } from '../browser/browserManager';
@@ -62,6 +63,7 @@ import type {
   AgentInfo,
   AudioAttachment,
   ChatMessage,
+  ChatResponse,
   ContextAttachment,
   DocumentAttachment,
   ImageAttachment,
@@ -118,6 +120,8 @@ interface ChatPanelMessage {
     | 'webviewReady'
     | 'openUsage'
     | 'setUsageAccount'
+    | 'compareRun'
+    | 'comparePick'
     | 'setApiKey';
   readonly prompt?: string;
   readonly agentId?: string;
@@ -166,6 +170,10 @@ interface ChatPanelMessage {
   readonly accountId?: string;
   /** For 'applyCodeBlock': the fence language (informational). */
   readonly lang?: string;
+  /** For 'compareRun': the model to compare the current one against. */
+  readonly otherId?: string;
+  /** For 'comparePick': which column ('a' | 'b') to adopt. */
+  readonly which?: string;
 }
 
 type RewindChoice = 'convo' | 'files' | 'both';
@@ -746,6 +754,12 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       case 'openUsage':
         await this.sendUsageInfo();
         return;
+      case 'compareRun':
+        await this.runCompare(message.prompt ?? '', message.otherId ?? '');
+        return;
+      case 'comparePick':
+        await this.adoptCompareChoice(message.id ?? '', message.which === 'b' ? 'b' : 'a');
+        return;
       case 'setUsageAccount': {
         const accountId = (message.accountId ?? '').trim();
         if (accountId) {
@@ -998,6 +1012,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         // Show the options in the webview's in-panel menu (concise, chat-anchored).
         this.post({ type: 'openCompactMenu' });
         return true;
+      case 'compare':
+        await this.startCompare(input);
+        return true;
       case 'context':
         await this.showContextBreakdown();
         return true;
@@ -1032,7 +1049,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         this.history.push({
           role: 'assistant',
           content:
-            '**Slash commands**\n- `/clear` (or `/new`) — start a new conversation\n- `/compact` — summarize to free up context (choose keep-recent or all)\n- `/context` — breakdown of what is filling the context window\n- `/cost` — show this conversation\'s token/cost usage\n- `/model` — switch the model\n- `/init` — create a project rules file (AGENTS.md)\n- `/json` — make the next reply a JSON object\n- `/help` — this list\n\n**Custom commands:** add a `name.md` file under `.parley/commands/` or `.claude/commands/` (workspace), or `~/.parley/commands/` / `~/.claude/commands/` (global — workspace wins on a name clash) and it becomes `/name` — its text is the prompt, with `$ARGS` replaced by anything typed after the command and `$SELECTION` by the active editor selection. Optional `description:` frontmatter shows in the slash menu.\n\n**Custom subagents:** add a `name.md` under `.parley/agents/` (frontmatter `description:` and optional `model:`; body = its extra system prompt) and the agent can delegate read-only investigations to it via run_subagent.\n\nMost actions also have commands in the Command Palette (search "Parley").',
+            '**Slash commands**\n- `/clear` (or `/new`) — start a new conversation\n- `/compact` — summarize to free up context (choose keep-recent or all)\n- `/context` — breakdown of what is filling the context window\n- `/cost` — show this conversation\'s token/cost usage\n- `/model` — switch the model\n- `/compare [prompt]` — run a prompt on a second model, side by side (reuses your last message if omitted)\n- `/init` — create a project rules file (AGENTS.md)\n- `/json` — make the next reply a JSON object\n- `/help` — this list\n\n**Custom commands:** add a `name.md` file under `.parley/commands/` or `.claude/commands/` (workspace), or `~/.parley/commands/` / `~/.claude/commands/` (global — workspace wins on a name clash) and it becomes `/name` — its text is the prompt, with `$ARGS` replaced by anything typed after the command and `$SELECTION` by the active editor selection. Optional `description:` frontmatter shows in the slash menu.\n\n**Custom subagents:** add a `name.md` under `.parley/agents/` (frontmatter `description:` and optional `model:`; body = its extra system prompt) and the agent can delegate read-only investigations to it via run_subagent.\n\nMost actions also have commands in the Command Palette (search "Parley").',
           createdAt: new Date().toISOString()
         });
         await this.postState();
@@ -2128,6 +2145,106 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     await this.compactConversation(pick === KEEP ? 4 : 0);
   }
 
+  /** `/compare [prompt]` — offer the model list; the webview picker answers with 'compareRun'. */
+  private async startCompare(input: string): Promise<void> {
+    const args = input.replace(/^\/\S+\s*/, '').trim();
+    const prompt =
+      args ||
+      [...this.history]
+        .reverse()
+        .find((m) => m.role === 'user')
+        ?.content?.trim();
+    if (!prompt) {
+      const note = '⚖ Nothing to compare — type `/compare <prompt>` or send a message first.';
+      this.history.push({ role: 'assistant', content: note, createdAt: new Date().toISOString() });
+      this.appendTranscript({ kind: 'note', text: note, at: new Date().toISOString() });
+      await this.postState();
+      return;
+    }
+    const current = this.selectedAgentId || this.getSettings().defaultAgent;
+    const others = this.agents.filter((a) => a.id !== current);
+    if (others.length === 0) {
+      await vscode.window.showInformationMessage('Parley: no other models available to compare against.');
+      return;
+    }
+    this.post({
+      type: 'openCompareMenu',
+      prompt,
+      current,
+      models: others.map((a) => ({ id: a.id, label: a.label, detail: a.description }))
+    });
+  }
+
+  /** Run the same prompt on the current model and `otherId`, side by side (chat-only, no tools). */
+  private async runCompare(prompt: string, otherId: string): Promise<void> {
+    if (!prompt || !otherId) {
+      return;
+    }
+    if (this.busy) {
+      await vscode.window.showInformationMessage('Parley is still responding — stop it before comparing.');
+      return;
+    }
+    const current = this.selectedAgentId || this.getSettings().defaultAgent;
+    const systemExtra = await this.buildSystemExtra();
+    const thinking = resolveThinking(this.selectedThinking);
+    // Same history + prompt for both; this.history itself is NOT mutated.
+    const messages = [...this.history, { role: 'user' as const, content: prompt, createdAt: new Date().toISOString() }];
+    const ask = (agentId: string, signal: AbortSignal) =>
+      this.getProvider().sendMessage(
+        { prompt, messages, context: [], agentId, systemExtra, thinking, speed: this.selectedSpeed },
+        { signal }
+      );
+    let aborted = false;
+    const [ra, rb] = await this.turns.runExternal(async (signal) => {
+      const results = await Promise.allSettled([ask(current, signal), ask(otherId, signal)]);
+      aborted = signal.aborted;
+      return results;
+    });
+    if (aborted) {
+      return; // user hit Stop — record nothing (runExternal already re-posted state)
+    }
+    const column = (modelId: string, r: PromiseSettledResult<ChatResponse>) => {
+      if (r.status === 'fulfilled') {
+        if (r.value.usage) {
+          this.accrueUsage(r.value.usage.total, estimateCostUsd(modelId, r.value.usage) ?? 0);
+        }
+        return { model: modelId, text: r.value.message.content };
+      }
+      const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
+      return { model: modelId, text: msg.split('\n')[0].slice(0, 300), error: true };
+    };
+    const a = column(current, ra);
+    const b = column(otherId, rb);
+    if (a.error && b.error) {
+      const note = `⚖ Compare failed: ${a.text}`;
+      this.appendTranscript({ kind: 'note', text: note, at: new Date().toISOString() });
+      await this.postState();
+      return;
+    }
+    this.appendTranscript({ kind: 'compare', id: `cmp-${Date.now()}`, prompt, a, b, at: new Date().toISOString() });
+    await this.postState();
+  }
+
+  /** "Use this reply" on a compare card: adopt that column into the conversation history. */
+  private async adoptCompareChoice(id: string, which: 'a' | 'b'): Promise<void> {
+    const entry = this.transcript.find((x) => x.kind === 'compare' && x.id === id);
+    if (!entry || entry.kind !== 'compare' || entry.chosen) {
+      return;
+    }
+    const col = which === 'b' ? entry.b : entry.a;
+    if (col.error) {
+      return;
+    }
+    entry.chosen = which;
+    const now = new Date().toISOString();
+    this.history.push(
+      { role: 'user', content: entry.prompt, createdAt: now },
+      { role: 'assistant', content: col.text, model: col.model, createdAt: now }
+    );
+    this.syncTranscriptFile(); // the in-place `chosen` mutation must reach the JSONL
+    await this.postState();
+  }
+
   /**
    * Compact the conversation: ask the model to summarize it, then replace the
    * history with that summary so the chat can continue with far fewer tokens.
@@ -3143,6 +3260,13 @@ function transcriptToHistory(entries: readonly TranscriptEntry[]): ChatMessage[]
       out.push({ role: 'user', content: e.text, createdAt: e.at });
     } else if (e.kind === 'assistant') {
       out.push({ role: 'assistant', content: e.text, model: e.model, thinking: e.thinking, createdAt: e.at });
+    } else if (e.kind === 'compare' && e.chosen) {
+      // An adopted comparison joined the conversation as a normal exchange.
+      const col = e.chosen === 'b' ? e.b : e.a;
+      out.push(
+        { role: 'user', content: e.prompt, createdAt: e.at },
+        { role: 'assistant', content: col.text, model: col.model, createdAt: e.at }
+      );
     }
   }
   return out;

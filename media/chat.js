@@ -760,6 +760,55 @@ import hljs from 'highlight.js/lib/common';
     card.append(head, list);
     history.append(card);
   }
+  // ⚖ /compare — two model replies side by side, each adoptable into the conversation.
+  function renderCompareCard(e) {
+    const card = document.createElement('div');
+    card.className = 'comparecard';
+    const head = document.createElement('div');
+    head.className = 'comparehead';
+    head.textContent = '⚖ Compare — ' + (e.prompt || '').slice(0, 120);
+    const cols = document.createElement('div');
+    cols.className = 'comparecols';
+    const buttons = [];
+    [
+      ['a', e.a],
+      ['b', e.b]
+    ].forEach(([key, col]) => {
+      if (!col) {
+        return;
+      }
+      const colEl = document.createElement('div');
+      colEl.className = 'comparecol' + (e.chosen === key ? ' chosen' : '');
+      const model = document.createElement('div');
+      model.className = 'comparemodel';
+      model.textContent = col.model + (e.chosen === key ? ' ✓ adopted' : '');
+      const body = document.createElement('div');
+      body.className = 'comparebody content' + (col.error ? ' error' : '');
+      if (col.error) {
+        body.textContent = '⚠ ' + col.text;
+      } else {
+        body.innerHTML = renderMd(col.text || '');
+        enhanceContent(body);
+      }
+      colEl.append(model, body);
+      if (!e.chosen && !col.error) {
+        const use = document.createElement('button');
+        use.type = 'button';
+        use.className = 'applybtn';
+        use.textContent = 'Use this reply';
+        use.title = 'Adopt this reply into the conversation';
+        use.addEventListener('click', () => {
+          buttons.forEach((b) => (b.disabled = true));
+          vscode.postMessage({ type: 'comparePick', id: e.id, which: key });
+        });
+        buttons.push(use);
+        colEl.append(use);
+      }
+      cols.append(colEl);
+    });
+    card.append(head, cols);
+    history.append(card);
+  }
   function renderTranscript(entries, pendingIds) {
     history.replaceChildren();
     pendingIds = pendingIds || [];
@@ -830,6 +879,8 @@ import hljs from 'highlight.js/lib/common';
         renderStaticPlan(e.steps || []);
       } else if (e.kind === 'changes') {
         renderChangesCard(e);
+      } else if (e.kind === 'compare') {
+        renderCompareCard(e);
       } else if (e.kind === 'note') {
         const c = bubble('assistant', renderMd(e.text));
         c.parentNode.classList.add('note');
@@ -920,6 +971,7 @@ import hljs from 'highlight.js/lib/common';
     { cmd: '/compact', desc: 'Summarize to free up context' },
     { cmd: '/cost', desc: "Show this conversation's token/cost usage" },
     { cmd: '/model', desc: 'Switch the model' },
+    { cmd: '/compare', desc: 'Run your last prompt on a second model, side by side' },
     { cmd: '/init', desc: 'Create a project rules file (AGENTS.md)' },
     { cmd: '/json', desc: 'Make the next reply a JSON object' },
     { cmd: '/help', desc: 'List slash commands' }
@@ -1849,6 +1901,23 @@ import hljs from 'highlight.js/lib/common';
     if (msg.type === 'openCompactMenu') {
       // The host asks us to show the compact options (e.g. the /compact slash command).
       openCompactMenu();
+      return;
+    }
+    if (msg.type === 'openCompareMenu') {
+      // /compare — pick the model to run the prompt against (alongside the current one).
+      openMenu({
+        kind: 'compare',
+        title: 'Compare against…',
+        note:
+          'Runs the prompt on your current model (' +
+          (msg.current || '') +
+          ') and the one you pick — chat-only, no tools.',
+        items: (msg.models || []).map((m) => ({
+          label: m.label,
+          detail: m.id,
+          onPick: () => vscode.postMessage({ type: 'compareRun', otherId: m.id, prompt: msg.prompt })
+        }))
+      });
       return;
     }
     if (msg.type === 'usageInfo') {

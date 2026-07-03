@@ -93,3 +93,38 @@ test('export metadata fields are present in the header', () => {
   assert.match(md, /Mode:\*\* full/);
   assert.match(md, /Estimated cost:\*\* ~\$0\.42/);
 });
+
+test('compare entries export to markdown with adopted marker and error flag', () => {
+  const compare: TranscriptEntry[] = [
+    {
+      kind: 'compare',
+      id: 'cmp-1',
+      prompt: 'explain the tool loop',
+      a: { model: 'openai/gpt-5.5', text: 'Answer A' },
+      b: { model: 'claude-fable-5', text: 'Answer B' },
+      chosen: 'b',
+      at: '2026-07-03T10:00:00.000Z'
+    },
+    {
+      kind: 'compare',
+      id: 'cmp-2',
+      prompt: 'second try',
+      a: { model: 'm1', text: 'fine' },
+      b: { model: 'm2', text: 'model not found', error: true },
+      at: '2026-07-03T10:05:00.000Z'
+    }
+  ];
+  const md = transcriptToMarkdown(meta, compare);
+  assert.match(md, /\*\*Model comparison\*\* — _explain the tool loop_/);
+  assert.match(md, /### openai\/gpt-5\.5\n/);
+  assert.match(md, /### claude-fable-5 ✓ adopted/);
+  assert.match(md, /Answer A/);
+  assert.match(md, /Answer B/);
+  assert.match(md, /⚠ model not found/);
+  assert.doesNotMatch(md, /### m1 ✓ adopted/);
+
+  const txt = transcriptToPlainText(meta, compare);
+  assert.match(txt, /\[Comparison\] explain the tool loop/);
+  assert.match(txt, /--- claude-fable-5 \(adopted\) ---/);
+  assert.match(txt, /\(error\) model not found/);
+});
