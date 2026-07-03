@@ -18,7 +18,8 @@ import { terminalSnapshot } from '../context/terminalLog';
 import { loadProjectMemory } from '../context/projectMemory';
 import { findExistingRulesFile, writeRulesTemplate } from '../commands/initProjectRules';
 import { describeAction, parseAction } from '../computer/actions';
-import { captureScreen, runAction } from '../computer/winControl';
+import { resolveBackend, type BackendPref, type ControlBackend } from '../computer/control';
+import { installNutJs, isNutInstalled } from '../computer/nutControl';
 import { isSensitiveFile } from '../context/sensitiveFileFilter';
 import { loadIgnoreMatcher, type IgnoreMatcher } from '../context/ignoreRules';
 import type { CheckpointStore } from '../diff/checkpoints';
@@ -2247,10 +2248,82 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   }
 
   /**
+   * Resolve the computer-use control backend, running the one-time consent flow the
+   * first time. That flow explains what computer use does and offers nut.js
+   * (cross-platform, but a native module under a GPL-3.0 / paid-commercial license,
+   * installed on demand only after the user accepts those terms) vs. the built-in
+   * Windows PowerShell backend. Returns undefined if the user cancels or nothing is
+   * usable (and posts an explanatory note in that case).
+   */
+  private async resolveComputerBackend(): Promise<ControlBackend | undefined> {
+    const note = async (text: string): Promise<void> => {
+      this.history.push({ role: 'assistant', content: text, createdAt: new Date().toISOString() });
+      this.appendTranscript({ kind: 'note', text, at: new Date().toISOString() });
+      await this.postState();
+    };
+    const dir = this.globalStorageUri.fsPath;
+    const pref = (this.getSettings().computerUseBackend as BackendPref) || 'auto';
+    const CONSENT_KEY = 'parley.computerUse.consented';
+
+    // Already have a usable backend and the user has been through the explainer → go.
+    const ready = resolveBackend(pref, dir);
+    if (ready && this.state.get<boolean>(CONSENT_KEY, false)) {
+      return ready;
+    }
+
+    // First run (or nothing installed yet): explain and offer the backends.
+    const nutText =
+      'Parley can drive your mouse and keyboard two ways:\n\n' +
+      "• nut.js — cross-platform (Windows/macOS/Linux), most reliable input. It is a third-party NATIVE module under a GPL-3.0 / paid-commercial license and is NOT bundled with Parley; choosing it downloads and installs it into Parley's storage. By installing it you accept nut.js's own license terms (see github.com/nut-tree/nut.js).\n" +
+      (process.platform === 'win32' ? '• Built-in — Windows only, no install, uses PowerShell.\n\n' : '\n') +
+      'Either way, computer use lets Parley click/type on your real desktop; it always confirms before each run and Stop aborts it.';
+    const options: string[] = ['Install nut.js'];
+    if (process.platform === 'win32') {
+      options.push('Use built-in');
+    }
+    const choice = await vscode.window.showWarningMessage(nutText, { modal: true }, ...options);
+    if (!choice) {
+      return undefined; // cancelled — don't record consent, so they see this again next time
+    }
+
+    if (choice === 'Use built-in') {
+      await this.state.update(CONSENT_KEY, true);
+      const backend = resolveBackend('auto', dir);
+      if (!backend) {
+        await note('🖥 The built-in backend is unavailable here. Computer use needs Windows or nut.js installed.');
+      }
+      return backend;
+    }
+
+    // Install nut.js (accepted its terms).
+    try {
+      const installed = await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: 'Parley: installing nut.js…', cancellable: false },
+        async () => {
+          await installNutJs(dir);
+          return isNutInstalled(dir);
+        }
+      );
+      if (!installed) {
+        await note(
+          '🖥 nut.js installed but could not be loaded. Try reloading the window, or use the built-in backend.'
+        );
+        return undefined;
+      }
+    } catch (error) {
+      await note(`🖥 nut.js install failed: ${error instanceof Error ? error.message : 'unknown error'}`);
+      return resolveBackend('auto', dir); // fall back to built-in if available (e.g. Windows)
+    }
+    await this.state.update(CONSENT_KEY, true);
+    void vscode.window.showInformationMessage('Parley: nut.js installed — computer use is ready.');
+    return resolveBackend('auto', dir);
+  }
+
+  /**
    * `/computer <task>` — computer use: capture the screen, ask the model for ONE
    * action (JSON), execute it (mouse/keyboard), repeat until done/abort or the step
-   * cap. Gated behind `parley.computerUse.enabled`, Windows-only, guarded by a
-   * modal confirm; Stop aborts the loop. This is the most powerful/dangerous
+   * cap. Gated behind `parley.computerUse.enabled` + a first-run consent flow, and a
+   * per-run modal confirm; Stop aborts the loop. This is the most powerful/dangerous
    * capability in Parley — an agent driving the real mouse and keyboard.
    */
   public async startComputerUse(input: string): Promise<void> {
@@ -2264,10 +2337,6 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       await note('🖥 Usage: `/computer <task>` — e.g. `/computer open Notepad and type hello`.');
       return;
     }
-    if (process.platform !== 'win32') {
-      await note('🖥 Computer use currently supports Windows only.');
-      return;
-    }
     if (!this.getSettings().computerUseEnabled) {
       await note(
         '🖥 Computer use is **off** by default — it lets Parley control your real mouse and keyboard. Enable `parley.computerUse.enabled` in settings, then try again.'
@@ -2278,8 +2347,14 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       await vscode.window.showInformationMessage('Parley is still responding — stop it first.');
       return;
     }
+
+    const backend = await this.resolveComputerBackend();
+    if (!backend) {
+      return; // resolver already explained (first-run consent, install declined, or unsupported)
+    }
+
     const ok = await vscode.window.showWarningMessage(
-      `Parley will control your mouse and keyboard to: "${task}".\n\nIt acts on your real desktop — it can click, type, and open anything you can. Watch it, and click Stop (or press the Stop button) to abort. Proceed?`,
+      `Parley will control your mouse and keyboard to: "${task}".\n\nIt acts on your real desktop via ${backend.name} — it can click, type, and open anything you can. Watch it, and press the Stop button to abort. Proceed?`,
       { modal: true },
       'Start'
     );
@@ -2302,7 +2377,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         }
         let shot;
         try {
-          shot = await captureScreen();
+          shot = await backend.captureScreen();
         } catch (error) {
           await note(`🖥 Screen capture failed: ${error instanceof Error ? error.message : 'unknown'}. Stopping.`);
           return;
@@ -2358,7 +2433,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
           return;
         }
         try {
-          await runAction(action, (x, y) => ({
+          await backend.runAction(action, (x, y) => ({
             x: Math.round(shot.left + x * (shot.realW / shot.shownW)),
             y: Math.round(shot.top + y * (shot.realH / shot.shownH))
           }));

@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
 import type { CuAction } from './actions';
+import type { ControlBackend, CoordMap, Screenshot } from './backend';
 
 /**
  * Windows screen capture + mouse/keyboard injection via PowerShell + .NET —
@@ -8,18 +9,6 @@ import type { CuAction } from './actions';
  * string can't inject PowerShell. Everything else is validated numbers/enums.
  * Windows-only; callers gate on process.platform.
  */
-
-export interface Screenshot {
-  /** Virtual-screen origin (real pixels) — real = origin + shown / scale. */
-  readonly left: number;
-  readonly top: number;
-  readonly realW: number;
-  readonly realH: number;
-  /** Dimensions of the downscaled image the model sees (coordinate space). */
-  readonly shownW: number;
-  readonly shownH: number;
-  readonly base64: string; // PNG
-}
 
 const MAX_SHOWN_WIDTH = 1280;
 
@@ -156,10 +145,7 @@ switch ($act) {
  * Execute one action. `map` converts shown-image coordinates to real screen pixels.
  * Returns after the injection completes (the caller waits before the next capture).
  */
-export async function runAction(
-  action: CuAction,
-  map: (x: number, y: number) => { x: number; y: number }
-): Promise<void> {
+export async function runAction(action: CuAction, map: CoordMap): Promise<void> {
   const env: Record<string, string> = { PARLEY_CU_X: '0', PARLEY_CU_Y: '0' };
   switch (action.type) {
     case 'move': {
@@ -198,3 +184,6 @@ export async function runAction(
   }
   await runPowerShell(INPUT_SCRIPT, env, 10000);
 }
+
+/** Built-in Windows backend (no dependency). */
+export const powershellBackend: ControlBackend = { name: 'PowerShell', captureScreen, runAction };

@@ -53,6 +53,8 @@ export interface ParleySettings {
   readonly computerUseEnabled: boolean;
   /** Max steps in one `/computer` run. */
   readonly computerUseMaxSteps: number;
+  /** Which control backend `/computer` uses: 'auto' | 'nutjs' | 'powershell'. */
+  readonly computerUseBackend: string;
   readonly autoCompactTokens: number;
   readonly autoCompactPercent: number;
   readonly autoSaveConversations: boolean;
@@ -109,6 +111,7 @@ export function getSettings(): ParleySettings {
     chimeOnDone: config.get<boolean>('sound.chimeOnDone', false),
     computerUseEnabled: config.get<boolean>('computerUse.enabled', false),
     computerUseMaxSteps: Math.max(1, Math.min(100, config.get<number>('computerUse.maxSteps', 25))),
+    computerUseBackend: config.get<string>('computerUse.backend', 'auto'),
     autoCompactTokens: Math.max(0, Math.floor(config.get<number>('autoCompactTokens', 0))),
     autoCompactPercent: clampInt(config.get<number>('autoCompactPercent', 80), 0, 100),
     autoSaveConversations: config.get<boolean>('autoSaveConversations', true),

@@ -21,8 +21,10 @@ async function main() {
     platform: 'node',
     target: 'node18',
     outfile: 'dist/extension.js',
-    // `vscode` is provided by the host; transformers.js and playwright are installed on demand at runtime.
-    external: ['vscode', '@xenova/transformers', 'playwright'],
+    // `vscode` is provided by the host; transformers.js, playwright, and the optional
+    // nut.js computer-use backend are installed on demand / by the user, so keep them
+    // external and lazily required (see src/computer/nutControl.ts).
+    external: ['vscode', '@xenova/transformers', 'playwright', '@nut-tree/nut-js', '@nut-tree-fork/nut-js', 'nut-js'],
     sourcemap: !production,
     minify: production,
     logLevel: 'info'

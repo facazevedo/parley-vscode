@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.98.0",
+  "version": "0.99.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -572,6 +572,16 @@
           "minimum": 1,
           "maximum": 100,
           "markdownDescription": "Maximum number of actions in a single `/computer` run before it stops on its own."
+        },
+        "parley.computerUse.backend": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "nutjs",
+            "powershell"
+          ],
+          "default": "auto",
+          "markdownDescription": "Which backend drives the mouse/keyboard for `/computer`: **auto** (prefer nut.js if installed, else built-in Windows PowerShell), **nutjs** (cross-platform; installed on demand under its own GPL-3.0/commercial license), or **powershell** (built-in, Windows only, no install)."
         },
         "parley.voice.autoRead": {
           "type": "boolean",

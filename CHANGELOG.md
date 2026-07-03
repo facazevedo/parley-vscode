@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.99.0
+
+### New — optional nut.js backend for computer use (cross-platform)
+
+- `/computer` now has two interchangeable control backends behind one interface: the built-in Windows PowerShell backend (v0.98) and, new here, **nut.js** — cross-platform (Windows/macOS/Linux) with more robust mouse/keyboard input.
+- **First-run consent**: the first time you use `/computer`, Parley explains what computer use does and offers the backends. nut.js is a third-party **native module under a GPL-3.0 / paid-commercial license** and is **not bundled** — choosing it downloads and installs it into Parley's global storage on demand, only after you accept its terms (the built-in Windows option needs no install). Pick a default with `parley.computerUse.backend` (`auto` / `nutjs` / `powershell`).
+- nut.js capture is DPI-aware: it reads the physical-pixel screenshot and maps the model's coordinates back to logical screen pixels, so clicks land correctly on scaled/multi-monitor displays. The backend is loaded lazily (never bundled), following the same on-demand-install pattern as the embedding index and browser tools.
+
 ## 0.98.0
 
 ### New — `/computer`: agentic computer use (⚠ off by default, Windows)
