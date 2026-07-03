@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.6.0
+
+### New — ⚙️ settings button, and flat composer icons
+
+- Added a **⚙️ settings** button to the composer toolbar (right of 🖱️ computer control) that opens VS Code Settings filtered to Parley's section — one click to `parley.*`.
+- **Fixed the white background** behind the composer icon buttons (🎤 🗣 📷 🎥 🖱️ ⚙️): they now share the flat/transparent style of 📎, with a subtle hover, instead of rendering as filled buttons.
+
 ## 1.5.0
 
 ### New — `Parley: Usage History`

@@ -1536,6 +1536,10 @@ import hljs from 'highlight.js/lib/common';
   $('usage').addEventListener('click', () => toggleMenu('usage', openUsageMenu));
   $('compact').addEventListener('click', () => toggleMenu('compact', openCompactMenu));
   attachBtn.addEventListener('click', () => vscode.postMessage({ type: 'attachFiles' }));
+  const settingsBtn = $('settings');
+  if (settingsBtn) {
+    settingsBtn.addEventListener('click', () => vscode.postMessage({ type: 'openSettings' }));
+  }
 
   // ---------- Voice input (🎤 → PCM capture → WAV → host transcription) ----------
   // MediaRecorder emits webm/opus, which the gateway's input_audio doesn't accept —

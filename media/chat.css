@@ -1460,7 +1460,14 @@ button:disabled {
 .actions .model {
   flex: 1 1 110px;
 }
-.actions #attach {
+/* Icon buttons in the composer toolbar — flat/transparent, not filled buttons. */
+.actions #attach,
+.actions #mic,
+.actions #voiceMode,
+.actions #shot,
+.actions #rec,
+.actions #computer,
+.actions #settings {
   background: transparent;
   color: var(--vscode-foreground);
   opacity: 0.8;
@@ -1469,7 +1476,13 @@ button:disabled {
   padding: 3px 6px;
   cursor: pointer;
 }
-.actions #attach:hover {
+.actions #attach:hover,
+.actions #mic:hover,
+.actions #voiceMode:hover,
+.actions #shot:hover,
+.actions #rec:hover,
+.actions #computer:hover,
+.actions #settings:hover {
   opacity: 1;
   background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.2));
 }

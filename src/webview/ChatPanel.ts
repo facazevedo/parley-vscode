@@ -101,6 +101,7 @@ interface ChatPanelMessage {
     | 'thinkingChanged'
     | 'speedChanged'
     | 'attachFiles'
+    | 'openSettings'
     | 'pasteFile'
     | 'removeAttachment'
     | 'export'
@@ -787,6 +788,13 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         return;
       case 'attachFiles':
         await this.pickAttachments();
+        return;
+      case 'openSettings':
+        // Open the Settings UI filtered to Parley's section.
+        await vscode.commands.executeCommand(
+          'workbench.action.openSettings',
+          '@ext:mit-parley-community.parley-vscode'
+        );
         return;
       case 'pasteFile':
         await this.addPastedFile(message.dataUri, message.name);
