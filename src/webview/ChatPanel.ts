@@ -101,6 +101,7 @@ interface ChatPanelMessage {
     | 'compact'
     | 'openHistory'
     | 'historyList'
+    | 'historySearch'
     | 'openConversation'
     | 'renameConversation'
     | 'archiveConversation'
@@ -182,6 +183,18 @@ interface ChatPanelMessage {
 }
 
 type RewindChoice = 'convo' | 'files' | 'both';
+
+/** One row of the in-panel history list (also used by its content search). */
+interface HistoryItem {
+  id: string;
+  base: string;
+  title: string;
+  savedAt: string;
+  model: string;
+  events: number;
+  repo: string;
+  archived: boolean;
+}
 type ExportFormat = 'md' | 'txt' | 'json';
 
 function asRewindChoice(value: string | undefined): RewindChoice | undefined {
@@ -693,6 +706,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         return;
       case 'historyList':
         await this.sendHistoryList(message.scope === 'all' ? 'all' : 'repo');
+        return;
+      case 'historySearch':
+        await this.sendHistorySearch(message.query ?? '', message.scope === 'all' ? 'all' : 'repo', message.seq ?? 0);
         return;
       case 'openConversation':
         await this.loadConversation(message.base ?? this.parleyBase(), message.id ?? '');
@@ -2465,6 +2481,11 @@ export class ChatPanel implements vscode.WebviewViewProvider {
    * global registry (Codex-style). The webview filters client-side as the user types.
    */
   private async sendHistoryList(scope: 'repo' | 'all'): Promise<void> {
+    const items = await this.collectHistoryItems(scope);
+    this.post({ type: 'historyResults', scope, items: items.slice(0, 200) });
+  }
+
+  private async collectHistoryItems(scope: 'repo' | 'all'): Promise<HistoryItem[]> {
     const currentBase = this.parleyBase();
     const bases: Array<{ base: string; repo: string }> = [{ base: currentBase, repo: this.currentRepoLabel() }];
     if (scope === 'all') {
@@ -2478,16 +2499,6 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       }
     }
 
-    type HistoryItem = {
-      id: string;
-      base: string;
-      title: string;
-      savedAt: string;
-      model: string;
-      events: number;
-      repo: string;
-      archived: boolean;
-    };
     const items: HistoryItem[] = [];
     for (const { base, repo } of bases) {
       let idx: transcriptStore.ConversationIndexEntry[];
@@ -2513,7 +2524,58 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       }
     }
     items.sort((a, b) => (a.savedAt < b.savedAt ? 1 : a.savedAt > b.savedAt ? -1 : 0));
-    this.post({ type: 'historyResults', scope, items: items.slice(0, 200) });
+    return items;
+  }
+
+  // id-keyed lowercased transcript text for content search (lazy, capped, best-effort staleness).
+  private readonly searchTextCache = new Map<string, string>();
+
+  /**
+   * Content search for the in-panel history (3+ chars in the filter box): title
+   * matches rank first, then conversations whose transcript text contains the
+   * query — each with a recognizable snippet. Echoes `seq` so the webview drops
+   * stale responses.
+   */
+  private async sendHistorySearch(query: string, scope: 'repo' | 'all', seq: number): Promise<void> {
+    const q = query.trim().toLowerCase();
+    const items = await this.collectHistoryItems(scope);
+    const titleHits: Array<HistoryItem & { snippet?: string }> = [];
+    const contentHits: Array<HistoryItem & { snippet?: string }> = [];
+    for (const item of items) {
+      if (`${item.title} ${item.model} ${item.repo}`.toLowerCase().includes(q)) {
+        titleHits.push(item);
+        continue;
+      }
+      if (titleHits.length + contentHits.length >= 50) {
+        continue; // enough hits — skip further disk reads
+      }
+      const key = `${item.base}::${item.id}`;
+      let text = this.searchTextCache.get(key);
+      if (text === undefined) {
+        try {
+          const file = path.join(transcriptStore.conversationsDir(item.base), `${item.id}.jsonl`);
+          text = Buffer.from(await vscode.workspace.fs.readFile(vscode.Uri.file(file)))
+            .toString('utf8')
+            .toLowerCase();
+        } catch {
+          text = '';
+        }
+        if (this.searchTextCache.size > 300) {
+          this.searchTextCache.clear(); // crude cap — rebuilt lazily
+        }
+        this.searchTextCache.set(key, text);
+      }
+      const at = text.indexOf(q);
+      if (at !== -1) {
+        const snippet = text
+          .slice(Math.max(0, at - 40), at + q.length + 40)
+          .replace(/\\n/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        contentHits.push({ ...item, snippet: `…${snippet}…` });
+      }
+    }
+    this.post({ type: 'historySearchResults', scope, seq, items: [...titleHits, ...contentHits].slice(0, 50) });
   }
 
   /**

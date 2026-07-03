@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.94.0
+
+### New — content search in the history panel
+
+- The 🕘 history panel's filter box now searches **inside conversations**, not just titles: type 3+ characters and the host greps the on-disk transcripts (debounced, cached, both This-repo and All-repos scopes), ranking title matches first and content matches after — each content hit showing an italic snippet of the surrounding text under the row. Fewer than 3 characters keeps the instant client-side title filter.
+- Stale-response guards (sequence tokens, scope checks) keep fast typing race-free; disk reads stop once 50 hits are found.
+
 ## 0.93.0
 
 ### New — 🎤 voice input

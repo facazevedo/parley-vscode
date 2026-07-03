@@ -1061,6 +1061,15 @@ button:disabled {
   color: var(--vscode-badge-foreground);
   font-size: 0.95em;
 }
+/* Content-search snippet under a history row (host-side transcript match). */
+.hp-snippet {
+  font-size: 0.74em;
+  opacity: 0.65;
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .hp-empty {
   padding: 12px 10px;
   color: var(--vscode-descriptionForeground);

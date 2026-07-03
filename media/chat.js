@@ -1606,6 +1606,11 @@ import hljs from 'highlight.js/lib/common';
   let historyFiltered = [];
   let renamingId = null; // conversation id being renamed inline (row shows an input)
   let confirmDeleteId = null; // conversation id whose 🗑 is armed ("Delete?" confirm)
+  // Content search (3+ chars): the host greps transcript text and returns ranked
+  // hits with snippets; null = plain client-side title filtering.
+  let historySearchHits = null;
+  let historySearchSeq = 0;
+  let historySearchTimer = null;
 
   function historyOpen() {
     return historyPanel && historyPanel.style.display !== 'none';
@@ -1621,6 +1626,7 @@ import hljs from 'highlight.js/lib/common';
     historyPanel.style.display = 'flex';
     renamingId = null;
     confirmDeleteId = null;
+    historySearchHits = null;
     historyFilter.value = '';
     historyListEl.innerHTML = '<div class="hp-empty">Loading…</div>';
     requestHistory();
@@ -1660,12 +1666,13 @@ import hljs from 'highlight.js/lib/common';
   }
   function renderHistory() {
     const q = (historyFilter.value || '').trim().toLowerCase();
-    historyFiltered = historyAllItems.filter((it) => {
+    const source = q.length >= 3 && historySearchHits ? historySearchHits : null;
+    historyFiltered = (source || historyAllItems).filter((it) => {
       if (!showArchived && it.archived) {
         return false;
       }
-      if (!q) {
-        return true;
+      if (source || !q) {
+        return true; // host-ranked content hits are already query-matched
       }
       return `${it.title} ${it.model} ${it.repo}`.toLowerCase().includes(q);
     });
@@ -1743,6 +1750,12 @@ import hljs from 'highlight.js/lib/common';
           )
         );
         main.append(title, meta);
+        if (it.snippet) {
+          const snip = document.createElement('div');
+          snip.className = 'hp-snippet';
+          snip.textContent = it.snippet;
+          main.append(snip);
+        }
         main.addEventListener('mousedown', (e) => {
           e.preventDefault();
           selectHistory(it);
@@ -1800,7 +1813,12 @@ import hljs from 'highlight.js/lib/common';
         historyScope = btn.dataset.scope === 'all' ? 'all' : 'repo';
         historyPanel.querySelectorAll('.hp-scopebtn').forEach((b) => b.classList.toggle('active', b === btn));
         historyListEl.innerHTML = '<div class="hp-empty">Loading…</div>';
+        historySearchHits = null;
         requestHistory();
+        const q = historyFilter.value.trim();
+        if (q.length >= 3) {
+          vscode.postMessage({ type: 'historySearch', query: q, scope: historyScope, seq: ++historySearchSeq });
+        }
       });
     });
     $('historyClose').addEventListener('click', () => closeHistory());
@@ -1814,6 +1832,19 @@ import hljs from 'highlight.js/lib/common';
     }
     historyFilter.addEventListener('input', () => {
       historyActive = -1;
+      const q = historyFilter.value.trim();
+      if (historySearchTimer) {
+        clearTimeout(historySearchTimer);
+        historySearchTimer = null;
+      }
+      if (q.length >= 3) {
+        // Debounced host-side content search; title filtering renders immediately.
+        historySearchTimer = setTimeout(() => {
+          vscode.postMessage({ type: 'historySearch', query: q, scope: historyScope, seq: ++historySearchSeq });
+        }, 300);
+      } else {
+        historySearchHits = null;
+      }
       renderHistory();
     });
     historyFilter.addEventListener('keydown', (e) => {
@@ -2040,6 +2071,20 @@ import hljs from 'highlight.js/lib/common';
       }
       historyAllItems = msg.items || [];
       historyActive = -1;
+      if (historyOpen()) {
+        renderHistory();
+      }
+      return;
+    }
+    if (msg.type === 'historySearchResults') {
+      // Content-search hits for the history filter; drop stale/superseded responses.
+      if (msg.scope !== historyScope || msg.seq !== historySearchSeq) {
+        return;
+      }
+      if (historyFilter.value.trim().length < 3) {
+        return; // query since cleared
+      }
+      historySearchHits = msg.items || [];
       if (historyOpen()) {
         renderHistory();
       }
