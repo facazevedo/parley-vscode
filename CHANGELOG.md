@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.6.1
+
+### Fixed — mode button contrast
+
+- The mode button (**Chat ▾** / Ask / Edit / … next to the model dropdown) now has a black background with white text, so it's clearly readable instead of blending into a light background.
+
 ## 1.6.0
 
 ### New — ⚙️ settings button, and flat composer icons
