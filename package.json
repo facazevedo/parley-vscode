@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.85.0",
+  "version": "0.86.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -265,6 +265,12 @@
         "when": "editorTextFocus"
       }
     ],
+    "submenus": [
+      {
+        "id": "parley.editorSubmenu",
+        "label": "Parley"
+      }
+    ],
     "menus": {
       "explorer/context": [
         {
@@ -274,13 +280,46 @@
       ],
       "editor/context": [
         {
+          "submenu": "parley.editorSubmenu",
+          "group": "1_modification@10"
+        }
+      ],
+      "parley.editorSubmenu": [
+        {
+          "command": "parley.askSelection",
+          "when": "editorHasSelection",
+          "group": "1_selection@1"
+        },
+        {
+          "command": "parley.inlineEdit",
+          "when": "editorHasSelection && !editorReadonly",
+          "group": "1_selection@2"
+        },
+        {
+          "command": "parley.refactorSelection",
+          "when": "editorHasSelection",
+          "group": "1_selection@3"
+        },
+        {
           "command": "parley.insertSelectionMention",
           "when": "editorHasSelection",
-          "group": "9_parley@1"
+          "group": "1_selection@4"
+        },
+        {
+          "command": "parley.explainFile",
+          "group": "2_file@1"
+        },
+        {
+          "command": "parley.generateTests",
+          "group": "2_file@2"
+        },
+        {
+          "command": "parley.fixDiagnostics",
+          "group": "2_file@3"
         },
         {
           "command": "parley.addFileToChat",
-          "group": "9_parley@2"
+          "group": "2_file@4"
         }
       ],
       "editor/title/context": [
@@ -290,6 +329,61 @@
         }
       ]
     },
+    "walkthroughs": [
+      {
+        "id": "parley.gettingStarted",
+        "title": "Get started with Parley",
+        "description": "Connect your account, learn the chat, and meet the agent modes.",
+        "steps": [
+          {
+            "id": "parley.step.apiKey",
+            "title": "Connect your Parley account",
+            "description": "Parley talks to the MIT Parley gateway with your personal API key (stored in VS Code's secret storage, never in settings files).\n[Set API Key](command:parley.setApiKey)",
+            "media": {
+              "markdown": "resources/walkthrough/api-key.md"
+            },
+            "completionEvents": [
+              "onCommand:parley.setApiKey"
+            ]
+          },
+          {
+            "id": "parley.step.openChat",
+            "title": "Open the chat",
+            "description": "The Parley chat lives in the activity bar. Ask anything about your code — replies stream in with token and cost counters in the header.\n[Open Parley Chat](command:parley.chatView.focus)",
+            "media": {
+              "markdown": "resources/walkthrough/open-chat.md"
+            },
+            "completionEvents": [
+              "onView:parley.chatView"
+            ]
+          },
+          {
+            "id": "parley.step.context",
+            "title": "Give it context",
+            "description": "Type `@` to mention files, `@git` for your uncommitted diff, `@terminal` for recent terminal output, or `@codebase` to auto-pick relevant files. Press `Alt+K` (or right-click → Parley) to drop the current selection into the chat.",
+            "media": {
+              "markdown": "resources/walkthrough/context.md"
+            }
+          },
+          {
+            "id": "parley.step.modes",
+            "title": "Pick a mode",
+            "description": "The mode button under the composer switches between Chat, Ask-before-edits, Edit-automatically, Plan, Auto, and Full access. Every agent edit is checkpointed — Parley: Revert Last Edit undoes it.",
+            "media": {
+              "markdown": "resources/walkthrough/modes.md"
+            }
+          },
+          {
+            "id": "parley.step.power",
+            "title": "Power tools",
+            "description": "Slash commands: `/compact`, `/compare`, `/model`, `/help`. Define your own in `.parley/commands/*.md` and custom subagents in `.parley/agents/*.md`. Code blocks have Copy and Apply buttons; squiggles offer Fix-with-Parley in the lightbulb.",
+            "media": {
+              "markdown": "resources/walkthrough/power.md"
+            }
+          }
+        ]
+      }
+    ],
     "configuration": {
       "title": "Parley",
       "properties": {

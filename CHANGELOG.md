@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.86.0
+
+### New — Parley editor submenu + getting-started walkthrough
+
+- **Right-click → Parley** in any editor now offers the full toolkit in one tidy submenu: Ask About Selection, Edit Selection (Inline), Refactor Selection, Add Selection to Chat (selection-gated), plus Explain Current File, Generate Tests, Fix Diagnostics, and Add File to Chat. Explorer and editor-tab context menus unchanged.
+- **Getting-started walkthrough** (Help → Get Started → "Get started with Parley", auto-offered on install): five steps — connect your API key, open the chat, give it context (@-mentions), pick a mode, and power tools (slash commands, custom commands/subagents, Apply buttons, lightbulb fixes) — with completion tracking for the setup steps.
+
+### Release automation (no code change)
+
+- Adopted tagging: pushing a `v*` tag now runs the existing Release workflow (build → test → GitHub Release with the VSIX attached). v0.85.0 is the first automated release: https://github.com/facazevedo/parley-vscode/releases. Marketplace/Open VSX publishing stays off until the corresponding secrets are set.
+
 ## 0.85.0
 
 ### New — `/compare`: side-by-side model comparison
