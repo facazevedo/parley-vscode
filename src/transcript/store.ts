@@ -22,6 +22,13 @@ export interface ConversationIndexEntry {
   events: number;
 }
 
+/** One `.parley` base dir seen by the extension — the registry that powers "All repos". */
+export interface RegisteredBase {
+  base: string;
+  label: string;
+  lastUsed: string;
+}
+
 // Per-file write serialization. append/rewrite of one JSONL log, and the shared
 // index.json / state.json, are fire-and-forget from several ChatPanels in this one
 // process; without ordering, a concurrent appendFile + full rewrite can interleave
@@ -135,6 +142,32 @@ export async function upsertIndex(base: string, entry: ConversationIndexEntry): 
 export async function writeState(base: string, state: Record<string, unknown>): Promise<void> {
   const file = path.join(base, 'state.json');
   await serialize(file, () => atomicWrite(file, JSON.stringify(state, null, 2)));
+}
+
+/** Path to the global registry of `.parley` base dirs (lives in the extension's global storage). */
+function registryPath(globalStorageDir: string): string {
+  return path.join(globalStorageDir, 'bases.json');
+}
+
+/** Every `.parley` base the extension has saved into (newest first). Powers "All repos". */
+export async function readBases(globalStorageDir: string): Promise<RegisteredBase[]> {
+  try {
+    const raw = await fsp.readFile(registryPath(globalStorageDir), 'utf8');
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? (parsed as RegisteredBase[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Record (or refresh) a base dir in the global registry so "All repos" can enumerate it. */
+export async function registerBase(globalStorageDir: string, base: string, label: string): Promise<void> {
+  const file = registryPath(globalStorageDir);
+  await serialize(file, async () => {
+    const list = (await readBases(globalStorageDir)).filter((b) => path.resolve(b.base) !== path.resolve(base));
+    list.unshift({ base, label, lastUsed: new Date().toISOString() });
+    await atomicWrite(file, JSON.stringify(list.slice(0, 100), null, 2));
+  });
 }
 
 /**

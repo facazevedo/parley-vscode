@@ -998,7 +998,7 @@ import hljs from 'highlight.js/lib/common';
 
   $('refresh').addEventListener('click', () => vscode.postMessage({ type: 'refreshAgents' }));
   $('newChat').addEventListener('click', () => vscode.postMessage({ type: 'newChat' }));
-  $('historyBtn').addEventListener('click', () => vscode.postMessage({ type: 'openHistory' }));
+  $('historyBtn').addEventListener('click', () => toggleHistory());
   $('export').addEventListener('click', () => vscode.postMessage({ type: 'export' }));
   $('usage').addEventListener('click', () => vscode.postMessage({ type: 'openUsage' }));
   $('compact').addEventListener('click', () => vscode.postMessage({ type: 'compact' }));
@@ -1008,6 +1008,142 @@ import hljs from 'highlight.js/lib/common';
     sessionTokEl.style.cursor = 'pointer';
     sessionTokEl.title = 'View usage';
     sessionTokEl.addEventListener('click', () => vscode.postMessage({ type: 'openUsage' }));
+  }
+
+  // ---------- In-panel conversation history ----------
+  const historyPanel = $('historyPanel');
+  const historyListEl = $('historyList');
+  const historyFilter = $('historyFilter');
+  let historyScope = 'repo';
+  let historyAllItems = []; // full list from the host for the current scope
+  let historyActive = -1; // keyboard-highlighted index within the filtered view
+  let historyFiltered = [];
+
+  function historyOpen() {
+    return historyPanel && historyPanel.style.display !== 'none';
+  }
+  function requestHistory() {
+    vscode.postMessage({ type: 'historyList', scope: historyScope });
+  }
+  function openHistory() {
+    if (!historyPanel) {
+      return;
+    }
+    historyPanel.style.display = 'flex';
+    historyFilter.value = '';
+    historyListEl.innerHTML = '<div class="hp-empty">Loading…</div>';
+    requestHistory();
+    setTimeout(() => historyFilter.focus(), 0);
+  }
+  function closeHistory() {
+    if (historyPanel) {
+      historyPanel.style.display = 'none';
+      historyActive = -1;
+    }
+  }
+  function toggleHistory() {
+    if (historyOpen()) {
+      closeHistory();
+    } else {
+      openHistory();
+    }
+  }
+  function fmtWhen(iso) {
+    const d = new Date(iso);
+    return isNaN(d.getTime()) ? '' : d.toLocaleString();
+  }
+  function renderHistory() {
+    const q = (historyFilter.value || '').trim().toLowerCase();
+    historyFiltered = historyAllItems.filter((it) => {
+      if (!q) {
+        return true;
+      }
+      return `${it.title} ${it.model} ${it.repo}`.toLowerCase().includes(q);
+    });
+    if (historyActive >= historyFiltered.length) {
+      historyActive = historyFiltered.length - 1;
+    }
+    if (historyFiltered.length === 0) {
+      historyListEl.innerHTML = '';
+      const empty = document.createElement('div');
+      empty.className = 'hp-empty';
+      empty.textContent =
+        historyAllItems.length === 0 ? 'No saved conversations yet.' : 'No conversations match your filter.';
+      historyListEl.append(empty);
+      return;
+    }
+    historyListEl.replaceChildren(
+      ...historyFiltered.map((it, i) => {
+        const row = document.createElement('div');
+        row.className = 'hp-item' + (i === historyActive ? ' active' : '');
+        const title = document.createElement('div');
+        title.className = 'hp-item-title';
+        title.textContent = it.title || 'Conversation';
+        const meta = document.createElement('div');
+        meta.className = 'hp-item-meta';
+        // The repo badge only adds signal in the All-repos view.
+        if (historyScope === 'all' && it.repo) {
+          const badge = document.createElement('span');
+          badge.className = 'hp-repo';
+          badge.textContent = it.repo;
+          meta.append(badge);
+        }
+        meta.append(
+          document.createTextNode(`${fmtWhen(it.savedAt)} · ${it.events} events${it.model ? ' · ' + it.model : ''}`)
+        );
+        row.append(title, meta);
+        row.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          selectHistory(it);
+        });
+        return row;
+      })
+    );
+  }
+  function selectHistory(it) {
+    if (!it) {
+      return;
+    }
+    vscode.postMessage({ type: 'openConversation', id: it.id, base: it.base });
+    closeHistory();
+  }
+  if (historyPanel) {
+    historyPanel.querySelectorAll('.hp-scopebtn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        historyScope = btn.dataset.scope === 'all' ? 'all' : 'repo';
+        historyPanel.querySelectorAll('.hp-scopebtn').forEach((b) => b.classList.toggle('active', b === btn));
+        historyListEl.innerHTML = '<div class="hp-empty">Loading…</div>';
+        requestHistory();
+      });
+    });
+    $('historyClose').addEventListener('click', () => closeHistory());
+    historyFilter.addEventListener('input', () => {
+      historyActive = -1;
+      renderHistory();
+    });
+    historyFilter.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeHistory();
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        historyActive = Math.min(historyActive + 1, historyFiltered.length - 1);
+        renderHistory();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        historyActive = Math.max(historyActive - 1, 0);
+        renderHistory();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        selectHistory(historyFiltered[Math.max(0, historyActive)]);
+      }
+    });
+    // Click outside the panel closes it (but not clicks on the toggle button).
+    document.addEventListener('mousedown', (e) => {
+      if (historyOpen() && !historyPanel.contains(e.target) && e.target !== $('historyBtn')) {
+        closeHistory();
+      }
+    });
   }
 
   // Paste or drag-and-drop images (e.g. a screenshot) or PDFs straight into the composer.
@@ -1200,6 +1336,18 @@ import hljs from 'highlight.js/lib/common';
       mentionItems = msg.items || [];
       mentionIndex = 0;
       renderMentions();
+      return;
+    }
+    if (msg.type === 'historyResults') {
+      // Ignore results for a scope the user has since switched away from.
+      if (msg.scope && msg.scope !== historyScope) {
+        return;
+      }
+      historyAllItems = msg.items || [];
+      historyActive = -1;
+      if (historyOpen()) {
+        renderHistory();
+      }
       return;
     }
     if (msg.type === 'insertText') {

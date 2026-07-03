@@ -137,6 +137,10 @@ export class TranscriptRecorder {
         speed: snap.speed,
         updatedAt: meta.exportedAt
       });
+      // Record this base in the global registry so the in-panel history's "All repos"
+      // scope can enumerate conversations from every workspace, Codex-style.
+      const label = vscode.workspace.workspaceFolders?.[0]?.name ?? (path.basename(path.dirname(base)) || 'workspace');
+      await transcriptStore.registerBase(this.globalStorageUri.fsPath, base, label);
     } catch (error) {
       this.logger.warn(`Could not auto-save conversation: ${error instanceof Error ? error.message : 'unknown'}`);
     }

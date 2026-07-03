@@ -89,6 +89,8 @@ interface ChatPanelMessage {
     | 'export'
     | 'compact'
     | 'openHistory'
+    | 'historyList'
+    | 'openConversation'
     | 'copyText'
     | 'openLink'
     | 'mentionQuery'
@@ -116,6 +118,10 @@ interface ChatPanelMessage {
   readonly dataUri?: string;
   readonly name?: string;
   readonly contextOptions?: ContextOptions;
+  /** For 'historyList': 'repo' (default) or 'all' — which conversations to list. */
+  readonly scope?: string;
+  /** For 'openConversation': the `.parley` base dir the conversation lives under. */
+  readonly base?: string;
   /** For 'mentionQuery': echo token so the webview can drop stale results. */
   readonly seq?: number;
   /** For 'dropPaths': `text/uri-list` entries from a drag-and-drop. */
@@ -605,6 +611,12 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         return;
       case 'openHistory':
         await this.openPastConversation();
+        return;
+      case 'historyList':
+        await this.sendHistoryList(message.scope === 'all' ? 'all' : 'repo');
+        return;
+      case 'openConversation':
+        await this.loadConversation(message.base ?? this.parleyBase(), message.id ?? '');
         return;
       case 'agentChanged':
         this.selectedAgentId = message.agentId ?? this.selectedAgentId;
@@ -1978,6 +1990,102 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       id: this.conversationId
     });
     void this.state.update('parley.sessions', sessions.slice(0, 20));
+  }
+
+  /** Human label for the current workspace, shown as the "repo" of a conversation. */
+  private currentRepoLabel(): string {
+    return (
+      vscode.workspace.workspaceFolders?.[0]?.name ?? (path.basename(path.dirname(this.parleyBase())) || 'workspace')
+    );
+  }
+
+  /**
+   * Build the in-panel history list for the given scope and post it to the webview.
+   * `repo` lists this workspace's `.parley` only; `all` merges every base in the
+   * global registry (Codex-style). The webview filters client-side as the user types.
+   */
+  private async sendHistoryList(scope: 'repo' | 'all'): Promise<void> {
+    const currentBase = this.parleyBase();
+    const bases: Array<{ base: string; repo: string }> = [{ base: currentBase, repo: this.currentRepoLabel() }];
+    if (scope === 'all') {
+      const seen = new Set<string>([path.resolve(currentBase)]);
+      for (const b of await transcriptStore.readBases(this.globalStorageUri.fsPath)) {
+        const key = path.resolve(b.base);
+        if (!seen.has(key)) {
+          seen.add(key);
+          bases.push({ base: b.base, repo: b.label || path.basename(b.base) });
+        }
+      }
+    }
+
+    type HistoryItem = {
+      id: string;
+      base: string;
+      title: string;
+      savedAt: string;
+      model: string;
+      events: number;
+      repo: string;
+    };
+    const items: HistoryItem[] = [];
+    for (const { base, repo } of bases) {
+      let idx: transcriptStore.ConversationIndexEntry[];
+      try {
+        idx = await transcriptStore.readIndex(base);
+      } catch {
+        continue;
+      }
+      for (const e of idx) {
+        if (base === currentBase && e.id === this.conversationId) {
+          continue; // don't list the live conversation
+        }
+        items.push({
+          id: e.id,
+          base,
+          title: e.title || 'Conversation',
+          savedAt: e.savedAt,
+          model: e.model,
+          events: e.events,
+          repo
+        });
+      }
+    }
+    items.sort((a, b) => (a.savedAt < b.savedAt ? 1 : a.savedAt > b.savedAt ? -1 : 0));
+    this.post({ type: 'historyResults', scope, items: items.slice(0, 200) });
+  }
+
+  /**
+   * Load a saved conversation (by base + id) into the chat, archiving the current one
+   * first. Works for both this-repo and cross-repo (All repos) entries; checkpoints
+   * bind under the conversation's own base so its edit history travels with it.
+   */
+  private async loadConversation(base: string, id: string): Promise<void> {
+    if (!id) {
+      return;
+    }
+    const transcript = await transcriptStore.readEvents(base, id);
+    if (transcript.length === 0) {
+      await vscode.window.showInformationMessage(
+        'Parley: that conversation could not be loaded (it may have been removed).'
+      );
+      return;
+    }
+    await this.autosaveConversation();
+    this.archiveCurrent();
+    this.transcript = transcript;
+    this.history.length = 0;
+    this.history.push(...transcriptToHistory(transcript));
+    this.conversationId = id;
+    this.recorder.customTitle = undefined; // title re-derives from the loaded content
+    this.conversationStartedAt = transcript[0]?.at ?? new Date().toISOString();
+    this.attachments = [];
+    this.executor.resetConversationState();
+    this.sessionTokens = 0;
+    this.sessionCost = 0;
+    this.highUsageWarned = false;
+    await this.checkpoints.bind(base, id);
+    await this.reveal();
+    await this.postState();
   }
 
   /** Pick a previously saved conversation and load its FULL transcript back into the chat. */

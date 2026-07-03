@@ -3,7 +3,16 @@ import { test } from 'node:test';
 import { promises as fsp } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { appendEvent, readEvents, upsertIndex, readIndex, ensureGitignore, jsonlPath } from '../src/transcript/store';
+import {
+  appendEvent,
+  readEvents,
+  upsertIndex,
+  readIndex,
+  ensureGitignore,
+  jsonlPath,
+  readBases,
+  registerBase
+} from '../src/transcript/store';
 import type { TranscriptEntry } from '../src/transcript/transcript';
 
 async function tmpBase(name: string): Promise<string> {
@@ -86,6 +95,25 @@ test('concurrent appendEvent calls all land (serialized, no interleave loss)', a
   const read = await readEvents(base, id);
   assert.equal(read.length, n, 'no appended event was lost to an interleaved write');
   await fsp.rm(base, { recursive: true, force: true });
+});
+
+test('registerBase records bases newest-first and de-duplicates by path (powers "All repos")', async () => {
+  const gs = await tmpBase('registry');
+  await registerBase(gs, '/repos/alpha/.parley', 'alpha');
+  await registerBase(gs, '/repos/beta/.parley', 'beta');
+  // Re-registering an existing base moves it to the front and refreshes its label.
+  await registerBase(gs, '/repos/alpha/.parley', 'alpha-renamed');
+  const bases = await readBases(gs);
+  assert.equal(bases.length, 2, 'no duplicate entry for the same base');
+  assert.equal(bases[0].base, '/repos/alpha/.parley', 're-registered base is newest');
+  assert.equal(bases[0].label, 'alpha-renamed', 'label refreshed');
+  assert.equal(bases[1].base, '/repos/beta/.parley');
+  await fsp.rm(gs, { recursive: true, force: true });
+});
+
+test('readBases returns [] when no registry exists yet', async () => {
+  const gs = await tmpBase('registry-empty');
+  assert.deepEqual(await readBases(gs), []);
 });
 
 test('ensureGitignore creates a wildcard ignore once and never overwrites', async () => {

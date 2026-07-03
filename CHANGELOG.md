@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.75.0
+
+### Changed — in-panel conversation history (was a floating picker)
+
+- **🕘 Past conversations** now opens as a concise dropdown anchored to the top of the chat area — aligned with the panel, Claude-Code style — instead of the big screen-centered VS Code QuickPick. Filter-as-you-type, arrow-key navigation, Enter to open, Esc / click-away to dismiss.
+- **Scope toggle: "This repo" (default) / "All repos".** By default it lists only the current workspace's conversations (like Claude Code). Switch to **All repos** to browse conversations from every workspace you've used Parley in (like Codex) — each row shows a repo badge. This is powered by a new global base registry (`bases.json` in the extension's global storage), updated on autosave; opening a cross-repo conversation loads its full transcript and binds its checkpoints under its own `.parley`.
+- The command-palette **`Parley: Open Past Conversation`** still opens the full QuickPick (with transcript full-text search) for those who prefer it.
+
 ## 0.74.1
 
 ### Hardened — child-process spawning (removes Node DEP0190; shrinks injection surface)
