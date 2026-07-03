@@ -36,6 +36,34 @@ export function isSensitiveFile(filePath: string): boolean {
   return normalized.split('/').some((part) => ['.ssh', '.aws', '.azure', '.gnupg'].includes(part.toLowerCase()));
 }
 
+/**
+ * ripgrep negated globs covering every sensitive pattern isSensitiveFile blocks,
+ * so `grep` excludes the same files the other tools refuse (pair with rg's
+ * `--glob-case-insensitive` so SECRETS.YAML etc. are caught too).
+ */
+export function sensitiveExcludeGlobs(): string[] {
+  return [
+    '!**/.env',
+    '!**/.env.*',
+    '!**/.npmrc',
+    '!**/.pypirc',
+    '!**/id_rsa*',
+    '!**/id_ed25519*',
+    '!**/known_hosts',
+    '!**/credentials',
+    '!**/credentials.json',
+    '!**/secrets.*',
+    '!**/*.pem',
+    '!**/*.key',
+    '!**/*.p12',
+    '!**/*.pfx',
+    '!**/.ssh/**',
+    '!**/.aws/**',
+    '!**/.azure/**',
+    '!**/.gnupg/**'
+  ];
+}
+
 export function shouldSendFile(filePath: string): boolean {
   const normalized = filePath.replace(/\\/g, '/');
   const base = path.posix.basename(normalized);

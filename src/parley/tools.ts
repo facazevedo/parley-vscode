@@ -1,8 +1,10 @@
+import * as dns from 'dns';
 import * as fs from 'fs';
+import * as net from 'net';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { execFile, type ExecFileException } from 'child_process';
-import { isSensitiveFile } from '../context/sensitiveFileFilter';
+import { isSensitiveFile, sensitiveExcludeGlobs } from '../context/sensitiveFileFilter';
 import { decodeText } from '../diff/fileFormat';
 import type { ToolCall, ToolDefinition } from './types';
 
@@ -416,6 +418,7 @@ export const SUBAGENT_TOOLS: readonly ToolDefinition[] = READ_ONLY_TOOLS.filter(
 );
 
 const MAX_FETCH_CHARS = 12000;
+const MAX_FETCH_REDIRECTS = 5;
 const MAX_READ_LINES = 500;
 const MAX_SEARCH_FILES = 800;
 const MAX_SEARCH_RESULTS = 80;
@@ -693,19 +696,11 @@ function grepSearch(
   if (opts.glob) {
     args.push('--glob', opts.glob);
   }
-  // rg honors .gitignore by default; also exclude build output and credential-like files.
-  for (const ex of [
-    '!**/node_modules/**',
-    '!**/.git/**',
-    '!**/out/**',
-    '!**/dist/**',
-    '!**/.env*',
-    '!**/*.pem',
-    '!**/*.key',
-    '!**/id_rsa*',
-    '!**/.ssh/**',
-    '!**/.aws/**'
-  ]) {
+  // rg honors .gitignore by default; also exclude build output and — via the shared
+  // denylist (case-insensitively) — every credential-like file the other tools refuse,
+  // so grep can't surface a secret that read_file/search_text would have blocked.
+  args.push('--glob-case-insensitive');
+  for (const ex of ['!**/node_modules/**', '!**/.git/**', '!**/out/**', '!**/dist/**', ...sensitiveExcludeGlobs()]) {
     args.push('--glob', ex);
   }
   args.push('--regexp', pattern, '--', '.');
@@ -828,6 +823,52 @@ async function searchText(query: string, glob?: string): Promise<string> {
   return header + results.join('\n');
 }
 
+/**
+ * True for addresses fetch_url must never reach: loopback, private (RFC 1918), link-local
+ * (cloud metadata), unique-local, and unspecified — the SSRF targets a prompt-injected URL
+ * could otherwise read from inside the user's network. Pure so it is unit-testable.
+ */
+export function isBlockedAddress(ip: string): boolean {
+  const version = net.isIP(ip);
+  if (version === 4) {
+    const [a, b] = ip.split('.').map(Number);
+    return (
+      a === 127 || // loopback 127.0.0.0/8
+      a === 10 || // private 10.0.0.0/8
+      a === 0 || // unspecified / "this network" (includes 0.0.0.0)
+      (a === 172 && b >= 16 && b <= 31) || // private 172.16.0.0/12
+      (a === 192 && b === 168) || // private 192.168.0.0/16
+      (a === 169 && b === 254) // link-local 169.254.0.0/16 (cloud metadata endpoints)
+    );
+  }
+  if (version === 6) {
+    const lower = ip.toLowerCase();
+    const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(lower);
+    if (mapped) {
+      return isBlockedAddress(mapped[1]); // IPv4-mapped — judge the embedded IPv4 address
+    }
+    if (lower === '::1' || lower === '::') {
+      return true; // loopback / unspecified
+    }
+    const first = parseInt(lower.split(':')[0] || '0', 16);
+    return (first & 0xfe00) === 0xfc00 || (first & 0xffc0) === 0xfe80; // fc00::/7 ULA, fe80::/10 link-local
+  }
+  return false;
+}
+
+/**
+ * SSRF guard for fetch_url: false when the URL's host is a blocked literal IP, or when any
+ * address it resolves to is blocked. DNS/parse failures propagate to the caller's catch.
+ */
+async function isAllowedFetchDestination(target: string): Promise<boolean> {
+  const host = new URL(target).hostname.replace(/^\[|\]$/g, ''); // URL keeps IPv6 literals bracketed
+  if (net.isIP(host) !== 0) {
+    return !isBlockedAddress(host);
+  }
+  const addresses = await dns.promises.lookup(host, { all: true });
+  return addresses.every((a) => !isBlockedAddress(a.address));
+}
+
 async function fetchUrl(url: string): Promise<string> {
   if (!/^https:\/\//i.test(url)) {
     return 'Error: only https:// URLs are allowed.';
@@ -835,18 +876,39 @@ async function fetchUrl(url: string): Promise<string> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
   try {
-    const response = await fetch(url, { signal: controller.signal, headers: { Accept: 'text/html,text/plain' } });
-    if (!response.ok) {
-      return `Error: HTTP ${response.status} fetching ${url}.`;
+    // Follow redirects manually (bounded), re-vetting every hop — a public URL could
+    // otherwise 302 to 169.254.169.254/localhost and return internal content to the model.
+    let current = url;
+    for (let hop = 0; hop <= MAX_FETCH_REDIRECTS; hop += 1) {
+      if (!(await isAllowedFetchDestination(current))) {
+        return 'Error: refusing to fetch a private, loopback, or link-local address.';
+      }
+      const response = await fetch(current, {
+        redirect: 'manual',
+        signal: controller.signal,
+        headers: { Accept: 'text/html,text/plain' }
+      });
+      const location = response.headers.get('location');
+      if (response.status >= 300 && response.status < 400 && location) {
+        current = new URL(location, current).toString();
+        if (!/^https:\/\//i.test(current)) {
+          return 'Error: only https:// URLs are allowed.';
+        }
+        continue;
+      }
+      if (!response.ok) {
+        return `Error: HTTP ${response.status} fetching ${url}.`;
+      }
+      const raw = await response.text();
+      const text = raw
+        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      return text.length > MAX_FETCH_CHARS ? `${text.slice(0, MAX_FETCH_CHARS)}\n\n[truncated]` : text;
     }
-    const raw = await response.text();
-    const text = raw
-      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    return text.length > MAX_FETCH_CHARS ? `${text.slice(0, MAX_FETCH_CHARS)}\n\n[truncated]` : text;
+    return `Error: too many redirects fetching ${url}.`;
   } catch (error) {
     return `Error: could not fetch ${url} (${error instanceof Error ? error.message : 'unknown'}).`;
   } finally {
@@ -899,6 +961,47 @@ export async function resolveAcrossRoots(relative: string): Promise<vscode.Uri |
   return resolveInWorkspace(folders[0].uri, normalized);
 }
 
+/**
+ * True only when the CANONICAL (symlink-resolved) path of `uri` stays under the canonical
+ * workspace root. resolveInWorkspace's lexical check cannot see a symlink/junction INSIDE
+ * the workspace that points outside it (e.g. docs/system -> /etc), so read-side tools call
+ * this before touching the disk. Targets that do not exist yet are checked via the nearest
+ * existing ancestor directory. Non-file schemes pass (realpath does not apply to them).
+ */
+export async function assertInsideWorkspace(uri: vscode.Uri, root: vscode.Uri): Promise<boolean> {
+  if (uri.scheme !== 'file') {
+    return true;
+  }
+  let realRoot: string;
+  try {
+    realRoot = await fs.promises.realpath(root.fsPath);
+  } catch {
+    return false;
+  }
+  let candidate = uri.fsPath;
+  let realTarget: string | undefined;
+  while (realTarget === undefined) {
+    try {
+      realTarget = await fs.promises.realpath(candidate);
+    } catch {
+      const parent = path.dirname(candidate);
+      if (parent === candidate) {
+        return false; // nothing on the path exists — cannot verify containment
+      }
+      candidate = parent; // target doesn't exist yet (e.g. a new file) — check its ancestor
+    }
+  }
+  const target = realTarget.replace(/\\/g, '/');
+  const rootPath = realRoot.replace(/\\/g, '/');
+  return target === rootPath || target.startsWith(`${rootPath}/`);
+}
+
+/** The workspace folder that owns `uri`, falling back to the first root. */
+function owningRoot(uri: vscode.Uri): vscode.Uri | undefined {
+  // Optional-call: the real API always has getWorkspaceFolder; the test double does not.
+  return vscode.workspace.getWorkspaceFolder?.(uri)?.uri ?? vscode.workspace.workspaceFolders?.[0]?.uri;
+}
+
 /** Workspace-relative label for results — prefixed with the folder name in multi-root workspaces. */
 export function toolRelPath(uri: vscode.Uri): string {
   const multi = (vscode.workspace.workspaceFolders?.length ?? 0) > 1;
@@ -914,6 +1017,10 @@ async function readFile(root: vscode.Uri, relative: string, startLine?: number, 
   const uri = await resolveAcrossRoots(relative);
   if (!uri) {
     return 'Error: path is outside the workspace.';
+  }
+  const owner = owningRoot(uri);
+  if (owner && !(await assertInsideWorkspace(uri, owner))) {
+    return 'Error: path is outside the workspace.'; // symlink/junction escaping the root
   }
   if (isSensitiveFile(uri.fsPath)) {
     return 'Error: refusing to read a sensitive file (looks like credentials).';
@@ -967,6 +1074,10 @@ async function listDirectory(root: vscode.Uri, relative: string): Promise<string
   const uri = await resolveAcrossRoots(relative === '' ? '.' : relative);
   if (!uri) {
     return 'Error: path is outside the workspace.';
+  }
+  const owner = owningRoot(uri);
+  if (owner && !(await assertInsideWorkspace(uri, owner))) {
+    return 'Error: path is outside the workspace.'; // symlink/junction escaping the root
   }
   try {
     const entries = await vscode.workspace.fs.readDirectory(uri);

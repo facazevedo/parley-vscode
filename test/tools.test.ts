@@ -4,11 +4,12 @@ import { promises as fsp } from 'fs';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { setWorkspaceRoot } from './fakeVscode';
+import { fakeVscode, setWorkspaceRoot } from './fakeVscode';
 
 // Install the real-fs vscode double before loading the tools (they import vscode).
 // eslint-disable-next-line @typescript-eslint/no-var-requires -- loaded after the vscode stub is installed
-const { runAgentTool } = require('../src/parley/tools') as typeof import('../src/parley/tools');
+const tools = require('../src/parley/tools') as typeof import('../src/parley/tools');
+const { runAgentTool, isBlockedAddress, assertInsideWorkspace } = tools;
 
 async function workspace(files: Record<string, string>): Promise<string> {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'parley-tools-'));
@@ -95,4 +96,47 @@ test('runAgentTool reports unknown tools and invalid JSON', async () => {
 test('fetch_url refuses non-https URLs without hitting the network', async () => {
   await workspace({});
   assert.match(await run('fetch_url', { url: 'http://insecure.example' }), /only https/i);
+});
+
+test('fetch_url refuses literal private/loopback destinations without hitting the network', async () => {
+  await workspace({});
+  const expected = /refusing to fetch a private, loopback, or link-local address/;
+  assert.match(await run('fetch_url', { url: 'https://127.0.0.1/latest/meta-data' }), expected);
+  assert.match(await run('fetch_url', { url: 'https://169.254.169.254/latest/meta-data' }), expected);
+  assert.match(await run('fetch_url', { url: 'https://[::1]:8443/admin' }), expected);
+});
+
+test('isBlockedAddress blocks loopback, private, link-local, ULA, and unspecified addresses', () => {
+  const blocked = [
+    '127.0.0.1',
+    '::1',
+    '10.0.0.1',
+    '172.16.5.5',
+    '192.168.1.1',
+    '169.254.169.254',
+    '0.0.0.0',
+    '::ffff:127.0.0.1',
+    'fe80::1',
+    'fc00::1'
+  ];
+  for (const ip of blocked) {
+    assert.equal(isBlockedAddress(ip), true, `${ip} should be blocked`);
+  }
+});
+
+test('isBlockedAddress allows public addresses', () => {
+  for (const ip of ['8.8.8.8', '1.1.1.1', '172.32.0.1', '2606:4700:4700::1111']) {
+    assert.equal(isBlockedAddress(ip), false, `${ip} should be allowed`);
+  }
+});
+
+test('assertInsideWorkspace: real paths under the root pass, paths outside fail, new files pass', async () => {
+  const root = await workspace({ 'inside.txt': 'x' });
+  const uri = (p: string) => fakeVscode.Uri.file(p);
+  const rootUri = uri(root);
+  assert.equal(await assertInsideWorkspace(uri(path.join(root, 'inside.txt')), rootUri), true);
+  assert.equal(await assertInsideWorkspace(uri(path.join(root, 'new-dir', 'new.txt')), rootUri), true);
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'parley-outside-'));
+  assert.equal(await assertInsideWorkspace(uri(path.join(outside, 'f.txt')), rootUri), false);
+  assert.equal(await assertInsideWorkspace({ scheme: 'untitled', fsPath: '/x' } as never, rootUri), true);
 });

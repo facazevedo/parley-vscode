@@ -46,8 +46,13 @@ export const NUDGE_PROMPT =
   'Your previous reply was empty. Continue with the task — call a tool or reply with text. If it is already fully complete, reply with <DONE>.';
 
 export function decideTurnStep(input: TurnStepInput): TurnStepDecision {
-  const done = /<DONE>/i.test(input.content);
-  const cleaned = input.content.replace(/<DONE>/gi, '').trimEnd();
+  // Only treat <DONE> as the completion sentinel when it TERMINATES the message
+  // (optionally after same-line prose), so a model discussing the token in prose
+  // or code — common for a coding assistant asked about its own protocol — is not
+  // truncated or prematurely stopped.
+  const DONE_RE = /(^|\s)<DONE>\s*$/i;
+  const done = DONE_RE.test(input.content);
+  const cleaned = input.content.replace(DONE_RE, '').trimEnd();
   const hadNarration = cleaned.trim().length > 0;
   const madeProgress = hadNarration || input.toolActions > 0 || input.thinkingChars > 0;
 

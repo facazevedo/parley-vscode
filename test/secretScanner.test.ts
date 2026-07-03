@@ -40,6 +40,23 @@ test('redactSecrets replaces every hit with a typed marker and preserves surroun
   assert.equal(findings.length, 2);
 });
 
+test('PEM redaction removes the key BODY and footer, not just the header (regression)', () => {
+  // Clearly-fake body — not a real key. Before the fix only the BEGIN header was
+  // redacted and the key material itself survived.
+  const pem = '-----BEGIN RSA PRIVATE KEY-----\nMIIEvQIBADANBgkqELIDEDBODY\n-----END RSA PRIVATE KEY-----';
+  const { text, findings } = redactSecrets('prefix ' + pem + ' suffix');
+  assert.ok(!text.includes('MIIEvQIBADANBgkqELIDEDBODY'), 'key body is removed');
+  assert.ok(!text.includes('-----END'), 'footer is removed');
+  assert.ok(text.includes('«redacted:'), 'replaced with a redaction marker');
+  assert.ok(text.startsWith('prefix ') && text.endsWith(' suffix'), 'surrounding text survives');
+  // Detection: the block-spanning pattern fires exactly once on the full PEM.
+  assert.ok(
+    findings.some((f) => f.type === 'private key block' && f.count === 1),
+    'full block is detected as one finding'
+  );
+  assert.equal(scanForSecrets(pem).filter((f) => f.type === 'private key block').length, 1);
+});
+
 test('redactSecrets is a no-op on clean text (same string, no findings)', () => {
   const clean = 'export const timeout = 30_000;';
   const { text, findings } = redactSecrets(clean);

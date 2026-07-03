@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { ParleySettings } from '../config/settings';
+import { isSensitiveFile } from '../context/sensitiveFileFilter';
 import type { Logger } from '../logging/logger';
 import type { ParleyAuthStore } from '../parley/auth';
 import type { ParleyProvider } from '../parley/ParleyProvider';
@@ -36,6 +37,10 @@ export class ParleyInlineCompletionProvider implements vscode.InlineCompletionIt
     }
     // Only complete in real editor documents, not output/SCM/debug input boxes.
     if (document.uri.scheme !== 'file' && document.uri.scheme !== 'untitled') {
+      return undefined;
+    }
+    // Never send the contents of sensitive files (.env, keys, credentials) to the gateway.
+    if (document.uri.scheme === 'file' && isSensitiveFile(document.uri.fsPath)) {
       return undefined;
     }
     if (!(await this.auth.getToken())) {

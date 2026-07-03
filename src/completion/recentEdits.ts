@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { isSensitiveFile } from '../context/sensitiveFileFilter';
 import { formatRecentEdits, pushEdit, type RecentEdit } from './recentEditsCore';
 
 /**
@@ -15,7 +16,7 @@ const edits: RecentEdit[] = [];
 export function activateRecentEdits(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.workspace.onDidChangeTextDocument((e) => {
-      if (e.document.uri.scheme !== 'file' || e.contentChanges.length === 0) {
+      if (e.document.uri.scheme !== 'file' || e.contentChanges.length === 0 || isSensitiveFile(e.document.uri.fsPath)) {
         return;
       }
       const change = e.contentChanges[e.contentChanges.length - 1];

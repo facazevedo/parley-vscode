@@ -33,6 +33,14 @@ export async function extractFileCodeBlockChanges(response: string): Promise<Pro
   const changes: ProposedFileChange[] = [];
   for (const { rawPath, code } of parseFileCodeBlocks(response)) {
     const filePath = path.isAbsolute(rawPath) ? rawPath : path.join(workspaceFolder.uri.fsPath, rawPath);
+
+    // Containment guard: never propose a write outside the workspace folder. Skips targets
+    // that escape via absolute paths, `..` traversal, or another drive (Windows).
+    const rel = path.relative(workspaceFolder.uri.fsPath, filePath);
+    if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) {
+      continue;
+    }
+
     const proposedText = code.endsWith('\n') ? code : `${code}\n`;
 
     let originalText = '';

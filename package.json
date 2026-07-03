@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.72.1",
+  "version": "0.73.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -31,8 +31,7 @@
     "Other"
   ],
   "activationEvents": [
-    "onStartupFinished",
-    "onView:parley.chatView"
+    "onStartupFinished"
   ],
   "main": "./dist/extension.js",
   "capabilities": {
@@ -405,6 +404,12 @@
           "default": 0,
           "minimum": 0,
           "markdownDescription": "Token budget per conversation. When the conversation's total token usage reaches this, Parley stops and asks you to raise the limit or start a new conversation. **`0` means unlimited (default).** Set it from `Parley: Set Token Limit`."
+        },
+        "parley.usageWarnUsd": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "markdownDescription": "Show a one-time warning in the conversation once its **estimated** spend crosses this many US dollars (a soft budget — the turn still continues). **`0` disables it (default).** For your real billed spend, use the 💰 button or `Parley: Show Usage`."
         },
         "parley.autoCompactTokens": {
           "type": "number",

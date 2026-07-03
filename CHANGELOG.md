@@ -1,5 +1,58 @@
 # Changelog
 
+## 0.73.0
+
+### New — usage visibility
+
+- A **💰 usage button** in the chat header (and a click on the session-cost readout) opens **Parley: Show Usage** — your real billed spend for the month — so it's no longer buried in the command palette.
+- A new **soft-budget warning**: set `parley.usageWarnUsd` and Parley posts a one-time notice in the conversation once its estimated spend crosses that amount, nudging you to `/compact` or start fresh. Off by default. (A true "% of weekly plan" gauge isn't possible yet — the Parley gateway's usage API doesn't expose a plan limit.)
+
+### Production-readiness hardening
+
+A deep multi-agent review of the whole extension surfaced 40 confirmed defects (each adversarially re-verified before fixing). This release fixes all of them.
+
+**Security**
+
+- **Command allowlist no longer approves output redirection.** A remembered `git log` rule would auto-run `git log > ~/.bashrc`; `hasRedirection` now disqualifies any un-quoted `>`/`<`/`>>` from auto-approval and from "Always Allow" (`commandSafety.ts`).
+- **Write tools can't escape the workspace.** `write_file`/`edit_file`/`multi_edit` resolved a `..`-traversal path through a fallback that rebuilt the escaping absolute path; they now hard-fail with "path is outside the workspace" (`toolExecutor.ts`). The same guard now covers `@`-mention reads, `@codebase`, and chat-mode `File:`/diff Apply cards.
+- **Private keys are fully redacted.** The PEM pattern matched only the `-----BEGIN-----` header, so the key body still shipped; it now spans the whole block (`secretScanner.ts`).
+- **Inline completion skips sensitive files.** Typing in `.env`/`*.pem`/`id_rsa` no longer sends surrounding text (or records recent-edit lines) to the gateway (`inlineCompletionProvider.ts`, `recentEdits.ts`).
+- **`grep` honors the same sensitive-file denylist** as every other tool (was excluding only a narrow hardcoded set, leaking `.npmrc`/`credentials.json`/`secrets.*`).
+- **`fetch_url` SSRF protection** — rejects private/loopback/link-local hosts and re-validates every redirect hop. **`browser_navigate`** blocks the cloud-metadata range (`169.254.169.254`, `metadata.google.internal`) while still allowing localhost dev servers.
+- **Symlink containment** — workspace-relative resolution now canonicalizes with `realpath`, so an in-tree symlink to `/etc/passwd` can't be read.
+- **`/v1/files` uploads get the same secret redaction** as inline context (was bypassed for large text attachments).
+
+**Data-loss & correctness**
+
+- **Stop keeps the partial reply.** Clicking Stop mid-stream previously erased the entire streamed answer; it's now preserved in the transcript.
+- **No concurrent turns.** Two fast sends (or a send during slow context gathering) could launch overlapping turns with interleaved output; the busy guard now covers the whole pre-execute window.
+- **Regenerate no longer duplicates** the user message / strands the old answer (transcript is trimmed in sync with history).
+- **Stop cancels compaction** (including auto-compaction), which previously ran with an inert Stop button.
+- **Transcript & index writes are serialized and atomic** (temp-file + rename), fixing a concurrent-append/rewrite race that could silently drop events, and an index read-modify-write race that could drop a conversation from the history picker.
+- **Reverts are guarded and serialized** — a "Revert All" during an agent turn can no longer undo a just-applied edit; all checkpoint mutations run through one FIFO queue.
+- A **literal `<DONE>` in prose/code** is no longer stripped or treated as turn completion (anchored to end-of-message).
+- Auto-continue past the tool-round cap now **carries forward the tool findings** instead of forgetting what it read.
+- Subagent file reads no longer satisfy the parent's write-clobber guard for files the parent never saw.
+
+**MCP**
+
+- `dispose()` and unexpected server exit now **reject in-flight calls** instead of hanging the turn for 30s (or forever).
+- Tool names are **sanitized and length-bounded** to a valid function-name shape, so one oddly-named tool can't 400 the whole turn; malformed `inputSchema` is normalized; server-name collisions are skipped with a warning; on Windows the whole process tree is killed (no orphaned server).
+
+**Diff engine**
+
+- Unified-diff hunks apply at the **line indicated by `@@`** (not the first matching text), fixing wrong-location edits in files with duplicate blocks.
+- CRLF files no longer render a one-line edit as a **full-file rewrite** in the review card.
+- Diffs that **create (`/dev/null` →) or delete (→ `/dev/null`)** a file are handled instead of being silently dropped or turned into an emptied file (deletions are checkpointed/revertible).
+
+**Context / ignore rules**
+
+- `.gitignore` entries **without a trailing slash** (`node_modules`, `dist`) now exclude their subtree; **negation (`!`) lines** are honored (an allowlist-style ignore file no longer blanks out all context). `@codebase` now respects `.gitignore`/`.parleyignore`.
+
+**Reliability & UX**
+
+- Fixed listener leaks (per-tab save/selection listeners disposed), a mid-turn full re-render that truncated the live reply, an O(n) markdown re-parse on every state update (now memoized), the composer discarding a typed prompt when a turn is refused (now restored), Memento bloat from re-serializing the transcript on every step (coalesced while streaming), a leaked HTTP stream socket on mid-stream errors, per-message token undercounting on multi-round turns, and "Generate Commit Message" targeting the wrong repo in multi-repo workspaces.
+
 ## 0.72.1
 
 ### Security — honor VS Code Workspace Trust

@@ -1,3 +1,4 @@
+import * as path from 'path';
 import * as vscode from 'vscode';
 import type { CommandDependencies } from './common';
 import { reportProviderError } from './common';
@@ -5,11 +6,47 @@ import { reportProviderError } from './common';
 const MAX_DIFF_CHARS = 12000;
 
 interface GitRepo {
+  readonly rootUri: vscode.Uri;
   diff(cached?: boolean): Promise<string>;
   readonly inputBox: { value: string };
 }
 interface GitApi {
   readonly repositories: GitRepo[];
+}
+
+/** True when `uri` lives inside the repository's root folder (fsPath prefix compare). */
+function repoContains(repo: GitRepo, uri: vscode.Uri): boolean {
+  const root = repo.rootUri.fsPath.replace(/[\\/]+$/, '');
+  const file = uri.fsPath;
+  return file === root || file.startsWith(`${root}\\`) || file.startsWith(`${root}/`);
+}
+
+/**
+ * Resolve which repository the command should act on. With several repos open,
+ * prefer the one containing the active editor's file; otherwise (or when that is
+ * ambiguous, e.g. nested repos) ask the user. Returns undefined when the user
+ * dismisses the picker.
+ */
+async function resolveRepository(repositories: readonly GitRepo[]): Promise<GitRepo | undefined> {
+  if (repositories.length === 1) {
+    return repositories[0];
+  }
+  const active = vscode.window.activeTextEditor?.document.uri;
+  if (active) {
+    const containing = repositories.filter((repo) => repoContains(repo, active));
+    if (containing.length === 1) {
+      return containing[0];
+    }
+  }
+  const picked = await vscode.window.showQuickPick(
+    repositories.map((repo) => ({
+      label: path.basename(repo.rootUri.fsPath),
+      description: repo.rootUri.fsPath,
+      repo
+    })),
+    { placeHolder: 'Select the repository to generate a commit message for' }
+  );
+  return picked?.repo;
 }
 
 /**
@@ -29,10 +66,13 @@ export function registerGenerateCommitMessageCommand(
         return;
       }
       const api: GitApi = (await gitExt.activate()).getAPI(1);
-      const repo = api.repositories[0];
-      if (!repo) {
+      if (api.repositories.length === 0) {
         await vscode.window.showWarningMessage('Parley: no Git repository found in this workspace.');
         return;
+      }
+      const repo = await resolveRepository(api.repositories);
+      if (!repo) {
+        return; // user dismissed the repository picker
       }
 
       let diff = '';

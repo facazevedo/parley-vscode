@@ -64,6 +64,10 @@ export interface TurnRequest {
  */
 export class AgentTurnRunner {
   public busy = false;
+  // True from the moment a turn is claimed until execute() takes over — the window
+  // (hooks, context collection, mention resolution) during which busy was still
+  // false, letting a second send start a concurrent turn. Callers treat it as busy.
+  public starting = false;
   private abortController?: AbortController;
   private queuedSteering: string[] = [];
   private lastToolAction = ''; // pairs a tool's ⏺ action with its ⎿ result for the transcript
@@ -76,6 +80,38 @@ export class AgentTurnRunner {
 
   public abort(): void {
     this.abortController?.abort();
+  }
+
+  /**
+   * Claim the turn synchronously (before any await in the caller's pre-execute
+   * phase) and arm an abort controller so Stop works even during context gathering.
+   */
+  public begin(): void {
+    this.starting = true;
+    this.abortController ??= new AbortController();
+  }
+
+  /** Release a claim made by begin() when the caller bails before calling execute(). */
+  public cancelStart(): void {
+    this.starting = false;
+    this.abortController = undefined;
+  }
+
+  /**
+   * Run a non-turn provider request (e.g. compaction) under the same busy/abort
+   * lifecycle, so the Stop button — which calls abort() — actually cancels it.
+   */
+  public async runExternal<T>(fn: (signal: AbortSignal) => Promise<T>): Promise<T> {
+    this.busy = true;
+    this.abortController = new AbortController();
+    await this.host.postState();
+    try {
+      return await fn(this.abortController.signal);
+    } finally {
+      this.busy = false;
+      this.abortController = undefined;
+      await this.host.postState();
+    }
   }
 
   // ---------- steering queue (messages typed while the agent works) ----------
@@ -98,11 +134,17 @@ export class AgentTurnRunner {
   /** Execute a prepared turn. The caller has already pushed the user message. */
   public async execute(req: TurnRequest): Promise<void> {
     this.busy = true;
-    this.abortController = new AbortController();
+    this.starting = false; // execute() now owns the lifecycle
+    this.abortController ??= new AbortController(); // reuse begin()'s controller so Stop worked during context gathering
     await this.host.postState();
 
     const { settings, agentId, useStream, toolsEnabled, canAutoContinue } = req;
     let turnTokens = 0;
+    // Partial streamed output for the CURRENT round — persisted if the user hits Stop
+    // mid-stream so the reply they were reading isn't lost. Reset each round; completed
+    // rounds are already pushed to history/recorder below.
+    let streamedText = '';
+    let streamedThinking = '';
     const cpStart = this.host.checkpoints.size;
     this.host.post({ type: 'tokens', total: 0 });
     dbg('turn', 'start', {
@@ -121,6 +163,8 @@ export class AgentTurnRunner {
       let continuation: string | null = null; // null = first send (real prompt + context)
       for (;;) {
         const stepActions: string[] = []; // tool activity for this step (persisted if the model doesn't narrate)
+        streamedText = '';
+        streamedThinking = '';
         if (useStream) {
           this.host.post({ type: 'streamStart' });
         }
@@ -146,8 +190,18 @@ export class AgentTurnRunner {
           },
           {
             signal: this.abortController.signal,
-            onToken: useStream ? (delta) => this.host.post({ type: 'streamDelta', delta }) : undefined,
-            onThinking: useStream ? (delta) => this.host.post({ type: 'thinkingDelta', delta }) : undefined,
+            onToken: useStream
+              ? (delta) => {
+                  streamedText += delta;
+                  this.host.post({ type: 'streamDelta', delta });
+                }
+              : undefined,
+            onThinking: useStream
+              ? (delta) => {
+                  streamedThinking += delta;
+                  this.host.post({ type: 'thinkingDelta', delta });
+                }
+              : undefined,
             tools: req.turnTools,
             runTool: toolsEnabled ? (call) => this.host.executor.run(call) : undefined,
             onToolEvent: toolsEnabled
@@ -304,6 +358,7 @@ export class AgentTurnRunner {
         this.host.recorder.append({ kind: 'note', text: note, at: new Date().toISOString() });
       }
       this.busy = false;
+      this.starting = false;
       this.abortController = undefined;
       await this.host.postState();
       await this.host.recorder.autosave();
@@ -318,13 +373,36 @@ export class AgentTurnRunner {
       }
     } catch (error) {
       this.busy = false;
+      this.starting = false;
       this.abortController = undefined;
       this.host.post({ type: 'streamEnd' });
-      await this.host.postState();
       if ((error as { name?: string })?.name === 'AbortError') {
+        // Preserve whatever streamed before Stop — otherwise the transcript re-render
+        // (which has no assistant entry for this round yet) erases the reply the user
+        // was reading. Persist the partial BEFORE postState so the re-render keeps it.
+        const partial = streamedText.trim();
+        const partialThinking = streamedThinking.trim();
+        if (partial || partialThinking) {
+          const text = partial || '_(stopped before any text was produced)_';
+          this.host.history.push({
+            role: 'assistant',
+            content: text,
+            createdAt: new Date().toISOString(),
+            model: agentId
+          });
+          this.host.recorder.append({
+            kind: 'assistant',
+            text,
+            model: agentId,
+            thinking: partialThinking || undefined,
+            at: new Date().toISOString()
+          });
+        }
+        await this.host.postState();
         this.host.logger.info('Parley reply was stopped by the user.');
         return;
       }
+      await this.host.postState();
       await reportProviderError(this.host.commandDeps, error);
     }
   }

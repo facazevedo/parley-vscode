@@ -155,6 +155,46 @@ test('the on-disk log is removed once the stack is emptied', async () => {
   assert.equal(await exists(logPath), false, 'empty stack deletes the log');
 });
 
+test('deleteWithCheckpoint removes the file; revert re-creates it with the original bytes', async () => {
+  const root = tmpRoot();
+  const file = path.join(root, 'gone.txt');
+  await fsp.writeFile(file, 'keep me\n');
+  const store = await newStore(root);
+
+  await store.deleteWithCheckpoint(uri(file), 'delete gone.txt');
+  assert.equal(await exists(file), false, 'the file was deleted');
+  assert.equal(store.size, 1);
+
+  await store.revertLast();
+  assert.equal(await exists(file), true, 'revert re-creates the deleted file');
+  assert.equal(await read(file), 'keep me\n', 'with its original contents');
+});
+
+test('deleting a missing file is a no-op (no checkpoint pushed)', async () => {
+  const root = tmpRoot();
+  const store = await newStore(root);
+  await store.deleteWithCheckpoint(uri(path.join(root, 'nope.txt')), 'delete nope');
+  assert.equal(store.size, 0);
+});
+
+test('concurrent applyWithCheckpoint calls are serialized (no lost checkpoint)', async () => {
+  const root = tmpRoot();
+  const a = path.join(root, 'a.txt');
+  const b = path.join(root, 'b.txt');
+  await fsp.writeFile(a, 'a0\n');
+  await fsp.writeFile(b, 'b0\n');
+  const store = await newStore(root);
+
+  // Fire two edits without awaiting between them — the internal queue must apply both.
+  await Promise.all([
+    store.applyWithCheckpoint(uri(a), 'a1\n', 'edit a'),
+    store.applyWithCheckpoint(uri(b), 'b1\n', 'edit b')
+  ]);
+  assert.equal(store.size, 2, 'both checkpoints recorded despite overlapping calls');
+  assert.equal(await read(a), 'a1\n');
+  assert.equal(await read(b), 'b1\n');
+});
+
 test('changedSince reports unique basenames written at/after a stack position', async () => {
   const root = tmpRoot();
   const a = path.join(root, 'a.txt');

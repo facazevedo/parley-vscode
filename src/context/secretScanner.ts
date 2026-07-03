@@ -28,7 +28,13 @@ const PATTERNS: readonly SecretPattern[] = [
   { name: 'Stripe secret key', re: /\b[rs]k_live_[A-Za-z0-9]{20,}\b/g },
   { name: 'Google API key', re: /\bAIza[0-9A-Za-z_-]{35}\b/g },
   { name: 'npm token', re: /\bnpm_[A-Za-z0-9]{36}\b/g },
-  { name: 'private key block', re: /-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----/g }
+  // Span the whole PEM block so redaction removes the key BODY, not just the header.
+  {
+    name: 'private key block',
+    re: /-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----[\s\S]*?-----END (?:[A-Z ]+ )?PRIVATE KEY-----/g
+  },
+  // Fallback: a lone/truncated BEGIN header with no matching END still gets redacted.
+  { name: 'private key header', re: /-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----/g }
 ];
 
 export interface SecretFinding {

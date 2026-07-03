@@ -128,6 +128,8 @@ export interface ProposedFileChange {
   readonly originalText: string;
   readonly proposedText: string;
   readonly title?: string;
+  /** Propose deleting the file (unified diff `+++ /dev/null`) instead of rewriting its contents. */
+  readonly deleteFile?: boolean;
 }
 
 export interface TerminalSuggestion {

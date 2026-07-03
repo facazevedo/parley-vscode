@@ -24,6 +24,37 @@ export function hasCommandSubstitution(command: string): boolean {
 }
 
 /**
+ * True if the command contains an un-quoted redirection operator (`>`, `>>`, `<`,
+ * `2>`, `&>`). A redirection rides inside a single segment, so it would otherwise
+ * slip past segment matching — `git log > ~/.bashrc` must never auto-run just
+ * because `git log` is approved. Quoted redirection chars (`echo "a > b"`) are fine.
+ */
+export function hasRedirection(command: string): boolean {
+  let quote: "'" | '"' | null = null;
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i];
+    if (quote) {
+      if (ch === quote) {
+        quote = null;
+      }
+      continue;
+    }
+    if (ch === '\\') {
+      i++; // skip the escaped char
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      continue;
+    }
+    if (ch === '>' || ch === '<') {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Split a command into its top-level segments on the shell control operators
  * `&&`, `||`, `;`, `|`, `&`, and newlines — while respecting single/double
  * quotes and backslash escapes, and NOT mistaking redirections (`2>&1`, `&>f`)
@@ -108,7 +139,7 @@ function segmentMatchesRule(segment: string, rules: readonly string[]): boolean 
  * command substitution AND every top-level segment matches some approved rule.
  */
 export function isCommandAllowed(command: string, rules: readonly string[]): boolean {
-  if (rules.length === 0 || hasCommandSubstitution(command) || startsWithOperator(command)) {
+  if (rules.length === 0 || hasCommandSubstitution(command) || hasRedirection(command) || startsWithOperator(command)) {
     return false;
   }
   const segments = splitCommandSegments(command);
@@ -125,5 +156,10 @@ export function isCommandAllowed(command: string, rules: readonly string[]): boo
  * offered for simple commands.
  */
 export function isSimpleCommand(command: string): boolean {
-  return !hasCommandSubstitution(command) && !startsWithOperator(command) && splitCommandSegments(command).length === 1;
+  return (
+    !hasCommandSubstitution(command) &&
+    !hasRedirection(command) &&
+    !startsWithOperator(command) &&
+    splitCommandSegments(command).length === 1
+  );
 }

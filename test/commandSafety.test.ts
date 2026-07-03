@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   hasCommandSubstitution,
+  hasRedirection,
   isCommandAllowed,
   isSimpleCommand,
   splitCommandSegments
@@ -80,4 +81,26 @@ test('isSimpleCommand gates which commands may be remembered', () => {
   assert.equal(isSimpleCommand('npm test && rm -rf /'), false);
   assert.equal(isSimpleCommand('echo $(whoami)'), false);
   assert.equal(isSimpleCommand('cat a | grep b'), false);
+});
+
+test('redirection can no longer ride an approved prefix (regression)', () => {
+  // A redirection lives inside a single segment, so before the fix it slipped
+  // past segment matching — `git log > ~/.bashrc` auto-ran because `git log` matched.
+  assert.equal(isCommandAllowed('git log > /home/user/.bashrc', ['git log']), false);
+  assert.equal(isCommandAllowed('git status >> package.json', ['git status']), false);
+  assert.equal(isCommandAllowed('cat < secrets', ['cat']), false);
+  // A redirecting command must never be remembered as an allowlist rule either.
+  assert.equal(isSimpleCommand('git log > f'), false);
+  // Regression guard: plain approved commands still pass.
+  assert.equal(isCommandAllowed('git log', ['git log']), true);
+  assert.equal(isSimpleCommand('git log'), true);
+});
+
+test('hasRedirection ignores quoted redirection chars', () => {
+  assert.equal(hasRedirection('git log > f'), true);
+  assert.equal(hasRedirection('cat < secrets'), true);
+  assert.equal(hasRedirection('echo "a > b"'), false);
+  assert.equal(hasRedirection("echo 'a < b'"), false);
+  // ...so a quoted > does not block remembering a simple command.
+  assert.equal(isSimpleCommand('echo "a > b"'), true);
 });

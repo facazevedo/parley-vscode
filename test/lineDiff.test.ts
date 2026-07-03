@@ -73,6 +73,17 @@ test('formatUnifiedDiff collapses far-apart unchanged regions into a gap', () =>
   assert.ok(rows.filter((r) => r.kind === 'ctx').length < 38);
 });
 
+test('formatUnifiedDiff normalizes CRLF vs LF so only the real change is reported', () => {
+  const before = Array.from({ length: 20 }, (_, i) => `line${i}`).join('\r\n');
+  const after = before.replace(/\r\n/g, '\n').replace('line7', 'CHANGED7');
+  const { added, removed, rows } = formatUnifiedDiff(before, after);
+  // Before EOL normalization this reported all 20 lines as changed.
+  assert.equal(added, 1);
+  assert.equal(removed, 1);
+  assert.equal(rows.find((r) => r.kind === 'del')?.text, 'line7');
+  assert.equal(rows.find((r) => r.kind === 'add')?.text, 'CHANGED7');
+});
+
 test('formatUnifiedDiff treats a brand-new file as all additions', () => {
   const { added, removed, rows } = formatUnifiedDiff('', 'x\ny\nz');
   assert.equal(removed, 0);

@@ -2,7 +2,7 @@ import { spawn } from 'child_process';
 import type { Logger } from '../logging/logger';
 import type { ToolDefinition } from '../parley/types';
 import { dbg } from '../debug/debug';
-import { parseQualifiedName, qualifyToolName, sanitizeServerName } from './naming';
+import { parseQualifiedName, providerSafeToolName, sanitizeServerName } from './naming';
 
 /**
  * One entry of `parley.mcpServers`. Three transports:
@@ -63,6 +63,8 @@ const SSE_ENDPOINT_TIMEOUT_MS = 10000;
  */
 export class McpManager {
   private readonly servers = new Map<string, Server>();
+  /** Provider-safe function name → the real `{ server, tool }` it routes to (rebuilt by `getTools`). */
+  private readonly toolRoute = new Map<string, { server: string; tool: string }>();
 
   public constructor(private readonly logger: Logger) {}
 
@@ -75,6 +77,14 @@ export class McpManager {
     for (const [rawName, cfg] of Object.entries(configs)) {
       const name = sanitizeServerName(rawName);
       if (!cfg || (typeof cfg.command !== 'string' && typeof cfg.url !== 'string')) {
+        continue;
+      }
+      if (this.servers.has(name)) {
+        // Two config keys that sanitize to the same name would silently orphan the
+        // first subprocess and shadow it — keep the working server, skip the clash.
+        this.logger.warn(
+          `MCP: config key "${rawName}" sanitizes to "${name}", which collides with another server; skipping it.`
+        );
         continue;
       }
       try {
@@ -99,6 +109,15 @@ export class McpManager {
       }
       transport = new StdioTransport(cfg, this.logger, name, onMessage, () => {
         this.logger.warn(`MCP "${name}" exited.`);
+        // Fail in-flight calls immediately instead of stalling them into the 30s timeout.
+        const server = this.servers.get(name);
+        if (server) {
+          for (const pending of server.pending.values()) {
+            clearTimeout(pending.timer);
+            pending.reject(new Error(`MCP server "${name}" exited`));
+          }
+          server.pending.clear();
+        }
         this.servers.delete(name);
       });
     } else {
@@ -187,17 +206,31 @@ export class McpManager {
       );
   }
 
-  /** MCP tools mapped to OpenAI function-tool definitions for the agent loop. */
+  /**
+   * MCP tools mapped to OpenAI function-tool definitions for the agent loop. All
+   * tools ship to the provider in one array, so a single bad name or schema would
+   * 400 the entire turn — names are sanitized to `^[a-zA-Z0-9_-]{1,64}$` (routed
+   * back via `toolRoute`) and schemas are normalized to plain object schemas.
+   */
   public getTools(): ToolDefinition[] {
+    this.toolRoute.clear();
     const out: ToolDefinition[] = [];
     for (const [name, server] of this.servers) {
       for (const tool of server.tools) {
+        if (typeof tool.name !== 'string' || tool.name.length === 0) {
+          continue;
+        }
+        const safeName = providerSafeToolName(name, tool.name, this.toolRoute);
+        this.toolRoute.set(safeName, { server: name, tool: tool.name });
         out.push({
           type: 'function',
           function: {
-            name: qualifyToolName(name, tool.name),
-            description: (tool.description ?? `MCP tool ${tool.name}`).slice(0, 1024),
-            parameters: tool.inputSchema ?? { type: 'object', properties: {} }
+            name: safeName,
+            description: (typeof tool.description === 'string' ? tool.description : `MCP tool ${tool.name}`).slice(
+              0,
+              1024
+            ),
+            parameters: normalizeToolParameters(tool.inputSchema)
           }
         });
       }
@@ -207,12 +240,16 @@ export class McpManager {
 
   /** Execute an `mcp__server__tool` call and return its text content. */
   public async callTool(qualified: string, argsJson: string): Promise<string> {
-    const parsed = parseQualifiedName(qualified);
-    if (!parsed) {
+    // Sanitized/truncated names aren't reversible by string-splitting, so prefer the
+    // map built in getTools(). Fall back to parsing the qualified name so a validly
+    // formed call to a running server still reaches it (the server rejects an unknown
+    // tool) even if it wasn't in the last tools/list snapshot.
+    const route = this.toolRoute.get(qualified) ?? parseQualifiedName(qualified);
+    if (!route) {
       return `Error: "${qualified}" is not an MCP tool.`;
     }
-    if (!this.servers.has(parsed.server)) {
-      return `Error: MCP server "${parsed.server}" is not running.`;
+    if (!this.servers.has(route.server)) {
+      return `Error: MCP server "${route.server}" is not running.`;
     }
     let args: unknown = {};
     try {
@@ -221,7 +258,7 @@ export class McpManager {
       return 'Error: arguments were not valid JSON.';
     }
     try {
-      const result = (await this.rpc(parsed.server, 'tools/call', { name: parsed.tool, arguments: args })) as {
+      const result = (await this.rpc(route.server, 'tools/call', { name: route.tool, arguments: args })) as {
         content?: Array<{ type?: string; text?: string }>;
         isError?: boolean;
       };
@@ -244,11 +281,28 @@ export class McpManager {
     for (const server of this.servers.values()) {
       for (const pending of server.pending.values()) {
         clearTimeout(pending.timer);
+        // Reject (not just clear) so in-flight callTool awaiters resolve to an error
+        // string instead of hanging forever across a restart/reconfigure.
+        pending.reject(new Error('MCP server stopped'));
       }
+      server.pending.clear();
       server.transport.dispose();
     }
     this.servers.clear();
   }
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Coerce a server-provided `inputSchema` into something the provider will accept:
+ * non-objects (string/array/null/…) become an empty object schema, and `type` is
+ * forced to `'object'` last so a bogus server value can't override it. Exported for tests.
+ */
+export function normalizeToolParameters(inputSchema: unknown): Record<string, unknown> {
+  return isPlainObject(inputSchema) ? { ...inputSchema, type: 'object' } : { type: 'object', properties: {} };
 }
 
 // ---------- stdio transport (newline-delimited JSON-RPC over a child process) ----------
@@ -306,8 +360,18 @@ class StdioTransport implements McpTransport {
   }
 
   public dispose(): void {
+    const proc = this.proc;
+    if (!proc) {
+      return;
+    }
     try {
-      this.proc?.kill();
+      if (process.platform === 'win32' && proc.pid) {
+        // spawn() uses shell:true on Windows, so proc.kill() would only kill the
+        // cmd.exe wrapper and orphan the real server — kill the whole tree.
+        spawn('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { windowsHide: true });
+      } else {
+        proc.kill();
+      }
     } catch {
       // Already gone.
     }

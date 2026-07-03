@@ -513,6 +513,10 @@ export class ParleyClient implements ParleyProvider {
 
     let lastUsage: TokenUsage | undefined;
     let lastResult: CompletionResult | undefined;
+    // Accumulate completion tokens across rounds; the last round's prompt already
+    // carries the full cumulative context, so summing prompts too would double-count.
+    let accCompletion = 0;
+    let lastPrompt = 0;
     for (let round = 0; round < maxRounds; round += 1) {
       // Steering: user messages typed while the agent works join the conversation
       // at the next round boundary, so the model sees them without a restart.
@@ -552,7 +556,9 @@ export class ParleyClient implements ParleyProvider {
       });
       lastResult = result;
       if (result.usage) {
-        lastUsage = result.usage;
+        accCompletion += result.usage.completion;
+        lastPrompt = result.usage.prompt;
+        lastUsage = { prompt: lastPrompt, completion: accCompletion, total: lastPrompt + accCompletion };
       }
 
       if (result.toolCalls.length === 0) {
@@ -597,8 +603,31 @@ export class ParleyClient implements ParleyProvider {
     // make a final no-tools call here: mid-task, the model perceives the missing tools as
     // "the tool interface became unavailable" and gives up instead of finishing.
     this.logger.debug(`Tool loop hit ${maxRounds} rounds; pausing this step (auto-continue resumes with tools).`);
+    // Carry the tool findings gathered this step forward as plain content. The next
+    // auto-continue step rebuilds messages from history (role/content only), so
+    // without this recap it would start blind — re-reading files or reasoning from
+    // the bare action labels. Clamped so history doesn't balloon.
+    const callName = new Map<string, string>();
+    for (const m of convo) {
+      for (const c of m.tool_calls ?? []) {
+        callName.set(c.id, c.function.name);
+      }
+    }
+    const findings: string[] = [];
+    for (const m of convo) {
+      if (m.role === 'tool' && typeof m.content === 'string') {
+        findings.push(`- ${callName.get(m.tool_call_id ?? '') ?? 'tool'}: ${m.content}`);
+      }
+    }
+    let recap = '';
+    if (findings.length > 0) {
+      recap = '\n\nFindings gathered so far this step:\n' + findings.join('\n');
+      if (recap.length > 4000) {
+        recap = recap.slice(0, 4000) + '\n…(truncated)';
+      }
+    }
     return {
-      content: lastResult?.content ?? '',
+      content: (lastResult?.content ?? '') + recap,
       usage: lastUsage,
       thinking: lastResult?.thinking,
       thinkingSignature: lastResult?.thinkingSignature
@@ -739,6 +768,13 @@ export class ParleyClient implements ParleyProvider {
         }
       }
     } finally {
+      // Cancel first: on a mid-stream error/early-break the body is otherwise left
+      // undrained, keeping the undici socket out of the pool until a GC finalizer runs.
+      try {
+        await reader.cancel();
+      } catch {
+        // Already cancelled/released.
+      }
       try {
         reader.releaseLock();
       } catch {
@@ -876,6 +912,12 @@ export class ParleyClient implements ParleyProvider {
         }
       }
     } finally {
+      // Cancel first so a mid-stream error tears down the socket promptly (see streamRound).
+      try {
+        await reader.cancel();
+      } catch {
+        // Already cancelled/released.
+      }
       try {
         reader.releaseLock();
       } catch {

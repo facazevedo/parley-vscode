@@ -167,10 +167,18 @@ export class BrowserManager {
     if (!/^https?:\/\//i.test(url)) {
       return 'Error: only http:// or https:// URLs are allowed (localhost is fine, e.g. http://localhost:3000).';
     }
+    if (isMetadataHost(urlHost(url))) {
+      return 'Error: navigation blocked — cloud metadata endpoints (169.254.0.0/16, metadata.google.internal) are not allowed.';
+    }
     try {
       const page = await this.ensurePage();
       this.consoleLog.length = 0; // fresh console per navigation
       await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
+      if (isMetadataHost(urlHost(page.url()))) {
+        // Don't leave the metadata response readable via browser_read/screenshot.
+        await page.goto('about:blank', { timeout: 5000 });
+        return 'Error: navigation blocked — the page redirected to a cloud metadata endpoint.';
+      }
       const title = await page.title();
       const text = clampText(await safeInnerText(page));
       return `Navigated to ${page.url()}\nTitle: ${title}\n\n${text}`;
@@ -266,6 +274,44 @@ export class BrowserManager {
 
 async function safeInnerText(page: PwPage, selector?: string): Promise<string> {
   return page.innerText(selector && selector.trim() ? selector : 'body');
+}
+
+/**
+ * SSRF guard for `browser_navigate`: true when `host` is a cloud metadata endpoint —
+ * an IPv4 literal in link-local 169.254.0.0/16 (where AWS/Azure/GCP IMDS live), its
+ * well-known IPv6 equivalents, or the GCP metadata hostname. Deliberately narrow:
+ * localhost and private (RFC-1918) addresses stay reachable, since driving local dev
+ * servers is this tool's primary job.
+ */
+export function isMetadataHost(host: string): boolean {
+  // URL hostnames wrap IPv6 in [ ]; a trailing dot is the same host in DNS.
+  const h = host
+    .trim()
+    .toLowerCase()
+    .replace(/^\[|\]$/g, '')
+    .replace(/\.+$/, '');
+  if (h === 'metadata.google.internal') {
+    return true;
+  }
+  // Well-known IPv6 metadata endpoints: AWS IMDS and the mapped hex form of 169.254.169.254.
+  if (h === 'fd00:ec2::254' || h === '::ffff:a9fe:a9fe') {
+    return true;
+  }
+  // IPv4 literal (possibly IPv6-mapped dotted form) inside 169.254.0.0/16.
+  const dotted = h.startsWith('::ffff:') ? h.slice('::ffff:'.length) : h;
+  const octets = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(dotted);
+  return (
+    octets !== null && octets[1] === '169' && octets[2] === '254' && octets.slice(1).every((o) => Number(o) <= 255)
+  );
+}
+
+/** Hostname of a URL ('' when unparsable). WHATWG parsing canonicalizes IP shorthand (hex/octal/decimal). */
+function urlHost(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return '';
+  }
 }
 
 /** Timestamp for screenshot filenames without Date.now (kept deterministic-friendly). */

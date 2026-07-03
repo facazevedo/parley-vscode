@@ -215,8 +215,20 @@ import hljs from 'highlight.js/lib/common';
       return '';
     }
   });
+  // Memoized: full re-renders (postState) re-feed every prior message through
+  // markdown-it, which is O(n) jank in long sessions — cache by source string.
+  const mdCache = new Map();
   function renderMd(src) {
-    return md.render(String(src || ''));
+    const k = String(src || '');
+    let html = mdCache.get(k);
+    if (html === undefined) {
+      if (mdCache.size > 2000) {
+        mdCache.clear(); // crude cap so the cache can't grow unbounded
+      }
+      html = md.render(k);
+      mdCache.set(k, html);
+    }
+    return html;
   }
   function enhanceContent(contentEl) {
     // Copy button on each fenced block. The button lives outside the scrollable <pre>
@@ -988,8 +1000,15 @@ import hljs from 'highlight.js/lib/common';
   $('newChat').addEventListener('click', () => vscode.postMessage({ type: 'newChat' }));
   $('historyBtn').addEventListener('click', () => vscode.postMessage({ type: 'openHistory' }));
   $('export').addEventListener('click', () => vscode.postMessage({ type: 'export' }));
+  $('usage').addEventListener('click', () => vscode.postMessage({ type: 'openUsage' }));
   $('compact').addEventListener('click', () => vscode.postMessage({ type: 'compact' }));
   attachBtn.addEventListener('click', () => vscode.postMessage({ type: 'attachFiles' }));
+  // The header session-cost readout is also a shortcut to the full usage view.
+  if (sessionTokEl) {
+    sessionTokEl.style.cursor = 'pointer';
+    sessionTokEl.title = 'View usage';
+    sessionTokEl.addEventListener('click', () => vscode.postMessage({ type: 'openUsage' }));
+  }
 
   // Paste or drag-and-drop images (e.g. a screenshot) or PDFs straight into the composer.
   function isAttachable(type) {
@@ -1196,6 +1215,16 @@ import hljs from 'highlight.js/lib/common';
       prompt.focus();
       return;
     }
+    if (msg.type === 'restoreDraft') {
+      // The host refused the turn before it started (token limit, cancelled
+      // large-context confirm) — the prompt was already cleared on send, so put
+      // it back. Only if the composer is still empty: don't clobber new typing.
+      if (!prompt.value.trim()) {
+        prompt.value = msg.text || '';
+        prompt.focus();
+      }
+      return;
+    }
     if (msg.type === 'selectionInfo') {
       selInfo = msg.info || null;
       renderSelInfo();
@@ -1351,6 +1380,10 @@ import hljs from 'highlight.js/lib/common';
     agent.disabled = busy;
     modeBtn.disabled = busy;
     modeBtn.title = busy ? 'Locked while the agent is running (applies from the next turn)' : 'Mode & thinking';
+    const refreshBtn = $('refresh');
+    if (refreshBtn) {
+      refreshBtn.disabled = busy; // a mid-turn refresh would re-render over the live reply
+    }
     prompt.placeholder = busy
       ? 'Type to steer the agent — sent at its next step…'
       : 'Ask Parley…  (@file to attach · paste or drop files · Enter to send · Shift+Enter for newline)';
@@ -1377,6 +1410,14 @@ import hljs from 'highlight.js/lib/common';
     } else {
       banner.className = 'banner';
       banner.textContent = '';
+    }
+
+    // A reply is still streaming: the in-progress text isn't in the transcript
+    // yet, so the full re-render below would wipe it from view. Keep the
+    // non-destructive updates above and skip the rebuild until streamEnd.
+    if (msg.busy && streamContent) {
+      maybeScroll();
+      return;
     }
 
     streamNode = null;

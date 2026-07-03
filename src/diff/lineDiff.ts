@@ -131,6 +131,11 @@ export interface UnifiedDiff {
  * 1-based (`oldNo` for removed/context, `newNo` for added/context).
  */
 export function formatUnifiedDiff(originalText: string, proposedText: string, context = 3): UnifiedDiff {
+  // Normalize EOLs before diffing: proposals are LF while the original may be CRLF,
+  // and without this every line of a CRLF file would count as changed. The apply
+  // path re-normalizes EOL on write, so display-only normalization is safe here.
+  originalText = originalText.replace(/\r\n?/g, '\n');
+  proposedText = proposedText.replace(/\r\n?/g, '\n');
   const a = originalText.length ? originalText.split('\n') : [];
   const b = proposedText.length ? proposedText.split('\n') : [];
   const ops = diffMiddle(a, b);

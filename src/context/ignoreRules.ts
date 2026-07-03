@@ -26,7 +26,18 @@ export async function loadIgnoreMatcher(workspaceFolder: string, respectGitignor
     patterns,
     ignores(filePath: string): boolean {
       const relative = path.relative(workspaceFolder, filePath).replace(/\\/g, '/');
-      return patterns.some((pattern) => matchesPattern(relative, pattern));
+      let ignored = false;
+      for (const pattern of patterns) {
+        const negated = pattern.startsWith('!');
+        const raw = negated ? pattern.slice(1) : pattern;
+        if (raw.length === 0) {
+          continue;
+        }
+        if (matchesPattern(relative, raw)) {
+          ignored = !negated;
+        }
+      }
+      return ignored;
     }
   };
 }
@@ -35,7 +46,7 @@ export function parseIgnoreFile(content: string): string[] {
   return content
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter((line) => line.length > 0 && !line.startsWith('#') && !line.startsWith('!'));
+    .filter((line) => line.length > 0 && !line.startsWith('#'));
 }
 
 export function matchesPattern(relativePath: string, pattern: string): boolean {
@@ -48,7 +59,12 @@ export function matchesPattern(relativePath: string, pattern: string): boolean {
   }
 
   if (!cleanPattern.includes('*')) {
-    return normalized === cleanPattern || normalized.endsWith(`/${cleanPattern}`);
+    return (
+      normalized === cleanPattern ||
+      normalized.endsWith(`/${cleanPattern}`) ||
+      normalized.startsWith(`${cleanPattern}/`) ||
+      normalized.includes(`/${cleanPattern}/`)
+    );
   }
 
   const escaped = cleanPattern

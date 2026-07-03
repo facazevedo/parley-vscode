@@ -23,7 +23,7 @@ import { isMcpTool } from '../mcp/naming';
 import type { ParleyProvider } from '../parley/ParleyProvider';
 import { estimateCostUsd } from '../parley/pricing';
 import { resolveThinking, type ThinkingLevel } from '../parley/thinking';
-import { SUBAGENT_TOOLS, resolveAcrossRoots, runAgentTool } from '../parley/tools';
+import { SUBAGENT_TOOLS, assertInsideWorkspace, resolveAcrossRoots, runAgentTool } from '../parley/tools';
 import type { ToolCall } from '../parley/types';
 import { webSearch } from '../web/webSearch';
 import type { TranscriptRecorder } from './transcriptRecorder';
@@ -61,7 +61,7 @@ export class ToolExecutor {
   // Proposed file changes from a chat-mode reply, awaiting an inline Apply click.
   private readonly pendingChanges = new Map<
     string,
-    { uri: vscode.Uri; rel: string; original: string; proposedText: string }
+    { uri: vscode.Uri; rel: string; original: string; proposedText: string; deleteFile?: boolean }
   >();
   private changeSeq = 0;
   // Ask-mode approvals: proposed-change cards whose tool call awaits an Apply/Reject click.
@@ -73,6 +73,10 @@ export class ToolExecutor {
   // Content hashes of files the agent has read this conversation — staleness detection
   // for write_file (don't clobber unseen changes) and better edit_file errors.
   private readonly fileReadHashes = new Map<string, string>();
+  // Reads performed by a SUBAGENT: tracked for staleness/touched-files, but kept
+  // OUT of the write-clobber guard — the parent never saw those contents, only the
+  // subagent's distilled report, so they must not authorize a parent overwrite.
+  private readonly subagentReadHashes = new Map<string, string>();
   private commandChannel?: vscode.OutputChannel;
 
   public constructor(private readonly host: ToolExecutorHost) {}
@@ -86,15 +90,16 @@ export class ToolExecutor {
   public resetConversationState(): void {
     this.pendingChanges.clear();
     this.fileReadHashes.clear();
+    this.subagentReadHashes.clear();
   }
 
   /** Absolute paths of files the agent has read/edited this conversation (for glob-scoped rules). */
   public touchedFiles(): string[] {
-    return [...this.fileReadHashes.keys()];
+    return [...new Set([...this.fileReadHashes.keys(), ...this.subagentReadHashes.keys()])];
   }
 
   /** Tool runner for agent mode: read tools delegate to the read-only runner; writes/commands need UI + checkpoints. */
-  public async run(call: ToolCall): Promise<string> {
+  public async run(call: ToolCall, opts?: { subagent?: boolean }): Promise<string> {
     // Lifecycle hooks (parley.hooks): PreToolUse may block; PostToolUse may append feedback.
     const hooks = this.host.getSettings().hooks;
     const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
@@ -109,7 +114,7 @@ export class ToolExecutor {
     }
     // Scan tool output (e.g. a file the agent read, or command output) for credentials
     // before it reaches the model/gateway — see the setting parley.secretScanning.
-    const result = this.applySecretPolicy(await this.dispatch(call));
+    const result = this.applySecretPolicy(await this.dispatch(call, opts));
     const post = await runHookEvent(
       hooks,
       'PostToolUse',
@@ -137,13 +142,13 @@ export class ToolExecutor {
     return `${redacted}\n\n[Parley redacted ${summary} from this output before sending.]`;
   }
 
-  private async dispatch(call: ToolCall): Promise<string> {
+  private async dispatch(call: ToolCall, opts?: { subagent?: boolean }): Promise<string> {
     if (isMcpTool(call.name)) {
       return this.host.mcp.callTool(call.name, call.arguments);
     }
     if (call.name === 'read_file') {
       const result = await runAgentTool(call);
-      await this.recordReadFromArgs(call.arguments);
+      await this.recordReadFromArgs(call.arguments, opts?.subagent);
       return result;
     }
     if (call.name === 'write_file') {
@@ -197,7 +202,7 @@ export class ToolExecutor {
       tools: SUBAGENT_TOOLS,
       runTool: (nested) =>
         allowed.has(nested.name)
-          ? this.run(nested)
+          ? this.run(nested, { subagent: true })
           : Promise.resolve(`Error: ${nested.name} is not available to subagents (read-only tools only).`),
       signal: this.host.getAbortSignal(),
       onStep: (action) =>
@@ -295,8 +300,13 @@ export class ToolExecutor {
     this.fileReadHashes.set(fsPath, ToolExecutor.hashContent(content));
   }
 
-  /** After a read_file tool call: hash the file so later writes can detect outside changes. */
-  private async recordReadFromArgs(argsJson: string): Promise<void> {
+  /**
+   * After a read_file tool call: hash the file so later writes can detect outside
+   * changes. Subagent reads go to a separate map (subagentReadHashes) so they still
+   * feed staleness/touched-files but do NOT authorize a parent write_file overwrite —
+   * the parent only ever saw the subagent's report, not the file itself.
+   */
+  private async recordReadFromArgs(argsJson: string, subagent?: boolean): Promise<void> {
     try {
       const rel = String((JSON.parse(argsJson || '{}') as { path?: string }).path ?? '').replace(/^[/\\]+/, '');
       if (!rel) {
@@ -307,7 +317,8 @@ export class ToolExecutor {
         return;
       }
       const content = await ToolExecutor.readText(uri);
-      this.recordFileState(uri.fsPath, content);
+      const target = subagent ? this.subagentReadHashes : this.fileReadHashes;
+      target.set(uri.fsPath, ToolExecutor.hashContent(content));
     } catch {
       // Unreadable/absent — nothing to record.
     }
@@ -342,7 +353,15 @@ export class ToolExecutor {
       return 'Error: refusing to write a sensitive file.';
     }
 
-    const uri = (await resolveAcrossRoots(rel)) ?? vscode.Uri.joinPath(root, rel);
+    const uri = await resolveAcrossRoots(rel);
+    if (!uri) {
+      return 'Error: path is outside the workspace.';
+    }
+    // Canonical-path guard: an in-tree symlink/junction must not let a write escape
+    // the root (resolveAcrossRoots only checks the path lexically).
+    if (!(await assertInsideWorkspace(uri, vscode.workspace.getWorkspaceFolder?.(uri)?.uri ?? root))) {
+      return 'Error: path is outside the workspace.';
+    }
     let original = '';
     let fileExists = true;
     try {
@@ -399,7 +418,15 @@ export class ToolExecutor {
       return 'Error: refusing to edit a sensitive file.';
     }
 
-    const uri = (await resolveAcrossRoots(rel)) ?? vscode.Uri.joinPath(root, rel);
+    const uri = await resolveAcrossRoots(rel);
+    if (!uri) {
+      return 'Error: path is outside the workspace.';
+    }
+    // Canonical-path guard: an in-tree symlink/junction must not let a write escape
+    // the root (resolveAcrossRoots only checks the path lexically).
+    if (!(await assertInsideWorkspace(uri, vscode.workspace.getWorkspaceFolder?.(uri)?.uri ?? root))) {
+      return 'Error: path is outside the workspace.';
+    }
     let original: string;
     try {
       original = await ToolExecutor.readText(uri);
@@ -460,7 +487,15 @@ export class ToolExecutor {
       newText: String(e?.new_text ?? '')
     }));
 
-    const uri = (await resolveAcrossRoots(rel)) ?? vscode.Uri.joinPath(root, rel);
+    const uri = await resolveAcrossRoots(rel);
+    if (!uri) {
+      return 'Error: path is outside the workspace.';
+    }
+    // Canonical-path guard: an in-tree symlink/junction must not let a write escape
+    // the root (resolveAcrossRoots only checks the path lexically).
+    if (!(await assertInsideWorkspace(uri, vscode.workspace.getWorkspaceFolder?.(uri)?.uri ?? root))) {
+      return 'Error: path is outside the workspace.';
+    }
     let original: string;
     try {
       original = await ToolExecutor.readText(uri);
@@ -676,12 +711,32 @@ export class ToolExecutor {
   }
 
   /** Render an interactive "Apply" card for a chat-mode proposed file change (Cursor-style). */
-  public postProposedChange(change: { filePath: string; originalText: string; proposedText: string }): void {
+  public postProposedChange(change: {
+    filePath: string;
+    originalText: string;
+    proposedText: string;
+    deleteFile?: boolean;
+  }): void {
     const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+    // Containment: a chat-mode `File:`/diff block can name an absolute or `..` path;
+    // never surface an Apply card that would write outside the workspace.
+    if (root) {
+      const relCheck = path.relative(root.fsPath, change.filePath);
+      if (relCheck === '' || relCheck.startsWith('..') || path.isAbsolute(relCheck)) {
+        dbg('edit', `refused out-of-workspace proposed change: ${change.filePath}`);
+        return;
+      }
+    }
     const uri = vscode.Uri.file(change.filePath);
     const rel = root ? path.relative(root.fsPath, change.filePath).replace(/\\/g, '/') : change.filePath;
     const id = `chg${this.changeSeq++}`;
-    this.pendingChanges.set(id, { uri, rel, original: change.originalText, proposedText: change.proposedText });
+    this.pendingChanges.set(id, {
+      uri,
+      rel,
+      original: change.originalText,
+      proposedText: change.proposedText,
+      deleteFile: change.deleteFile
+    });
     const diff = formatUnifiedDiff(change.originalText, change.proposedText);
     const MAX_ROWS = 500;
     const rows = diff.rows.length > MAX_ROWS ? diff.rows.slice(0, MAX_ROWS) : diff.rows;
@@ -746,8 +801,13 @@ export class ToolExecutor {
     try {
       // The inline Apply click is the confirmation, so apply directly (still checkpointed/revertible).
       // The card already shows the diff, so we just flip it to "Applied" via changeResolved.
-      await this.host.checkpoints.applyWithCheckpoint(change.uri, change.proposedText, `edit ${change.rel}`);
-      this.recordFileState(change.uri.fsPath, change.proposedText);
+      if (change.deleteFile) {
+        await this.host.checkpoints.deleteWithCheckpoint(change.uri, `delete ${change.rel}`);
+        this.fileReadHashes.delete(change.uri.fsPath);
+      } else {
+        await this.host.checkpoints.applyWithCheckpoint(change.uri, change.proposedText, `edit ${change.rel}`);
+        this.recordFileState(change.uri.fsPath, change.proposedText);
+      }
       this.host.post({ type: 'changeResolved', id, status: 'applied' });
       this.resolveTranscriptChange(id, 'applied');
       await this.host.recorder.autosave();

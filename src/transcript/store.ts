@@ -22,6 +22,34 @@ export interface ConversationIndexEntry {
   events: number;
 }
 
+// Per-file write serialization. append/rewrite of one JSONL log, and the shared
+// index.json / state.json, are fire-and-forget from several ChatPanels in this one
+// process; without ordering, a concurrent appendFile + full rewrite can interleave
+// (Node documents concurrent appendFile as unsafe) or a stale-read upsert can drop
+// entries. All writes to a given path go through one FIFO chain keyed by that path.
+const writeChains = new Map<string, Promise<unknown>>();
+let tmpSeq = 0;
+
+function serialize<T>(key: string, op: () => Promise<T>): Promise<T> {
+  const resolved = path.resolve(key);
+  const prev = writeChains.get(resolved) ?? Promise.resolve();
+  const tail = prev.catch(() => undefined);
+  const next = tail.then(op);
+  writeChains.set(
+    resolved,
+    next.catch(() => undefined)
+  );
+  return next;
+}
+
+/** Atomic full-file write: temp file in the same dir, then rename over the target. */
+async function atomicWrite(file: string, data: string): Promise<void> {
+  await fsp.mkdir(path.dirname(file), { recursive: true });
+  const tmp = `${file}.tmp-${process.pid}-${tmpSeq++}`;
+  await fsp.writeFile(tmp, data, 'utf8');
+  await fsp.rename(tmp, file);
+}
+
 export function conversationsDir(base: string): string {
   return path.join(base, 'conversations');
 }
@@ -37,15 +65,20 @@ export function markdownPath(base: string, id: string): string {
 /** Append a single transcript event to the conversation's JSONL log (creates dirs as needed). */
 export async function appendEvent(base: string, id: string, entry: TranscriptEntry): Promise<void> {
   const file = jsonlPath(base, id);
-  await fsp.mkdir(path.dirname(file), { recursive: true });
-  await fsp.appendFile(file, JSON.stringify(entry) + '\n', 'utf8');
+  await serialize(file, async () => {
+    await fsp.mkdir(path.dirname(file), { recursive: true });
+    await fsp.appendFile(file, JSON.stringify(entry) + '\n', 'utf8');
+  });
 }
 
 /** Overwrite the whole JSONL log from an in-memory array (used to repair/sync). */
 export async function writeEvents(base: string, id: string, entries: readonly TranscriptEntry[]): Promise<void> {
   const file = jsonlPath(base, id);
-  await fsp.mkdir(path.dirname(file), { recursive: true });
-  await fsp.writeFile(file, entries.map((e) => JSON.stringify(e)).join('\n') + (entries.length ? '\n' : ''), 'utf8');
+  // Serialized against concurrent appends to the same log, and written atomically
+  // (temp + rename) so a crash mid-write can't truncate/zero the canonical log.
+  await serialize(file, () =>
+    atomicWrite(file, entries.map((e) => JSON.stringify(e)).join('\n') + (entries.length ? '\n' : ''))
+  );
 }
 
 /** Read and parse a conversation's JSONL log. Returns [] if missing/unreadable. */
@@ -88,15 +121,20 @@ export async function readIndex(base: string): Promise<ConversationIndexEntry[]>
 
 /** Insert or update a conversation's index entry, newest first. */
 export async function upsertIndex(base: string, entry: ConversationIndexEntry): Promise<void> {
-  const list = (await readIndex(base)).filter((e) => e.id !== entry.id);
-  list.unshift(entry);
-  await fsp.mkdir(base, { recursive: true });
-  await fsp.writeFile(path.join(base, 'index.json'), JSON.stringify(list.slice(0, 200), null, 2), 'utf8');
+  const file = path.join(base, 'index.json');
+  // The read-modify-write must be one critical section (keyed by index.json), or two
+  // panels finishing at once both read the old list and the second clobbers the first,
+  // dropping a conversation from the picker. atomicWrite avoids a torn index on crash.
+  await serialize(file, async () => {
+    const list = (await readIndex(base)).filter((e) => e.id !== entry.id);
+    list.unshift(entry);
+    await atomicWrite(file, JSON.stringify(list.slice(0, 200), null, 2));
+  });
 }
 
 export async function writeState(base: string, state: Record<string, unknown>): Promise<void> {
-  await fsp.mkdir(base, { recursive: true });
-  await fsp.writeFile(path.join(base, 'state.json'), JSON.stringify(state, null, 2), 'utf8');
+  const file = path.join(base, 'state.json');
+  await serialize(file, () => atomicWrite(file, JSON.stringify(state, null, 2)));
 }
 
 /**

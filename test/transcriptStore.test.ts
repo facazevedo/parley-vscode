@@ -52,6 +52,42 @@ test('upsertIndex keeps newest first and de-duplicates by id', async () => {
   await fsp.rm(base, { recursive: true, force: true });
 });
 
+test('concurrent upsertIndex calls do not drop entries (serialized read-modify-write)', async () => {
+  const base = await tmpBase('idx-race');
+  // Fire many upserts for distinct ids concurrently. Without serialization the
+  // read-modify-write would race and lose most of them; the lock must keep all.
+  const n = 20;
+  await Promise.all(
+    Array.from({ length: n }, (_, i) =>
+      upsertIndex(base, {
+        id: `c${i}`,
+        title: `C${i}`,
+        savedAt: `2026-06-23T00:00:${String(i).padStart(2, '0')}.000Z`,
+        model: 'm',
+        events: i
+      })
+    )
+  );
+  const idx = await readIndex(base);
+  assert.equal(idx.length, n, 'every concurrent upsert survived');
+  assert.deepEqual(idx.map((e) => e.id).sort(), Array.from({ length: n }, (_, i) => `c${i}`).sort());
+  await fsp.rm(base, { recursive: true, force: true });
+});
+
+test('concurrent appendEvent calls all land (serialized, no interleave loss)', async () => {
+  const base = await tmpBase('append-race');
+  const id = 'conv-race';
+  const n = 30;
+  await Promise.all(
+    Array.from({ length: n }, (_, i) =>
+      appendEvent(base, id, { kind: 'user', text: `m${i}`, at: `2026-06-23T00:00:00.${String(i).padStart(3, '0')}Z` })
+    )
+  );
+  const read = await readEvents(base, id);
+  assert.equal(read.length, n, 'no appended event was lost to an interleaved write');
+  await fsp.rm(base, { recursive: true, force: true });
+});
+
 test('ensureGitignore creates a wildcard ignore once and never overwrites', async () => {
   const base = await tmpBase('gi');
   await ensureGitignore(base);

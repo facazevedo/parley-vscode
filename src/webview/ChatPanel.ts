@@ -15,6 +15,7 @@ import { totalCharacters } from '../context/contextPreview';
 import { parseRuleFile, ruleApplies } from '../context/rulesDir';
 import { terminalSnapshot } from '../context/terminalLog';
 import { isSensitiveFile } from '../context/sensitiveFileFilter';
+import { loadIgnoreMatcher, type IgnoreMatcher } from '../context/ignoreRules';
 import type { CheckpointStore } from '../diff/checkpoints';
 import type { Logger } from '../logging/logger';
 import { SYSTEM_PROMPT } from '../parley/ParleyClient';
@@ -100,6 +101,7 @@ interface ChatPanelMessage {
     | 'dropText'
     | 'dropUnsupported'
     | 'webviewReady'
+    | 'openUsage'
     | 'setApiKey';
   readonly prompt?: string;
   readonly agentId?: string;
@@ -211,6 +213,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private mode: ChatMode = 'chat';
   private sessionTokens = 0;
   private sessionCost = 0;
+  private highUsageWarned = false; // one-shot soft-budget notice per conversation (parley.usageWarnUsd)
   private jsonNext = false; // one-shot: request the next reply as a JSON object (/json)
   private customCommandNames: string[] = []; // user-defined /commands from .parley|.claude/commands
   private embeddingIndex?: EmbeddingIndex; // lazy local semantic index for @codebase
@@ -233,7 +236,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
 
   private turns!: AgentTurnRunner;
   private get busy(): boolean {
-    return this.turns.busy;
+    // `starting` covers the pre-execute window (hooks, context, mentions) so a second
+    // send during it is queued as steering instead of launching a concurrent turn.
+    return this.turns.busy || this.turns.starting;
   }
   private set busy(value: boolean) {
     this.turns.busy = value;
@@ -287,13 +292,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         thinking: this.selectedThinking,
         speed: this.selectedSpeed
       }),
-      applyUsage: (tokens, cost) => {
-        this.sessionTokens += tokens;
-        if (cost) {
-          this.sessionCost += cost;
-        }
-        return { sessionTokens: this.sessionTokens, sessionCostUsd: this.sessionCost };
-      },
+      applyUsage: (tokens, cost) => this.accrueUsage(tokens, cost),
       post: (m) => this.post(m)
     });
     this.turns = new AgentTurnRunner({
@@ -305,13 +304,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       logger: this.logger,
       post: (m) => this.post(m),
       postState: () => this.postState(),
-      applyUsage: (tokens, cost) => {
-        this.sessionTokens += tokens;
-        if (cost) {
-          this.sessionCost += cost;
-        }
-        return { sessionTokens: this.sessionTokens, sessionCostUsd: this.sessionCost };
-      },
+      applyUsage: (tokens, cost) => this.accrueUsage(tokens, cost),
       getSessionTokens: () => this.sessionTokens,
       runFollowUp: (prompt) => void this.runTurn(prompt, this.contextOptions)
     });
@@ -348,20 +341,23 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     void this.checkpoints.bind(this.parleyBase(), this.conversationId);
     // Incremental semantic index: re-embed a file on save, but only when the local
     // provider is selected AND the embedder is already loaded (never load it for a save).
-    vscode.workspace.onDidSaveTextDocument((doc) => {
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri;
-      if (!root || !this.embeddingIndex || this.getSettings().codebaseSearchProvider !== 'local') {
-        return;
-      }
-      if (doc.uri.scheme !== 'file' || doc.getText().length > 200000) {
-        return;
-      }
-      const rel = path.relative(root.fsPath, doc.uri.fsPath).replace(/\\/g, '/');
-      if (rel.startsWith('..') || isSensitiveFile(rel)) {
-        return;
-      }
-      void this.embeddingIndex.updateFile(root.fsPath, rel, doc.getText());
-    });
+    // Disposed with the panel (a tab chat) so closed chats don't keep re-embedding.
+    this.disposables.push(
+      vscode.workspace.onDidSaveTextDocument((doc) => {
+        const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+        if (!root || !this.embeddingIndex || this.getSettings().codebaseSearchProvider !== 'local') {
+          return;
+        }
+        if (doc.uri.scheme !== 'file' || doc.getText().length > 200000) {
+          return;
+        }
+        const rel = path.relative(root.fsPath, doc.uri.fsPath).replace(/\\/g, '/');
+        if (rel.startsWith('..') || isSensitiveFile(rel)) {
+          return;
+        }
+        void this.embeddingIndex.updateFile(root.fsPath, rel, doc.getText());
+      })
+    );
     // Selection pill: tell the webview what editor selection would ride along with
     // the next prompt (includeSelection is on by default and otherwise invisible).
     let selectionTimer: NodeJS.Timeout | undefined;
@@ -404,8 +400,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   }
 
   private save(): void {
-    void this.state.update('parley.history', this.history);
-    void this.state.update('parley.transcript', this.transcript);
+    // Lightweight params — cheap, always written immediately.
     void this.state.update('parley.conversationStartedAt', this.conversationStartedAt);
     void this.state.update('parley.selectedAgentId', this.selectedAgentId);
     void this.state.update('parley.selectedThinking', this.selectedThinking);
@@ -416,6 +411,33 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     void this.state.update('parley.conversationId', this.conversationId);
     void this.state.update('parley.contextOptions', this.contextOptions);
     void this.state.update('parley.title', this.recorder.customTitle);
+    // The history/transcript blobs (which embed base64 images and up-to-500-row diff
+    // entries) get re-serialized on every postState — many times per streaming turn.
+    // Coalesce them while busy; flush immediately when idle so turn-end/user-action
+    // state stays durable. (The on-disk JSONL is the canonical record regardless.)
+    if (this.busy) {
+      this.scheduleHeavySave();
+    } else {
+      this.flushHeavySave();
+    }
+  }
+
+  private saveTimer?: NodeJS.Timeout;
+
+  private scheduleHeavySave(): void {
+    if (this.saveTimer) {
+      return;
+    }
+    this.saveTimer = setTimeout(() => this.flushHeavySave(), 800);
+  }
+
+  private flushHeavySave(): void {
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = undefined;
+    }
+    void this.state.update('parley.history', this.history);
+    void this.state.update('parley.transcript', this.transcript);
   }
 
   // ---------- transcript delegation (owner: TranscriptRecorder, decomposition 2/4) ----------
@@ -462,6 +484,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     this.executor.resetConversationState();
     this.sessionTokens = 0;
     this.sessionCost = 0;
+    this.highUsageWarned = false;
     this.conversationId = this.newConversationId();
     this.conversationStartedAt = new Date().toISOString();
     this.recorder.customTitle = undefined;
@@ -529,6 +552,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     panel.onDidDispose(() => {
       this.disposedFlag = true;
       this.turns.abort();
+      this.flushHeavySave(); // don't lose a coalesced transcript tail on tab close
       void this.autosaveConversation();
       for (const d of this.disposables) {
         d.dispose();
@@ -613,6 +637,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         return;
       case 'export':
         await this.exportConversation();
+        return;
+      case 'openUsage':
+        await vscode.commands.executeCommand('parley.showUsage');
         return;
       case 'compact':
         await this.promptCompact();
@@ -705,6 +732,32 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   /** Rough token estimate of the current conversation (~4 chars/token). */
   private estimateHistoryTokens(): number {
     return Math.round(this.history.reduce((n, m) => n + (m.content?.length ?? 0), 0) / 4);
+  }
+
+  /**
+   * Session token/cost sink shared by the turn runner and the tool executor (nested
+   * subagent loops). Also fires the one-shot soft-budget notice once the estimated
+   * spend crosses `parley.usageWarnUsd` (0 = off) so a runaway agent loop is visible.
+   */
+  private accrueUsage(tokens: number, cost: number): { sessionTokens: number; sessionCostUsd: number } {
+    this.sessionTokens += tokens;
+    if (cost) {
+      this.sessionCost += cost;
+    }
+    const warnUsd = this.getSettings().usageWarnUsd;
+    if (warnUsd > 0 && !this.highUsageWarned && this.sessionCost >= warnUsd) {
+      this.highUsageWarned = true;
+      const note =
+        `💸 This conversation has used about **${formatUsd(this.sessionCost)}** (${this.sessionTokens.toLocaleString()} tokens), ` +
+        `past your \`parley.usageWarnUsd\` warning threshold of ${formatUsd(warnUsd)}. ` +
+        `Consider **/compact** to shrink context, or **＋** to start a fresh conversation. Run **Parley: Show Usage** for your real billed spend.`;
+      this.history.push({ role: 'assistant', content: note, createdAt: new Date().toISOString() });
+      this.appendTranscript({ kind: 'note', text: note, at: new Date().toISOString() });
+      void vscode.window.showWarningMessage(
+        `Parley: this conversation is at ~${formatUsd(this.sessionCost)} (threshold ${formatUsd(warnUsd)}).`
+      );
+    }
+    return { sessionTokens: this.sessionTokens, sessionCostUsd: this.sessionCost };
   }
 
   /** Exact prompt-token count for the current history via the gateway, falling back to the heuristic. */
@@ -1001,8 +1054,42 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     }
     const prompt = this.history[i].content;
     this.history.length = i; // runTurn re-adds the user message
+    // Trim the transcript back to before its last user entry too (transcript indices
+    // differ from the history index because tool/fileEdit/note entries don't map 1:1),
+    // so the re-run yields [user, newAssistant] instead of duplicating the question
+    // and stranding the stale answer in the saved transcript and on reload.
+    let t = this.transcript.length - 1;
+    while (t >= 0 && this.transcript[t].kind !== 'user') {
+      t -= 1;
+    }
+    if (t >= 0) {
+      this.transcript = this.transcript.slice(0, t);
+      this.syncTranscriptFile();
+    }
     await this.postState();
     await this.runTurn(prompt, this.contextOptions);
+  }
+
+  /** "Parley: Revert Last Edit" — guarded so it can't interleave with an in-flight agent turn. */
+  public async revertLastEdit(): Promise<void> {
+    if (this.busy) {
+      await vscode.window.showInformationMessage('Parley is still responding — stop it before reverting.');
+      return;
+    }
+    const label = await this.checkpoints.revertLast();
+    await vscode.window.showInformationMessage(label ? `Parley reverted: ${label}.` : 'Parley: nothing to revert.');
+  }
+
+  /** "Parley: Revert All Edits" — guarded like revertLastEdit. */
+  public async revertAllEdits(): Promise<void> {
+    if (this.busy) {
+      await vscode.window.showInformationMessage('Parley is still responding — stop it before reverting.');
+      return;
+    }
+    const count = await this.checkpoints.revertAll();
+    await vscode.window.showInformationMessage(
+      count > 0 ? `Parley reverted ${count} edit${count === 1 ? '' : 's'}.` : 'Parley: nothing to revert.'
+    );
   }
 
   private async runTurn(prompt: string, contextOptions: ContextOptions): Promise<void> {
@@ -1025,10 +1112,17 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         await this.compactConversation(4); // keep the most recent exchange verbatim
       }
     }
+    // Claim the turn synchronously here (after the self-contained auto-compact, which
+    // runs its own busy lifecycle) so a second send during the async pre-execute work
+    // below — hooks, context collection, mention resolution — is queued as steering
+    // rather than launching a concurrent turn. cancelStart() releases it on early exit.
+    this.turns.begin();
     if (settings.tokenLimit > 0 && this.sessionTokens >= settings.tokenLimit) {
+      this.turns.cancelStart();
       await vscode.window.showWarningMessage(
         `Parley token limit reached for this conversation (${this.sessionTokens.toLocaleString()} / ${settings.tokenLimit.toLocaleString()}). Start a new conversation or raise "parley.tokenLimit".`
       );
+      await this.postToComposer({ type: 'restoreDraft', text: prompt });
       return;
     }
     // UserPromptSubmit hooks: exit 2 blocks the prompt; zero-exit stdout becomes extra context.
@@ -1039,10 +1133,12 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       { cwd: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath, log: (m) => this.logger.debug(`hooks: ${m}`) }
     );
     if (submitHook.blocked) {
+      this.turns.cancelStart();
       const note = `🚫 Blocked by a UserPromptSubmit hook${submitHook.feedback ? `: ${submitHook.feedback}` : ''}.`;
       this.history.push({ role: 'assistant', content: note, createdAt: new Date().toISOString() });
       this.appendTranscript({ kind: 'note', text: note, at: new Date().toISOString() });
       await this.postState();
+      await this.postToComposer({ type: 'restoreDraft', text: prompt });
       return;
     }
 
@@ -1101,6 +1197,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     if (totalCharacters(context) > settings.contextMaxCharacters / 2) {
       const confirmed = await previewAndConfirmContext(context, settings);
       if (!confirmed) {
+        this.turns.cancelStart();
+        await this.postToComposer({ type: 'restoreDraft', text: prompt });
         return;
       }
     }
@@ -1828,20 +1926,25 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       'Be concise but complete, and output only the summary.\n\n---\n' +
       transcript;
 
-    this.busy = true;
-    await this.postState();
     try {
-      const summary = await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: 'Compacting conversation…' },
-        async () => {
-          const response = await this.getProvider().sendMessage({
-            prompt,
-            messages: [{ role: 'user', content: prompt, createdAt: new Date().toISOString() }],
-            context: [],
-            agentId: model
-          });
-          return response.message.content;
-        }
+      // Run under the turn runner's busy/abort lifecycle so the Stop button (which
+      // calls turns.abort()) can actually cancel compaction, including auto-compaction.
+      const summary = await this.turns.runExternal(async (signal) =>
+        vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: 'Compacting conversation…' },
+          async () => {
+            const response = await this.getProvider().sendMessage(
+              {
+                prompt,
+                messages: [{ role: 'user', content: prompt, createdAt: new Date().toISOString() }],
+                context: [],
+                agentId: model
+              },
+              { signal }
+            );
+            return response.message.content;
+          }
+        )
       );
 
       const summaryMsg: ChatMessage = {
@@ -1852,12 +1955,12 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       };
       this.history.length = 0;
       this.history.push(summaryMsg, ...toKeep);
-    } catch (error) {
-      await reportProviderError(this.commandDeps, error);
-    } finally {
-      this.busy = false;
-      await this.postState();
       await this.autosaveConversation();
+    } catch (error) {
+      // A user Stop during compaction aborts the request — leave history unchanged.
+      if ((error as { name?: string })?.name !== 'AbortError') {
+        await reportProviderError(this.commandDeps, error);
+      }
     }
   }
 
@@ -1943,6 +2046,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     this.executor.resetConversationState();
     this.sessionTokens = 0;
     this.sessionCost = 0;
+    this.highUsageWarned = false;
     await this.checkpoints.bind(this.parleyBase(), this.conversationId);
     await vscode.commands.executeCommand('workbench.view.extension.parley');
     await vscode.commands.executeCommand('parley.chatView.focus');
@@ -2201,7 +2305,12 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         continue;
       }
       try {
-        const uri = (await resolveAcrossRoots(rel)) ?? vscode.Uri.joinPath(root, rel);
+        // resolveAcrossRoots returns undefined for a path that escapes the workspace
+        // (e.g. @../../../etc/passwd); skip it rather than reading outside the root.
+        const uri = await resolveAcrossRoots(rel);
+        if (!uri) {
+          continue;
+        }
         const stat = await vscode.workspace.fs.stat(uri);
         if (stat.type === vscode.FileType.Directory) {
           // RelativePattern anchors the glob to the resolved folder, which also makes
@@ -2264,7 +2373,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     settings: ParleySettings
   ): Promise<ContextAttachment[]> {
     const query = prompt.replace(/(?:^|\s)@\S+/g, ' ').trim() || prompt;
-    const docs = await this.gatherCodebaseDocs();
+    const docs = await this.gatherCodebaseDocs(settings.respectGitignore);
     if (docs.length === 0) {
       return [];
     }
@@ -2300,8 +2409,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       });
   }
 
-  /** Read indexable workspace files (skip binaries, huge files, node_modules, sensitive). */
-  private async gatherCodebaseDocs(): Promise<RankDoc[]> {
+  /** Read indexable workspace files (skip binaries, huge files, node_modules, sensitive, gitignored). */
+  private async gatherCodebaseDocs(respectGitignore: boolean): Promise<RankDoc[]> {
     let files: vscode.Uri[];
     try {
       files = await vscode.workspace.findFiles(
@@ -2312,10 +2421,23 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     } catch {
       return [];
     }
+    // Honor .gitignore/.parleyignore per root — @codebase is the highest-volume upload
+    // path, and a user who gitignores a file expects it excluded here too.
+    const matchers = new Map<string, IgnoreMatcher>();
+    for (const wf of vscode.workspace.workspaceFolders ?? []) {
+      if (wf.uri.scheme === 'file') {
+        matchers.set(wf.uri.fsPath, await loadIgnoreMatcher(wf.uri.fsPath, respectGitignore));
+      }
+    }
     const docs: RankDoc[] = [];
     for (const uri of files) {
       const rel = toolRelPath(uri); // folder-prefixed in multi-root workspaces
       if (isSensitiveFile(rel)) {
+        continue;
+      }
+      const wf = vscode.workspace.getWorkspaceFolder(uri);
+      const matcher = wf && matchers.get(wf.uri.fsPath);
+      if (matcher?.ignores(uri.fsPath)) {
         continue;
       }
       try {
@@ -2343,7 +2465,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: 'Parley: building local codebase index…' },
         async () => {
-          const docs = await this.gatherCodebaseDocs();
+          const docs = await this.gatherCodebaseDocs(this.getSettings().respectGitignore);
           const n = await this.embeddingIndex!.build(root.fsPath, docs);
           void vscode.window.showInformationMessage(`Parley indexed ${n} files for semantic @codebase search.`);
         }

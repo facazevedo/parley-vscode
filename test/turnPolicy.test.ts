@@ -27,6 +27,22 @@ test('<DONE> stops and is stripped from the rendered text', () => {
   assert.ok(d.kind === 'proceed' && d.cleaned === 'All finished.');
 });
 
+test('<DONE> after same-line prose still stops and is stripped from the tail', () => {
+  const d = decideTurnStep({ ...base, content: 'All set. <DONE>' });
+  assert.ok(d.kind === 'proceed' && d.next.kind === 'stop');
+  assert.ok(d.kind === 'proceed' && d.cleaned === 'All set.');
+  assert.ok(d.kind === 'proceed' && !d.cleaned.endsWith('<DONE>'));
+});
+
+test('<DONE> mentioned mid-prose is NOT the sentinel: kept verbatim, loop continues (regression)', () => {
+  // Before the fix, discussing the token in prose truncated the text and stopped the turn.
+  const d = decideTurnStep({ ...base, content: 'The <DONE> sentinel ends a turn.' });
+  assert.equal(d.kind, 'proceed');
+  assert.ok(d.kind === 'proceed' && d.cleaned === 'The <DONE> sentinel ends a turn.');
+  assert.ok(d.kind === 'proceed' && d.cleaned.includes('<DONE>'));
+  assert.ok(d.kind === 'proceed' && d.next.kind === 'continue');
+});
+
 test('thinking-only steps are progress, not stalls (the v0.42 bug)', () => {
   const d = decideTurnStep({ ...base, content: '', thinkingChars: 500 });
   assert.equal(d.kind, 'proceed');

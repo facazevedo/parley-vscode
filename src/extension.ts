@@ -230,16 +230,8 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('parley.compactConversation', () => currentChat().compactConversation()),
     vscode.commands.registerCommand('parley.regenerate', () => currentChat().regenerateLast()),
     vscode.commands.registerCommand('parley.openPastConversation', () => currentChat().openPastConversation()),
-    vscode.commands.registerCommand('parley.revertLastEdit', async () => {
-      const label = await currentChat().checkpointStore.revertLast();
-      await vscode.window.showInformationMessage(label ? `Parley reverted: ${label}.` : 'Parley: nothing to revert.');
-    }),
-    vscode.commands.registerCommand('parley.revertAll', async () => {
-      const count = await currentChat().checkpointStore.revertAll();
-      await vscode.window.showInformationMessage(
-        count > 0 ? `Parley reverted ${count} edit${count === 1 ? '' : 's'}.` : 'Parley: nothing to revert.'
-      );
-    }),
+    vscode.commands.registerCommand('parley.revertLastEdit', () => currentChat().revertLastEdit()),
+    vscode.commands.registerCommand('parley.revertAll', () => currentChat().revertAllEdits()),
     vscode.commands.registerCommand('parley.setTokenLimit', async () => {
       const current = getSettings().tokenLimit;
       const input = await vscode.window.showInputBox({
