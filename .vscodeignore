@@ -4,6 +4,7 @@ node_modules/**
 src/**
 test/**
 media/chat.js
+API_DISCOVERY.md
 .parley/**
 out/**
 dist/**/*.map
