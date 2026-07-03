@@ -3468,6 +3468,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       selectedSpeed: this.selectedSpeed,
       customCommands: this.customCommands.map((c) => ({ name: c.name, description: c.description })),
       promptHistory: this.promptHistory,
+      voice: { autoRead: this.getSettings().voiceAutoRead, chime: this.getSettings().chimeOnDone },
       contextOptions: this.contextOptions,
       selectionInfo: this.currentSelectionInfo(),
       attachments: this.attachments.map((a) => ({ id: a.id, label: a.label, kind: a.kind }))

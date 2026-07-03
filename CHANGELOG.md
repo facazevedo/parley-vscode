@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.96.0
+
+### New — voice output, hands-free voice mode, and a completion chime
+
+- **🔊 Read aloud**: every assistant reply gets a speak button (hover, next to ⏪) that reads it with the OS text-to-speech voices — free, offline, no tokens. Code blocks are skipped ("code omitted"), markdown is stripped for natural speech, click again to stop. `parley.voice.autoRead` reads every reply as it finishes.
+- **🗣 Voice mode**: toggle it and the conversation goes hands-free — 🎤 recordings auto-send when transcribed, and every reply is read aloud. Talk through a problem while your eyes stay on the code.
+- **Completion chime** (`parley.sound.chimeOnDone`, off by default): a soft two-tone chime when a turn finishes while the window is unfocused — the audio twin of the activity-bar badge.
+
 ## 0.95.0
 
 ### Changed — `/init` now analyzes the repository (Claude-Code style)

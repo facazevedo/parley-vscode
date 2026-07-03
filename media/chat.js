@@ -362,6 +362,90 @@ import hljs from 'highlight.js/lib/common';
     '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round">' +
     '<rect x="5.5" y="5.5" width="8.5" height="8.5" rx="1.5"/>' +
     '<path d="M3.5 10.5h-1a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v1"/></svg>';
+  // ---------- Voice output (built-in speechSynthesis TTS) ----------
+  let speakingBtn = null; // the 🔊 button currently playing (toggles stop)
+  let voicePrefs = { autoRead: false, chime: false }; // from the host state message
+  function speechText(md) {
+    return (md || '')
+      .replace(/```[\s\S]*?```/g, ' (code omitted) ')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, ' image ')
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+      .replace(/^#{1,6}\s+/gm, '')
+      .replace(/[*_>|]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+  function stopSpeaking() {
+    try {
+      window.speechSynthesis.cancel();
+    } catch (e) {
+      /* unsupported */
+    }
+    if (speakingBtn) {
+      speakingBtn.classList.remove('speaking');
+      speakingBtn = null;
+    }
+  }
+  function speak(md, btn) {
+    stopSpeaking();
+    if (!window.speechSynthesis) {
+      return;
+    }
+    const text = speechText(md).slice(0, 4000);
+    if (!text) {
+      return;
+    }
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1.05;
+    u.onend = () => stopSpeaking();
+    u.onerror = () => stopSpeaking();
+    window.speechSynthesis.speak(u);
+    if (btn) {
+      speakingBtn = btn;
+      btn.classList.add('speaking');
+    }
+  }
+  function addSpeakButton(messageNode, text) {
+    if (!window.speechSynthesis) {
+      return null;
+    }
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'msgspeak';
+    btn.title = 'Read aloud (click again to stop)';
+    btn.setAttribute('aria-label', 'Read aloud');
+    btn.textContent = '🔊';
+    btn.addEventListener('click', () => {
+      if (speakingBtn === btn) {
+        stopSpeaking();
+      } else {
+        speak(text, btn);
+      }
+    });
+    messageNode.appendChild(btn);
+    return btn;
+  }
+  // Soft two-tone chime for turns that finish while the window is unfocused.
+  function playChime() {
+    try {
+      const ctx = new AudioContext();
+      const gain = ctx.createGain();
+      gain.gain.value = 0.06;
+      gain.connect(ctx.destination);
+      [660, 880].forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        osc.frequency.value = freq;
+        osc.connect(gain);
+        osc.start(ctx.currentTime + i * 0.16);
+        osc.stop(ctx.currentTime + i * 0.16 + 0.14);
+      });
+      setTimeout(() => ctx.close(), 800);
+    } catch (e) {
+      /* audio unavailable */
+    }
+  }
+
   function addCopyButton(messageNode, text) {
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -836,6 +920,7 @@ import hljs from 'highlight.js/lib/common';
       } else if (e.kind === 'assistant') {
         const c = bubble('assistant', renderMd(e.text));
         addRewindButton(c.parentNode, tindex);
+        addSpeakButton(c.parentNode, e.text);
         if (e.thinking) {
           const det = document.createElement('details');
           det.className = 'thinking';
@@ -1441,7 +1526,11 @@ import hljs from 'highlight.js/lib/common';
   // MediaRecorder emits webm/opus, which the gateway's input_audio doesn't accept —
   // so capture raw PCM via WebAudio, downsample to 16 kHz mono, and encode WAV here.
   const micBtn = $('mic');
+  const voiceModeBtn = $('voiceMode');
   let micState = 'idle'; // idle | recording | busy
+  let voiceMode = false; // hands-free: transcription auto-sends, replies auto-read
+  let pendingVoiceSend = false; // the next insertText comes from voice-mode transcription
+  let liveText = ''; // raw markdown of the streaming reply (for read-aloud at streamEnd)
   let micStream = null;
   let micCtx = null;
   let micNode = null;
@@ -1571,6 +1660,7 @@ import hljs from 'highlight.js/lib/common';
     setMicState('busy');
     const base64 = encodeWavBase64(micChunks, micRate);
     micChunks = [];
+    pendingVoiceSend = voiceMode; // hands-free: send as soon as the transcription lands
     vscode.postMessage({ type: 'voiceAudio', base64 });
   }
   if (micBtn) {
@@ -1579,6 +1669,19 @@ import hljs from 'highlight.js/lib/common';
         void startRecording();
       } else if (micState === 'recording') {
         finishRecording();
+      }
+    });
+  }
+  if (voiceModeBtn) {
+    voiceModeBtn.addEventListener('click', () => {
+      voiceMode = !voiceMode;
+      voiceModeBtn.classList.toggle('active', voiceMode);
+      voiceModeBtn.title = voiceMode
+        ? 'Voice mode ON — 🎤 auto-sends, replies are read aloud. Click to turn off.'
+        : 'Voice mode: hands-free conversation (🎤 auto-sends, replies read aloud)';
+      if (!voiceMode) {
+        stopSpeaking();
+        pendingVoiceSend = false;
       }
     });
   }
@@ -2140,6 +2243,9 @@ import hljs from 'highlight.js/lib/common';
     if (msg.type === 'voiceStatus') {
       // Transcription finished (the text arrives via a separate insertText) or failed.
       setMicState('idle');
+      if (msg.state !== 'done') {
+        pendingVoiceSend = false;
+      }
       return;
     }
     if (msg.type === 'insertText') {
@@ -2153,6 +2259,11 @@ import hljs from 'highlight.js/lib/common';
       const caret = (before + pad + (msg.text || '')).length;
       prompt.setSelectionRange(caret, caret);
       prompt.focus();
+      if (pendingVoiceSend) {
+        // Voice mode: the transcription just landed — send it hands-free.
+        pendingVoiceSend = false;
+        sendPrompt();
+      }
       return;
     }
     if (msg.type === 'restoreDraft') {
@@ -2189,6 +2300,7 @@ import hljs from 'highlight.js/lib/common';
     if (msg.type === 'streamStart') {
       ensureStreamBubble();
       liveChars = 0;
+      liveText = '';
       setStatus('Parley is working…');
       return;
     }
@@ -2212,6 +2324,7 @@ import hljs from 'highlight.js/lib/common';
       streamContent = null;
       currentSeg = null;
       planEl = null;
+      liveText = '';
       const c = bubble('user', renderMd(msg.text || ''));
       addCopyButton(c.parentNode, msg.text || '');
       return;
@@ -2229,6 +2342,7 @@ import hljs from 'highlight.js/lib/common';
       ensureStreamBubble();
       currentSeg.textContent += msg.delta;
       liveChars += msg.delta.length;
+      liveText += msg.delta;
       if (!statusBase) {
         statusBase = 'Parley is working…';
       }
@@ -2265,6 +2379,16 @@ import hljs from 'highlight.js/lib/common';
       if (streamContent) {
         streamContent.classList.remove('cursor');
       }
+      if (streamContent && liveText.trim()) {
+        const btn = addSpeakButton(streamContent.parentNode, liveText);
+        if (voiceMode || voicePrefs.autoRead) {
+          speak(liveText, btn);
+        }
+      }
+      if (voicePrefs.chime && !document.hasFocus()) {
+        playChime();
+      }
+      liveText = '';
       finishThinkingBlock();
       streamNode = null;
       streamContent = null;
@@ -2311,6 +2435,9 @@ import hljs from 'highlight.js/lib/common';
       .querySelectorAll('.mp-speed button')
       .forEach((b) => b.classList.toggle('active', b.dataset.speed === speed));
     customCommands = msg.customCommands || [];
+    if (msg.voice) {
+      voicePrefs = msg.voice;
+    }
     if (msg.promptHistory && recallIndex === -1) {
       sentPrompts = msg.promptHistory; // don't yank entries mid-navigation
     }
@@ -2386,6 +2513,9 @@ import hljs from 'highlight.js/lib/common';
           addCopyButton(content.parentNode, item.content);
           addEditButton(content.parentNode, item.content, userOrdinal);
           userOrdinal += 1;
+        }
+        if (item.role === 'assistant') {
+          addSpeakButton(content.parentNode, item.content);
         }
         if (item.role === 'assistant' && item.thinking) {
           const det = document.createElement('details');

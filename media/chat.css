@@ -1131,6 +1131,43 @@ button:disabled {
   font-weight: 500;
 }
 
+/* Read-aloud button on assistant messages (left of the ⏪ rewind). */
+.msgspeak {
+  position: absolute;
+  top: var(--chat-action-offset-y);
+  right: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 3px;
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, rgba(127, 127, 127, 0.35));
+  border-radius: 4px;
+  font-size: 10px;
+  cursor: pointer;
+  opacity: 0;
+}
+.message.assistant:hover .msgspeak {
+  opacity: 0.55;
+}
+.msgspeak:hover {
+  opacity: 1;
+  background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.25));
+}
+.msgspeak.speaking {
+  opacity: 1;
+  color: var(--vscode-progressBar-background, var(--vscode-focusBorder));
+  animation: micpulse 1.2s ease-in-out infinite;
+}
+/* Voice-mode toggle (hands-free conversation). */
+#voiceMode.active {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border-radius: 5px;
+}
+
 /* Voice-input mic button: red pulse while recording. */
 #mic.recording {
   color: var(--vscode-errorForeground, #f66);

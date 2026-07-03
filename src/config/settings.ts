@@ -45,6 +45,10 @@ export interface ParleySettings {
   readonly terminalFixHintEnabled: boolean;
   /** Model used to transcribe voice input ('' = the current chat model). */
   readonly voiceModel: string;
+  /** Read replies aloud automatically when a turn finishes. */
+  readonly voiceAutoRead: boolean;
+  /** Play a soft chime when a turn finishes while the window is unfocused. */
+  readonly chimeOnDone: boolean;
   readonly autoCompactTokens: number;
   readonly autoCompactPercent: number;
   readonly autoSaveConversations: boolean;
@@ -97,6 +101,8 @@ export function getSettings(): ParleySettings {
     verifyCommand: config.get<string>('verifyCommand', '').trim(),
     terminalFixHintEnabled: config.get<boolean>('terminalFixHint.enabled', true),
     voiceModel: config.get<string>('voice.model', '').trim(),
+    voiceAutoRead: config.get<boolean>('voice.autoRead', false),
+    chimeOnDone: config.get<boolean>('sound.chimeOnDone', false),
     autoCompactTokens: Math.max(0, Math.floor(config.get<number>('autoCompactTokens', 0))),
     autoCompactPercent: clampInt(config.get<number>('autoCompactPercent', 80), 0, 100),
     autoSaveConversations: config.get<boolean>('autoSaveConversations', true),

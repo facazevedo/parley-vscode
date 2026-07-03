@@ -110,6 +110,7 @@ export function buildChatHtml(webview: vscode.Webview, extensionUri: vscode.Uri)
           <button type="button" id="modeBtn" class="modebtn" title="Mode &amp; thinking" aria-label="Mode">Chat ▾</button>
           <button type="button" id="attach" title="Attach files or images" aria-label="Attach files or images">📎</button>
           <button type="button" id="mic" title="Voice input (click to record, click again to transcribe)" aria-label="Voice input">🎤</button>
+          <button type="button" id="voiceMode" title="Voice mode: hands-free conversation (🎤 auto-sends, replies read aloud)" aria-label="Toggle voice mode">🗣</button>
           <span class="grow"></span>
           <button type="button" id="stop" style="display:none">Stop</button>
           <button type="submit" id="sendBtn" class="primary">Send</button>

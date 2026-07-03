@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "0.95.0",
+  "version": "0.96.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -560,6 +560,16 @@
           "type": "string",
           "default": "",
           "markdownDescription": "Model used to transcribe 🎤 voice input (must accept audio — OpenAI or Google models). Leave empty to use the current chat model. Example: `openai/gpt-5-nano`."
+        },
+        "parley.voice.autoRead": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Read assistant replies aloud automatically when a turn finishes (uses the OS text-to-speech voices; code blocks are skipped). The 🔊 button on any reply works regardless, and 🗣 voice mode always reads aloud."
+        },
+        "parley.sound.chimeOnDone": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Play a soft two-tone chime when a Parley turn finishes while the window is unfocused — the audio twin of the activity-bar badge."
         },
         "parley.terminalFixHint.enabled": {
           "type": "boolean",
