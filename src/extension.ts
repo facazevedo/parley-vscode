@@ -4,6 +4,7 @@ import type { CommandDependencies } from './commands/common';
 import { registerExplainFileCommand } from './commands/explainFile';
 import { registerFixDiagnosticsCommand } from './commands/fixDiagnostics';
 import { registerGenerateCommitMessageCommand } from './commands/generateCommitMessage';
+import { registerReviewBranchCommand } from './commands/reviewBranch';
 import { registerGenerateImageCommand } from './commands/generateImage';
 import { registerGenerateTestsCommand } from './commands/generateTests';
 import { registerInitProjectRulesCommand } from './commands/initProjectRules';
@@ -271,6 +272,7 @@ export function activate(context: vscode.ExtensionContext): void {
   registerSuggestTerminalCommand(context, commandDeps);
   registerGenerateImageCommand(context, commandDeps);
   registerGenerateCommitMessageCommand(context, commandDeps);
+  registerReviewBranchCommand(context, commandDeps);
   registerToggleInlineCompletionCommand(context);
   registerShowUsageCommand(context, commandDeps);
   registerReportIssueCommand(context, commandDeps);

@@ -5,13 +5,23 @@ import { reportProviderError } from './common';
 
 const MAX_DIFF_CHARS = 12000;
 
-interface GitRepo {
+export interface GitRepo {
   readonly rootUri: vscode.Uri;
   diff(cached?: boolean): Promise<string>;
   readonly inputBox: { value: string };
 }
-interface GitApi {
+export interface GitApi {
   readonly repositories: GitRepo[];
+}
+
+/** The built-in Git extension's API, or undefined (with a warning shown) when unavailable. */
+export async function getGitApi(): Promise<GitApi | undefined> {
+  const gitExt = vscode.extensions.getExtension('vscode.git');
+  if (!gitExt) {
+    await vscode.window.showWarningMessage('Parley: the built-in Git extension is not available.');
+    return undefined;
+  }
+  return (await gitExt.activate()).getAPI(1) as GitApi;
 }
 
 /** True when `uri` lives inside the repository's root folder (fsPath prefix compare). */
@@ -27,7 +37,10 @@ function repoContains(repo: GitRepo, uri: vscode.Uri): boolean {
  * ambiguous, e.g. nested repos) ask the user. Returns undefined when the user
  * dismisses the picker.
  */
-async function resolveRepository(repositories: readonly GitRepo[]): Promise<GitRepo | undefined> {
+export async function resolveRepository(
+  repositories: readonly GitRepo[],
+  placeHolder = 'Select the repository to generate a commit message for'
+): Promise<GitRepo | undefined> {
   if (repositories.length === 1) {
     return repositories[0];
   }
@@ -44,7 +57,7 @@ async function resolveRepository(repositories: readonly GitRepo[]): Promise<GitR
       description: repo.rootUri.fsPath,
       repo
     })),
-    { placeHolder: 'Select the repository to generate a commit message for' }
+    { placeHolder }
   );
   return picked?.repo;
 }
@@ -60,12 +73,10 @@ export function registerGenerateCommitMessageCommand(
 ): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('parley.generateCommitMessage', async () => {
-      const gitExt = vscode.extensions.getExtension('vscode.git');
-      if (!gitExt) {
-        await vscode.window.showWarningMessage('Parley: the built-in Git extension is not available.');
+      const api = await getGitApi();
+      if (!api) {
         return;
       }
-      const api: GitApi = (await gitExt.activate()).getAPI(1);
       if (api.repositories.length === 0) {
         await vscode.window.showWarningMessage('Parley: no Git repository found in this workspace.');
         return;

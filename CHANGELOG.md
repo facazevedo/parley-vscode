@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.88.0
+
+### New — `Parley: Review Current Branch`
+
+- Reviews your branch's committed work: finds the merge-base with `origin/main` / `origin/master` / `main` / `master`, gathers the commit list, diffstat, and diff (capped at 30k chars with the stat as full-scope fallback), and streams a severity-grouped code review **plus a ready-to-paste PR title & description** into the chat.
+- Complements the existing `@git` mention (uncommitted changes) — the command tells you so when the branch has no commits beyond the base. Multi-repo workspaces get the same repo picker as commit-message generation (now shared helpers).
+
 ## 0.87.0
 
 ### New — `/verify`: fix until green
