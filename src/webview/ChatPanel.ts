@@ -110,6 +110,7 @@ interface ChatPanelMessage {
     | 'dropUnsupported'
     | 'webviewReady'
     | 'openUsage'
+    | 'setUsageAccount'
     | 'setApiKey';
   readonly prompt?: string;
   readonly agentId?: string;
@@ -144,6 +145,29 @@ interface ChatPanelMessage {
   readonly ordinal?: number;
   /** For 'rewind': transcript entry index to rewind to. */
   readonly tindex?: number;
+  /** For 'compact': keep the last N messages verbatim (0 = summarize everything). Picked in the webview menu. */
+  readonly keepRecent?: number;
+  /** For 'export': format picked in the webview menu. */
+  readonly fmt?: string;
+  /** For 'rewind': which part to rewind, picked in the webview menu. */
+  readonly what?: string;
+  /** For 'renameConversation': new title entered inline in the webview. */
+  readonly title?: string;
+  /** For 'deleteConversation': the webview already showed an inline confirm. */
+  readonly confirmed?: boolean;
+  /** For 'setUsageAccount': the account id entered in the webview usage popover. */
+  readonly accountId?: string;
+}
+
+type RewindChoice = 'convo' | 'files' | 'both';
+type ExportFormat = 'md' | 'txt' | 'json';
+
+function asRewindChoice(value: string | undefined): RewindChoice | undefined {
+  return value === 'convo' || value === 'files' || value === 'both' ? value : undefined;
+}
+
+function asExportFormat(value: string | undefined): ExportFormat | undefined {
+  return value === 'md' || value === 'txt' || value === 'json' ? value : undefined;
 }
 
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp']);
@@ -616,7 +640,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         this.turns.removeQueued(message.index ?? -1);
         return;
       case 'rewind':
-        await this.rewindAtIndex(message.tindex ?? -1);
+        await this.rewindAtIndex(message.tindex ?? -1, asRewindChoice(message.what));
         return;
       case 'openHistory':
         await this.openPastConversation();
@@ -631,7 +655,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         await this.renameConversationFlow(
           message.base ?? this.parleyBase(),
           message.id ?? '',
-          message.scope === 'all' ? 'all' : 'repo'
+          message.scope === 'all' ? 'all' : 'repo',
+          message.title
         );
         return;
       case 'archiveConversation':
@@ -646,7 +671,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         await this.deleteConversationFlow(
           message.base ?? this.parleyBase(),
           message.id ?? '',
-          message.scope === 'all' ? 'all' : 'repo'
+          message.scope === 'all' ? 'all' : 'repo',
+          message.confirmed === true
         );
         return;
       case 'reviewChanges':
@@ -682,13 +708,27 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         await this.addPastedFile(message.dataUri, message.name);
         return;
       case 'export':
-        await this.exportConversation();
+        await this.exportConversation(asExportFormat(message.fmt));
         return;
       case 'openUsage':
-        await vscode.commands.executeCommand('parley.showUsage');
+        await this.sendUsageInfo();
         return;
+      case 'setUsageAccount': {
+        const accountId = (message.accountId ?? '').trim();
+        if (accountId) {
+          await vscode.workspace
+            .getConfiguration('parley')
+            .update('accountId', accountId, vscode.ConfigurationTarget.Global);
+        }
+        await this.sendUsageInfo();
+        return;
+      }
       case 'compact':
-        await this.promptCompact();
+        if (typeof message.keepRecent === 'number') {
+          await this.compactConversation(message.keepRecent);
+        } else {
+          await this.promptCompact();
+        }
         return;
       case 'copyText':
         await vscode.env.clipboard.writeText(message.text ?? '');
@@ -912,7 +952,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         await this.startNewConversation();
         return true;
       case 'compact':
-        await this.promptCompact();
+        // Show the options in the webview's in-panel menu (concise, chat-anchored).
+        this.post({ type: 'openCompactMenu' });
         return true;
       case 'context':
         await this.showContextBreakdown();
@@ -1037,7 +1078,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   }
 
   /** ⏪ on any message: choose to fork the conversation, restore files, or both. */
-  private async rewindAtIndex(idx: number): Promise<void> {
+  private async rewindAtIndex(idx: number, what?: RewindChoice): Promise<void> {
     if (this.busy) {
       await vscode.window.showInformationMessage('Parley is still responding — stop it before rewinding.');
       return;
@@ -1045,26 +1086,31 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     if (idx < 0 || idx >= this.transcript.length) {
       return;
     }
-    const CONVO = {
-      label: '$(comment-discussion) Rewind conversation (fork)',
-      detail: 'Continue from before this message — files keep their changes; the original conversation stays saved'
-    };
-    const FILES = {
-      label: '$(files) Rewind files',
-      detail: 'Restore files edited from this point on — the conversation itself is unchanged'
-    };
-    const BOTH = { label: '$(history) Rewind both', detail: 'Fork the conversation AND restore the files' };
-    const pick = await vscode.window.showQuickPick([CONVO, FILES, BOTH], {
-      title: 'Parley: rewind to this message',
-      placeHolder: "Edits are restored from this conversation's checkpoints"
-    });
-    if (!pick) {
-      return;
+    // The choice is normally made in the webview's in-panel menu; the QuickPick
+    // below is only a fallback for messages that don't carry one.
+    if (!what) {
+      const CONVO = {
+        label: '$(comment-discussion) Rewind conversation (fork)',
+        detail: 'Continue from before this message — files keep their changes; the original conversation stays saved'
+      };
+      const FILES = {
+        label: '$(files) Rewind files',
+        detail: 'Restore files edited from this point on — the conversation itself is unchanged'
+      };
+      const BOTH = { label: '$(history) Rewind both', detail: 'Fork the conversation AND restore the files' };
+      const pick = await vscode.window.showQuickPick([CONVO, FILES, BOTH], {
+        title: 'Parley: rewind to this message',
+        placeHolder: "Edits are restored from this conversation's checkpoints"
+      });
+      if (!pick) {
+        return;
+      }
+      what = pick === CONVO ? 'convo' : pick === FILES ? 'files' : 'both';
     }
-    if (pick !== FILES) {
+    if (what !== 'files') {
       await this.forkAtIndex(idx);
     }
-    if (pick !== CONVO) {
+    if (what !== 'convo') {
       const files = await this.checkpoints.rewindTo(idx);
       const note =
         files.length > 0
@@ -2152,20 +2198,60 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     this.post({ type: 'historyResults', scope, items: items.slice(0, 200) });
   }
 
-  /** Rename a saved (or the live) conversation via an input box, then refresh the list. */
-  private async renameConversationFlow(base: string, id: string, scope: 'repo' | 'all'): Promise<void> {
+  /**
+   * Fetch this month's billed usage and post it to the webview's in-panel usage
+   * popover (`usageInfo`). If no account id is configured yet, the popover shows
+   * an inline input instead ('setUsageAccount' saves it and re-fetches).
+   */
+  private async sendUsageInfo(): Promise<void> {
+    const accountId = vscode.workspace.getConfiguration('parley').get<string>('accountId', '').trim();
+    if (!accountId) {
+      this.post({ type: 'usageInfo', needsAccount: true });
+      return;
+    }
+    try {
+      const usage = await this.getProvider().getUsage(accountId);
+      const lines = [
+        `Billed: ${formatUsd(usage.costUsd)}`,
+        `Requests: ${usage.interactionsCount.toLocaleString()}`,
+        `Tokens: ${usage.inputTokens.toLocaleString()} in / ${usage.outputTokens.toLocaleString()} out`
+      ];
+      if (usage.periodStart && usage.periodEnd) {
+        lines.push(`Period: ${usage.periodStart.slice(0, 10)} → ${usage.periodEnd.slice(0, 10)}`);
+      }
+      this.post({ type: 'usageInfo', lines, accountId });
+    } catch (error) {
+      this.post({
+        type: 'usageInfo',
+        error: error instanceof Error ? error.message : 'Could not fetch usage.',
+        accountId
+      });
+    }
+  }
+
+  /** Rename a saved (or the live) conversation, then refresh the list. The new title
+   *  normally comes from the webview's inline rename input; the input box is a fallback. */
+  private async renameConversationFlow(
+    base: string,
+    id: string,
+    scope: 'repo' | 'all',
+    newTitle?: string
+  ): Promise<void> {
     if (!id) {
       return;
     }
-    const idx = await transcriptStore.readIndex(base);
-    const current = idx.find((e) => e.id === id);
-    const entered = await vscode.window.showInputBox({
-      title: 'Parley: rename conversation',
-      value: current?.title ?? '',
-      prompt: 'New title for this conversation',
-      validateInput: (v) => (v.trim().length === 0 ? 'Title cannot be empty.' : undefined)
-    });
+    let entered = newTitle;
     if (entered === undefined) {
+      const idx = await transcriptStore.readIndex(base);
+      const current = idx.find((e) => e.id === id);
+      entered = await vscode.window.showInputBox({
+        title: 'Parley: rename conversation',
+        value: current?.title ?? '',
+        prompt: 'New title for this conversation',
+        validateInput: (v) => (v.trim().length === 0 ? 'Title cannot be empty.' : undefined)
+      });
+    }
+    if (entered === undefined || entered.trim().length === 0) {
       return; // cancelled
     }
     const title = entered.trim().slice(0, 120);
@@ -2195,20 +2281,28 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     await this.sendHistoryList(scope);
   }
 
-  /** Delete a conversation (transcript files + index entry) after a confirm, then refresh. */
-  private async deleteConversationFlow(base: string, id: string, scope: 'repo' | 'all'): Promise<void> {
+  /** Delete a conversation (transcript files + index entry) after a confirm, then refresh.
+   *  `confirmed` means the webview already showed its inline "Delete?" confirm. */
+  private async deleteConversationFlow(
+    base: string,
+    id: string,
+    scope: 'repo' | 'all',
+    confirmed = false
+  ): Promise<void> {
     if (!id) {
       return;
     }
-    const idx = await transcriptStore.readIndex(base);
-    const current = idx.find((e) => e.id === id);
-    const choice = await vscode.window.showWarningMessage(
-      `Delete "${current?.title ?? 'this conversation'}"? This permanently removes its transcript from disk and can't be undone.`,
-      { modal: true },
-      'Delete'
-    );
-    if (choice !== 'Delete') {
-      return;
+    if (!confirmed) {
+      const idx = await transcriptStore.readIndex(base);
+      const current = idx.find((e) => e.id === id);
+      const choice = await vscode.window.showWarningMessage(
+        `Delete "${current?.title ?? 'this conversation'}"? This permanently removes its transcript from disk and can't be undone.`,
+        { modal: true },
+        'Delete'
+      );
+      if (choice !== 'Delete') {
+        return;
+      }
     }
     await transcriptStore.deleteConversation(base, id);
     // Deleting the live conversation: reset to a fresh one so we're not editing a ghost.
@@ -2423,20 +2517,25 @@ export class ChatPanel implements vscode.WebviewViewProvider {
    * Export the conversation. The canonical transcript on disk is completed/flushed first,
    * then a copy is written in the chosen format to a location the user picks.
    */
-  public async exportConversation(): Promise<void> {
+  public async exportConversation(fmt?: ExportFormat): Promise<void> {
     if (this.transcript.length === 0) {
       await vscode.window.showInformationMessage('Parley: there is no conversation to export yet.');
       return;
     }
 
-    const choice = await vscode.window.showQuickPick(
-      [
-        { label: 'Markdown (.md)', ext: 'md', fmt: 'md' as const },
-        { label: 'Plain text (.txt)', ext: 'txt', fmt: 'txt' as const },
-        { label: 'JSON (.json)', ext: 'json', fmt: 'json' as const }
-      ],
-      { title: 'Export Parley conversation', placeHolder: 'Choose a format' }
-    );
+    // The format is normally picked in the webview's in-panel menu; the QuickPick
+    // is a fallback for the command-palette entry.
+    let choice = fmt ? { ext: fmt, fmt } : undefined;
+    if (!choice) {
+      choice = await vscode.window.showQuickPick(
+        [
+          { label: 'Markdown (.md)', ext: 'md' as const, fmt: 'md' as const },
+          { label: 'Plain text (.txt)', ext: 'txt' as const, fmt: 'txt' as const },
+          { label: 'JSON (.json)', ext: 'json' as const, fmt: 'json' as const }
+        ],
+        { title: 'Export Parley conversation', placeHolder: 'Choose a format' }
+      );
+    }
     if (!choice) {
       return;
     }

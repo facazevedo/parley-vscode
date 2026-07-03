@@ -335,7 +335,7 @@ import hljs from 'highlight.js/lib/common';
       if (busy) {
         return;
       }
-      vscode.postMessage({ type: 'rewind', tindex });
+      openRewindMenu(tindex);
     });
     messageNode.appendChild(rw);
   }
@@ -1056,23 +1056,277 @@ import hljs from 'highlight.js/lib/common';
     }
   });
 
+  // ---------- Generic in-panel menu popover ----------
+  // All icon-triggered choices (compact, export, rewind, usage) render here — a
+  // concise dropdown anchored to the chat area, styled like the history panel,
+  // instead of VS Code's screen-centered QuickPick.
+  const menuPanel = $('menuPanel');
+  let menuKind = ''; // which menu is showing ('compact' | 'export' | 'usage' | 'rewind')
+  let menuRows = [];
+  let menuItems = [];
+  let menuActive = -1;
+
+  function menuIsOpen() {
+    return menuPanel && menuPanel.style.display !== 'none';
+  }
+  function closeMenu() {
+    if (menuPanel) {
+      menuPanel.style.display = 'none';
+      menuPanel.replaceChildren();
+      menuKind = '';
+      menuRows = [];
+      menuItems = [];
+      menuActive = -1;
+    }
+  }
+  function setMenuActive(i) {
+    menuActive = i;
+    menuRows.forEach((r, j) => r.classList.toggle('active', j === menuActive));
+  }
+  function pickMenuItem(i) {
+    const it = menuItems[i];
+    if (!it) {
+      return;
+    }
+    closeMenu();
+    it.onPick();
+  }
+  /**
+   * opts: { kind, title, note?, lines?: string[], items?: [{label, detail?, onPick}],
+   *         input?: {placeholder?, value?, onSubmit(value)} }
+   */
+  function openMenu(opts) {
+    if (!menuPanel) {
+      return;
+    }
+    closeHistory();
+    menuPanel.replaceChildren();
+    menuKind = opts.kind || '';
+    menuItems = (opts.items || []).slice();
+    menuRows = [];
+    menuActive = menuItems.length ? 0 : -1;
+
+    const head = document.createElement('div');
+    head.className = 'hp-head';
+    const title = document.createElement('div');
+    title.className = 'mn-title';
+    title.textContent = opts.title || '';
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'hp-close';
+    close.title = 'Close';
+    close.setAttribute('aria-label', 'Close');
+    close.textContent = '✕';
+    close.addEventListener('click', () => closeMenu());
+    head.append(title, close);
+    menuPanel.append(head);
+
+    if (opts.note) {
+      const note = document.createElement('div');
+      note.className = 'mn-note';
+      note.textContent = opts.note;
+      menuPanel.append(note);
+    }
+    if (opts.lines && opts.lines.length) {
+      const info = document.createElement('div');
+      info.className = 'mn-info';
+      opts.lines.forEach((line) => {
+        const row = document.createElement('div');
+        row.textContent = line;
+        info.append(row);
+      });
+      menuPanel.append(info);
+    }
+    let inputEl = null;
+    if (opts.input) {
+      inputEl = document.createElement('input');
+      inputEl.type = 'text';
+      inputEl.className = 'hp-filter';
+      inputEl.placeholder = opts.input.placeholder || '';
+      inputEl.value = opts.input.value || '';
+      inputEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          opts.input.onSubmit(inputEl.value);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          closeMenu();
+        }
+      });
+      menuPanel.append(inputEl);
+    }
+    if (menuItems.length) {
+      const list = document.createElement('div');
+      list.className = 'hp-list';
+      menuItems.forEach((it, i) => {
+        const row = document.createElement('div');
+        row.className = 'hp-item mn-item' + (i === menuActive ? ' active' : '');
+        row.setAttribute('role', 'menuitem');
+        const label = document.createElement('div');
+        label.className = 'hp-item-title';
+        label.textContent = it.label;
+        row.append(label);
+        if (it.detail) {
+          const det = document.createElement('div');
+          det.className = 'hp-item-meta';
+          det.textContent = it.detail;
+          row.append(det);
+        }
+        row.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          pickMenuItem(i);
+        });
+        row.addEventListener('mousemove', () => setMenuActive(i));
+        list.append(row);
+        menuRows.push(row);
+      });
+      menuPanel.append(list);
+    }
+    menuPanel.style.display = 'flex';
+    setTimeout(() => (inputEl ? inputEl.focus() : menuPanel.focus()), 0);
+  }
+  if (menuPanel) {
+    menuPanel.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeMenu();
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMenuActive(Math.min(menuActive + 1, menuItems.length - 1));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMenuActive(Math.max(menuActive - 1, 0));
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        pickMenuItem(Math.max(0, menuActive));
+      }
+    });
+    // Click outside closes it. The toolbar buttons toggle via their own handlers,
+    // which run on 'click' (after this mousedown already closed the menu) — so an
+    // outside mousedown on the same button would reopen it; the toggles below
+    // check `menuKind` at mousedown time via `lastClosedKind` to avoid that.
+    document.addEventListener('mousedown', (e) => {
+      if (menuIsOpen() && !menuPanel.contains(e.target)) {
+        lastClosedKind = menuKind;
+        closeMenu();
+      } else if (!menuIsOpen()) {
+        lastClosedKind = '';
+      }
+    });
+  }
+  let lastClosedKind = ''; // menu kind closed by the most recent outside mousedown
+  function toggleMenu(kind, open) {
+    if (lastClosedKind === kind) {
+      lastClosedKind = ''; // the mousedown just closed this same menu: treat click as a toggle-off
+      return;
+    }
+    if (menuIsOpen() && menuKind === kind) {
+      closeMenu();
+    } else {
+      open();
+    }
+  }
+
+  function openCompactMenu() {
+    openMenu({
+      kind: 'compact',
+      title: 'Compact conversation',
+      note: 'Compaction is lossy — it replaces history with a summary.',
+      items: [
+        {
+          label: 'Summarize older, keep recent',
+          detail: 'Summarize all but the last few messages (kept verbatim)',
+          onPick: () => vscode.postMessage({ type: 'compact', keepRecent: 4 })
+        },
+        {
+          label: 'Summarize everything',
+          detail: 'Replace the whole conversation with one summary',
+          onPick: () => vscode.postMessage({ type: 'compact', keepRecent: 0 })
+        }
+      ]
+    });
+  }
+  function openExportMenu() {
+    const fmts = [
+      { label: 'Markdown (.md)', fmt: 'md' },
+      { label: 'Plain text (.txt)', fmt: 'txt' },
+      { label: 'JSON (.json)', fmt: 'json' }
+    ];
+    openMenu({
+      kind: 'export',
+      title: 'Export conversation',
+      note: 'Choose a format — you pick where to save it next.',
+      items: fmts.map((f) => ({
+        label: f.label,
+        onPick: () => vscode.postMessage({ type: 'export', fmt: f.fmt })
+      }))
+    });
+  }
+  function openUsageMenu() {
+    openMenu({ kind: 'usage', title: 'Usage — this month', note: 'Fetching billed usage…' });
+    vscode.postMessage({ type: 'openUsage' });
+  }
+  function openUsageAccountInput(currentId) {
+    openMenu({
+      kind: 'usage',
+      title: 'Usage — account id',
+      note: 'Enter your Parley account id (Admin Portal → “My Account”), then press Enter.',
+      input: {
+        placeholder: 'acc_…',
+        value: currentId || '',
+        onSubmit: (value) => {
+          const v = (value || '').trim();
+          if (!v) {
+            return;
+          }
+          openMenu({ kind: 'usage', title: 'Usage — this month', note: 'Fetching billed usage…' });
+          vscode.postMessage({ type: 'setUsageAccount', accountId: v });
+        }
+      }
+    });
+  }
+  function openRewindMenu(tindex) {
+    openMenu({
+      kind: 'rewind',
+      title: 'Rewind to this message',
+      note: "Edits are restored from this conversation's checkpoints.",
+      items: [
+        {
+          label: '💬 Rewind conversation (fork)',
+          detail: 'Continue from before this message — files keep their changes',
+          onPick: () => vscode.postMessage({ type: 'rewind', tindex, what: 'convo' })
+        },
+        {
+          label: '📄 Rewind files',
+          detail: 'Restore files edited from this point on — the conversation is unchanged',
+          onPick: () => vscode.postMessage({ type: 'rewind', tindex, what: 'files' })
+        },
+        {
+          label: '⏪ Rewind both',
+          detail: 'Fork the conversation AND restore the files',
+          onPick: () => vscode.postMessage({ type: 'rewind', tindex, what: 'both' })
+        }
+      ]
+    });
+  }
+
   $('refresh').addEventListener('click', () => vscode.postMessage({ type: 'refreshAgents' }));
   $('newChat').addEventListener('click', () => vscode.postMessage({ type: 'newChat' }));
   $('historyBtn').addEventListener('click', () => toggleHistory());
-  $('export').addEventListener('click', () => vscode.postMessage({ type: 'export' }));
-  $('usage').addEventListener('click', () => vscode.postMessage({ type: 'openUsage' }));
-  $('compact').addEventListener('click', () => vscode.postMessage({ type: 'compact' }));
+  $('export').addEventListener('click', () => toggleMenu('export', openExportMenu));
+  $('usage').addEventListener('click', () => toggleMenu('usage', openUsageMenu));
+  $('compact').addEventListener('click', () => toggleMenu('compact', openCompactMenu));
   attachBtn.addEventListener('click', () => vscode.postMessage({ type: 'attachFiles' }));
   // The header session-cost readout is also a shortcut to the full usage view.
   if (sessionTokEl) {
     sessionTokEl.style.cursor = 'pointer';
     sessionTokEl.title = 'View usage';
-    sessionTokEl.addEventListener('click', () => vscode.postMessage({ type: 'openUsage' }));
+    sessionTokEl.addEventListener('click', () => toggleMenu('usage', openUsageMenu));
   }
   // Clicking the context-window meter offers to compact the conversation.
   if (ctxEl) {
     ctxEl.style.cursor = 'pointer';
-    ctxEl.addEventListener('click', () => vscode.postMessage({ type: 'compact' }));
+    ctxEl.addEventListener('click', () => toggleMenu('compact', openCompactMenu));
   }
 
   // ---------- In-panel conversation history ----------
@@ -1085,6 +1339,8 @@ import hljs from 'highlight.js/lib/common';
   let historyAllItems = []; // full list from the host for the current scope
   let historyActive = -1; // keyboard-highlighted index within the filtered view
   let historyFiltered = [];
+  let renamingId = null; // conversation id being renamed inline (row shows an input)
+  let confirmDeleteId = null; // conversation id whose 🗑 is armed ("Delete?" confirm)
 
   function historyOpen() {
     return historyPanel && historyPanel.style.display !== 'none';
@@ -1096,7 +1352,10 @@ import hljs from 'highlight.js/lib/common';
     if (!historyPanel) {
       return;
     }
+    closeMenu();
     historyPanel.style.display = 'flex';
+    renamingId = null;
+    confirmDeleteId = null;
     historyFilter.value = '';
     historyListEl.innerHTML = '<div class="hp-empty">Loading…</div>';
     requestHistory();
@@ -1164,6 +1423,44 @@ import hljs from 'highlight.js/lib/common';
 
         const main = document.createElement('div');
         main.className = 'hp-item-main';
+
+        if (renamingId === it.id) {
+          // Inline rename: the title becomes an input; Enter saves, Escape cancels.
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.className = 'hp-rename';
+          input.value = it.title || '';
+          input.setAttribute('aria-label', 'New title');
+          input.addEventListener('mousedown', (e) => e.stopPropagation());
+          input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              const title = input.value.trim();
+              if (title) {
+                renamingId = null;
+                historyAction('renameConversation', it, { title });
+              }
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              renamingId = null;
+              renderHistory();
+            }
+          });
+          input.addEventListener('blur', () => {
+            if (renamingId === it.id) {
+              renamingId = null;
+              renderHistory();
+            }
+          });
+          main.append(input);
+          row.append(main);
+          setTimeout(() => {
+            input.focus();
+            input.select();
+          }, 0);
+          return row;
+        }
+
         const title = document.createElement('div');
         title.className = 'hp-item-title';
         title.textContent = it.title || 'Conversation';
@@ -1188,13 +1485,33 @@ import hljs from 'highlight.js/lib/common';
 
         const actions = document.createElement('div');
         actions.className = 'hp-actions';
+        const del =
+          confirmDeleteId === it.id
+            ? actionButton('Delete?', 'Click again to permanently delete', () => {
+                confirmDeleteId = null;
+                historyAction('deleteConversation', it, { confirmed: true });
+              })
+            : actionButton('🗑', 'Delete', () => {
+                confirmDeleteId = it.id;
+                renderHistory();
+              });
+        if (confirmDeleteId === it.id) {
+          del.classList.add('arm');
+        }
         actions.append(
-          actionButton('✎', 'Rename', () => historyAction('renameConversation', it)),
+          actionButton('✎', 'Rename', () => {
+            renamingId = it.id;
+            confirmDeleteId = null;
+            renderHistory();
+          }),
           actionButton(it.archived ? '⇪' : '🗄', it.archived ? 'Unarchive' : 'Archive', () =>
             historyAction('archiveConversation', it, { value: !it.archived })
           ),
-          actionButton('🗑', 'Delete', () => historyAction('deleteConversation', it))
+          del
         );
+        if (confirmDeleteId === it.id) {
+          row.classList.add('active'); // keep the actions visible while the confirm is armed
+        }
 
         row.append(main, actions);
         return row;
@@ -1460,6 +1777,36 @@ import hljs from 'highlight.js/lib/common';
       historyActive = -1;
       if (historyOpen()) {
         renderHistory();
+      }
+      return;
+    }
+    if (msg.type === 'openCompactMenu') {
+      // The host asks us to show the compact options (e.g. the /compact slash command).
+      openCompactMenu();
+      return;
+    }
+    if (msg.type === 'usageInfo') {
+      // Billed-usage response for the in-panel usage popover. Ignore if the user
+      // has since closed it or opened a different menu.
+      if (menuKind !== 'usage') {
+        return;
+      }
+      if (msg.needsAccount) {
+        openUsageAccountInput(msg.accountId || '');
+      } else if (msg.error) {
+        openMenu({
+          kind: 'usage',
+          title: 'Usage — this month',
+          note: '⚠ ' + msg.error,
+          items: [{ label: 'Change account id…', onPick: () => openUsageAccountInput(msg.accountId || '') }]
+        });
+      } else {
+        openMenu({
+          kind: 'usage',
+          title: 'Usage — this month',
+          lines: msg.lines || [],
+          items: [{ label: 'Change account id…', onPick: () => openUsageAccountInput(msg.accountId || '') }]
+        });
       }
       return;
     }

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.78.0
+
+### Changed — every icon popup is now a concise in-panel dropdown (like the history panel)
+
+- **⊟ Compact** (and clicking the context meter, and `/compact`) now shows its two options — *Summarize older, keep recent* / *Summarize everything* — in a compact dropdown anchored to the chat area instead of the big screen-centered QuickPick.
+- **⤓ Export** picks the format (Markdown / plain text / JSON) in the same in-panel dropdown; only the native save dialog remains.
+- **💰 Usage** (and the header cost readout) fetches this month's billed spend and shows it right in the panel — cost, requests, tokens, period — with an inline **Change account id…** input instead of an input box + notification toast.
+- **⏪ Rewind** on a message opens the conversation/files/both choice in-panel too.
+- **History panel**: ✎ rename is now an inline input in the row (Enter saves, Esc cancels), and 🗑 delete confirms inline ("Delete?" — click again) — no more floating input box or modal dialog.
+- All dropdowns share one component: arrow-key navigation, Enter to pick, Esc / click-away to dismiss, and the trigger icon toggles it. The command-palette versions of these commands keep their native pickers.
+
 ## 0.77.0
 
 ### New — end-of-turn "changed files" summary with a Review action

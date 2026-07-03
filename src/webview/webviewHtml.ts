@@ -57,6 +57,7 @@ export function buildChatHtml(webview: vscode.Webview, extensionUri: vscode.Uri)
         <input type="text" id="historyFilter" class="hp-filter" placeholder="Filter conversations…" aria-label="Filter conversations">
         <div id="historyList" class="hp-list"></div>
       </div>
+      <div id="menuPanel" class="historypanel menupanel" style="display:none" tabindex="-1" role="menu"></div>
       <button id="jump" type="button" title="Jump to latest" aria-label="Jump to latest">↓</button>
     </div>
     <div id="status" class="status" style="display:none"></div>

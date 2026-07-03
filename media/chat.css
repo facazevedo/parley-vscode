@@ -993,6 +993,60 @@ button:disabled {
   font-size: 0.85em;
   text-align: center;
 }
+/* Inline rename input (replaces the row's title while renaming). */
+.hp-rename {
+  width: 100%;
+  padding: 3px 6px;
+  border: 1px solid var(--vscode-focusBorder, rgba(127, 127, 127, 0.5));
+  border-radius: 5px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font-size: 0.9em;
+  outline: none;
+}
+/* Armed delete confirm ("Delete?") — click again to actually delete. */
+.hp-act.arm {
+  background: var(--vscode-inputValidation-errorBackground, rgba(190, 30, 30, 0.35));
+  color: var(--vscode-errorForeground, #f88);
+  font-size: 0.78em;
+  opacity: 1;
+}
+
+/* Generic in-panel menu popover (compact/export/rewind/usage) — same concise,
+   chat-anchored style as the history panel instead of a floating QuickPick. */
+.menupanel {
+  left: auto;
+  min-width: 260px;
+  max-width: 92%;
+  outline: none;
+  padding-bottom: 4px;
+}
+.mn-title {
+  flex: 1;
+  font-size: 0.9em;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mn-note {
+  padding: 6px 10px 2px;
+  font-size: 0.78em;
+  color: var(--vscode-descriptionForeground);
+}
+.mn-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px 2px;
+  font-size: 0.85em;
+}
+.mn-item {
+  display: block;
+}
+.mn-item .hp-item-title {
+  font-weight: 500;
+}
 
 .attachments {
   display: flex;
