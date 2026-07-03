@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.81.0
+
+### New — "Fix with Parley" in the lightbulb menu
+
+- Any line with a squiggle now offers **Fix with Parley** in the Quick Fix lightbulb (`Ctrl+.`), next to the language's own fixes. It sends the *specific* diagnostics under the cursor — up to 5, deduped, Hints excluded — with a line-numbered excerpt of the offending code (±3 lines per diagnostic, merged and capped), plus the current file as context, and the reply streams into the chat.
+- One bundled action, never a spam list: a single diagnostic shows its message in the title ("Fix with Parley: Type 'number' is not…"), several show "Fix N problems with Parley". Parley never marks itself as the *preferred* fix, so it won't hijack auto-fix flows.
+- The palette command `Parley: Fix Diagnostics` (whole file, all diagnostics) is unchanged. New internal command `parley.fixDiagnostic` carries the lightbulb arguments; prompt builder is unit-tested.
+
 ## 0.80.0
 
 ### New — Apply button on chat code blocks
