@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.34.0
+
+### Changed — Codex-style conversation header
+
+- The conversation title line is now a proper header: a **← back arrow** (opens past conversations) on the left, the title in a **larger, full-strength** font (was small and greyed), and action icons on the right — **⋯** (more: export / compact / archive / delete), **↻** (new conversation), **⚙** (settings), and **✎** (rename inline).
+
 ## 1.33.1
 
 ### Fixed — timeline rail lines were cut between messages

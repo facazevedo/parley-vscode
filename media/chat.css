@@ -80,33 +80,54 @@ body {
 }
 
 /* Current-conversation title, shown as a line just below the toolbar. */
+/* Codex-style conversation header: ‹back› · title · action icons. */
 .convtitlebar {
-  padding: 2px 12px 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px 6px;
   border-bottom: 1px solid var(--vscode-sideBar-border);
 }
+.ct-grow {
+  flex: 1;
+}
 .convtitle-text {
-  display: block;
-  font-size: 0.82em;
-  color: var(--vscode-descriptionForeground);
+  font-size: 0.92rem;
+  font-weight: 500;
+  color: var(--vscode-foreground);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: pointer;
-}
-/* Codex-style disclosure caret hinting the name opens past conversations. */
-.convtitle-text::after {
-  content: ' ⌄';
-  opacity: 0.7;
+  min-width: 0;
 }
 .convtitle-text:hover {
-  color: var(--vscode-foreground);
+  opacity: 0.75;
 }
 .convtitle-text:empty::before {
   content: 'Untitled conversation';
   opacity: 0.6;
+  font-weight: 400;
+}
+.ct-icon {
+  flex: none;
+  background: transparent;
+  color: var(--vscode-foreground);
+  opacity: 0.7;
+  border: 0;
+  border-radius: 5px;
+  padding: 2px 6px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  line-height: 1.1;
+}
+.ct-icon:hover {
+  opacity: 1;
+  background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.2));
 }
 .convtitle-input {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   box-sizing: border-box;
   background: var(--vscode-input-background);
   color: var(--vscode-input-foreground);
@@ -114,7 +135,7 @@ body {
   border-radius: 4px;
   padding: 2px 6px;
   font: inherit;
-  font-size: 0.82em;
+  font-size: 0.9rem;
 }
 
 select,

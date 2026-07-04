@@ -1839,6 +1839,69 @@ import hljs from 'highlight.js/lib/common';
     // (search + relative dates). Renaming is on the ✎ button.
     convTitleText.addEventListener('click', () => toggleHistory());
   }
+  // Codex-style header controls: ‹back› to past conversations, and right-side actions.
+  function openConvMoreMenu() {
+    openMenu({
+      kind: 'convmore',
+      title: 'Conversation',
+      items: [
+        {
+          label: 'Export as Markdown',
+          detail: 'Save this conversation to a .md file',
+          onPick: () => vscode.postMessage({ type: 'export', fmt: 'md' })
+        },
+        {
+          label: 'Compact',
+          detail: 'Summarize older messages to free up context',
+          onPick: () => vscode.postMessage({ type: 'compact', keepRecent: 4 })
+        },
+        {
+          label: convArchived ? 'Unarchive' : 'Archive',
+          detail: convArchived ? 'Show in the default list again' : 'Hide from the default list',
+          onPick: () => {
+            if (convId) {
+              vscode.postMessage({
+                type: 'archiveConversation',
+                id: convId,
+                base: convBase,
+                value: !convArchived,
+                scope: 'repo'
+              });
+            }
+          }
+        },
+        {
+          label: 'Delete…',
+          detail: 'Permanently remove this conversation',
+          onPick: () => {
+            if (convId) {
+              vscode.postMessage({ type: 'deleteConversation', id: convId, base: convBase, scope: 'repo' });
+            }
+          }
+        }
+      ]
+    });
+  }
+  const convBackBtn = $('convBack');
+  const convMoreBtn = $('convMore');
+  const convNewBtn = $('convNew');
+  const convSettingsBtn = $('convSettings');
+  const convRenameBtn = $('convRename');
+  if (convBackBtn) {
+    convBackBtn.addEventListener('click', () => toggleHistory());
+  }
+  if (convMoreBtn) {
+    convMoreBtn.addEventListener('click', () => toggleMenu('convmore', openConvMoreMenu));
+  }
+  if (convNewBtn) {
+    convNewBtn.addEventListener('click', () => vscode.postMessage({ type: 'newChat' }));
+  }
+  if (convSettingsBtn) {
+    convSettingsBtn.addEventListener('click', () => vscode.postMessage({ type: 'openSettings' }));
+  }
+  if (convRenameBtn) {
+    convRenameBtn.addEventListener('click', () => startTitleEdit());
+  }
   if (convTitleInput) {
     convTitleInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {

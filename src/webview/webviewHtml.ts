@@ -49,8 +49,14 @@ export function buildChatHtml(webview: vscode.Webview, extensionUri: vscode.Uri)
       <button id="refresh" title="Refresh model list" aria-label="Refresh model list">↻</button>
     </div>
     <div id="convTitleBar" class="convtitlebar">
-      <span id="convTitleText" class="convtitle-text" title="Click to see past conversations (✎ to rename)"></span>
+      <button id="convBack" class="ct-icon" title="Back to past conversations" aria-label="Back to conversations">←</button>
+      <span id="convTitleText" class="convtitle-text" title="Past conversations"></span>
       <input id="convTitleInput" class="convtitle-input" type="text" maxlength="120" style="display:none" aria-label="Conversation title" />
+      <span class="ct-grow"></span>
+      <button id="convMore" class="ct-icon" title="More — export, compact, archive, delete" aria-label="More actions">⋯</button>
+      <button id="convNew" class="ct-icon" title="New conversation" aria-label="New conversation">↻</button>
+      <button id="convSettings" class="ct-icon" title="Settings" aria-label="Settings">⚙</button>
+      <button id="convRename" class="ct-icon" title="Rename this conversation" aria-label="Rename conversation">✎</button>
     </div>
     <div id="banner" class="banner"></div>
     <div class="histwrap">
