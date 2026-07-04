@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.15.0
+
+### Fixed — "screenshot my screen" now just works, even when the model won't
+
+- Some models (notably Claude Opus) **refuse to call** the `capture_screen` tool, insisting "I have no tool that captures your screen" no matter how it's prompted. So Parley no longer depends on the model's willingness: when your message clearly asks to screenshot your screen ("paste a screenshot of my main monitor", "take a screenshot", "capture my screen"), Parley **captures it and attaches it to that message automatically** — the model then simply *receives* the image and responds.
+- Works in **every mode** (including plain Chat, since it's a normal image attachment, not a tool call). The intent detector is precise — it ignores how-to questions ("how do I take a screenshot") and coding tasks ("add a screenshot button") — and only fires when a capture backend exists and you haven't already attached an image. The `capture_screen` tool and `/screenshot` command remain for explicit use.
+
 ## 1.14.0
 
 ### Fixed — captured screenshots no longer get "corrected" as hallucinations

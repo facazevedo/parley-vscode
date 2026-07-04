@@ -21,6 +21,7 @@ import { UNTRUSTED_SYSTEM_NOTE, wrapUntrusted } from '../parley/untrusted';
 import { describeAction, extractJsonObject, parseAction } from '../computer/actions';
 import { resolveBackend, type BackendPref, type ControlBackend } from '../computer/control';
 import { installNutJs, isNutInstalled } from '../computer/nutControl';
+import { looksLikeScreenshotRequest } from '../computer/screenshotIntent';
 import { isSensitiveFile } from '../context/sensitiveFileFilter';
 import { loadIgnoreMatcher, type IgnoreMatcher } from '../context/ignoreRules';
 import type { CheckpointStore } from '../diff/checkpoints';
@@ -929,6 +930,11 @@ export class ChatPanel implements vscode.WebviewViewProvider {
           }
           if (text.startsWith('/') && (await this.handleSlash(text))) {
             return;
+          }
+          // If the message is plainly "screenshot my screen", grab and attach it now
+          // rather than hoping the model calls capture_screen (some models refuse).
+          if (!text.startsWith('/')) {
+            await this.maybeAutoCaptureScreen(text);
           }
           await this.runTurn(text, this.contextOptions);
         }
@@ -2284,6 +2290,35 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       `## Gotchas — anything non-obvious (env vars, codegen steps, platform quirks)\n\n` +
       `Keep it under ~120 lines — this file is sent with EVERY AI request in this workspace, so concision matters. After writing it, summarize what you included.`;
     await this.runTurn(prompt, this.contextOptions);
+  }
+
+  /**
+   * When a message clearly asks to screenshot the user's screen, capture it and
+   * attach it to this turn — so the model just receives the image (vision) and
+   * responds, independent of whether it would call the capture_screen tool.
+   * No-op unless the intent matches, a capture backend exists, and no image is
+   * already attached.
+   */
+  private async maybeAutoCaptureScreen(text: string): Promise<void> {
+    if (!looksLikeScreenshotRequest(text)) {
+      return;
+    }
+    if (this.attachments.some((a) => a.kind === 'image')) {
+      return; // the user already attached an image — don't override it
+    }
+    const backend = resolveBackend(
+      (this.getSettings().computerUseBackend as BackendPref) || 'auto',
+      this.globalStorageUri.fsPath
+    );
+    if (!backend) {
+      return; // no capture backend (e.g. macOS/Linux without nut.js) — let the turn proceed
+    }
+    try {
+      const shot = await backend.captureScreen();
+      await this.addPastedFile(`data:image/png;base64,${shot.base64}`, 'screen.png');
+    } catch {
+      // Capture failed — proceed without it rather than blocking the message.
+    }
   }
 
   /**
