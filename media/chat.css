@@ -240,14 +240,19 @@ button:disabled {
    between messages — each message reserves ~32px on top for its hover buttons, so the
    node-to-next-dot distance runs ~60px. The next opaque dot + the next node's own
    segment sit on top of the overshoot, so the rail reads as one continuous line. */
-.history > *:not(.divider):not(.empty):not(.user):has(+ *:not(.divider):not(.empty):not(.user))::before {
+.history > *:not(.divider):not(.empty):not(.user)::before {
   content: '';
   position: absolute;
   left: -12px;
   top: 13px;
-  bottom: -64px;
+  bottom: 4px; /* run the rail down the step's full height, not just a lone dot */
   width: 1px;
   background: var(--vscode-sideBar-border, rgba(127, 127, 127, 0.5));
+}
+/* When another step follows in the same thread, extend past the bottom to bridge the gap
+   to its dot (the next opaque dot hides the overshoot, so the rail reads as continuous). */
+.history > *:not(.divider):not(.empty):not(.user):has(+ *:not(.divider):not(.empty):not(.user))::before {
+  bottom: -64px;
 }
 /* Your prompt starts a thread, so it sits OFF the rail — no dot, no connecting line —
    left-aligned and full-width, with the response's rail beginning below it. */

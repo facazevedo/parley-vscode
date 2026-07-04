@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.34.2
+
+### Fixed — rail now runs down the whole answer
+
+- The timeline rail previously drew a connecting line only when another step followed, so a single or final answer showed just a lone dot with an empty gutter beside all its text. The rail now runs down each step's full height (and still bridges to the next step within a thread), so every answer has a continuous rail alongside it.
+
 ## 1.34.1
 
 ### Changed — your prompt starts a thread (no rail dot)
