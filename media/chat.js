@@ -2742,27 +2742,192 @@ import hljs from 'highlight.js/lib/common';
     }
   });
 
-  // ---------- image lightbox (click an inline image to enlarge) ----------
-  let lightboxEl = null;
+  // ---------- image lightbox (zoom / pan / download / next-prev / thumbnails) ----------
+  let lightboxEl = null; // the overlay, or null when closed
+  let lb = null; // { list, index, zoom, tx, ty, img, pct, strip, apply, show }
   function closeLightbox() {
     if (lightboxEl) {
       lightboxEl.remove();
       lightboxEl = null;
+      lb = null;
     }
+  }
+  function collectImages() {
+    return Array.from(history.querySelectorAll('img.msgimg')).map((i) => i.src);
+  }
+  function lbButton(cls, label, title) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = cls;
+    b.textContent = label;
+    b.title = title;
+    b.setAttribute('aria-label', title);
+    return b;
+  }
+  function downloadImage(src, name) {
+    const ext = /^data:image\/(png|jpe?g|gif|webp|svg\+xml)/i.exec(src);
+    const suffix = ext ? '.' + ext[1].replace('jpeg', 'jpg').replace('svg+xml', 'svg') : '.png';
+    const a = document.createElement('a');
+    a.href = src;
+    a.download = name + suffix;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   }
   function openLightbox(src) {
     closeLightbox();
-    lightboxEl = document.createElement('div');
-    lightboxEl.className = 'lightbox';
-    const big = document.createElement('img');
-    big.src = src;
-    lightboxEl.appendChild(big);
-    lightboxEl.addEventListener('click', closeLightbox);
-    document.body.appendChild(lightboxEl);
+    const list = collectImages();
+    let index = list.indexOf(src);
+    if (index < 0) {
+      list.unshift(src);
+      index = 0;
+    }
+    const overlay = document.createElement('div');
+    overlay.className = 'lightbox';
+
+    const stage = document.createElement('div');
+    stage.className = 'lb-stage';
+    const img = document.createElement('img');
+    img.className = 'lb-img';
+    stage.appendChild(img);
+
+    const top = document.createElement('div');
+    top.className = 'lb-top';
+    const dl = lbButton('lb-btn', '⬇', 'Download');
+    const close = lbButton('lb-btn', '✕', 'Close (Esc)');
+    top.append(dl, close);
+
+    const prev = lbButton('lb-nav lb-prev', '‹', 'Previous (←)');
+    const next = lbButton('lb-nav lb-next', '›', 'Next (→)');
+
+    const zoombar = document.createElement('div');
+    zoombar.className = 'lb-zoom';
+    const zout = lbButton('lb-btn', '−', 'Zoom out (−)');
+    const pct = document.createElement('span');
+    pct.className = 'lb-pct';
+    const zin = lbButton('lb-btn', '+', 'Zoom in (+)');
+    zoombar.append(zout, pct, zin);
+
+    const strip = document.createElement('div');
+    strip.className = 'lb-strip';
+
+    overlay.append(stage, top, prev, next, zoombar, strip);
+    document.body.appendChild(overlay);
+    lightboxEl = overlay;
+    lb = { list, index, zoom: 1, tx: 0, ty: 0, img, pct, strip };
+
+    const apply = () => {
+      img.style.transform = 'translate(' + lb.tx + 'px,' + lb.ty + 'px) scale(' + lb.zoom + ')';
+      pct.textContent = Math.round(lb.zoom * 100) + '%';
+      img.style.cursor = lb.zoom > 1 ? 'grab' : 'default';
+    };
+    const zoom = (delta) => {
+      lb.zoom = Math.min(8, Math.max(0.1, +(lb.zoom + delta).toFixed(2)));
+      if (lb.zoom <= 1) {
+        lb.tx = lb.ty = 0;
+      }
+      apply();
+    };
+    const show = (i) => {
+      lb.index = (i + lb.list.length) % lb.list.length;
+      img.src = lb.list[lb.index];
+      lb.zoom = 1;
+      lb.tx = lb.ty = 0;
+      apply();
+      Array.from(strip.children).forEach((t, k) => t.classList.toggle('active', k === lb.index));
+      const multi = lb.list.length > 1;
+      prev.style.display = next.style.display = strip.style.display = multi ? '' : 'none';
+    };
+    lb.apply = apply;
+    lb.show = show;
+    lb.zoom = 1;
+
+    lb.list.forEach((s, k) => {
+      const t = document.createElement('img');
+      t.className = 'lb-thumb';
+      t.src = s;
+      t.addEventListener('click', (e) => {
+        e.stopPropagation();
+        show(k);
+      });
+      strip.append(t);
+    });
+
+    close.addEventListener('click', (e) => (e.stopPropagation(), closeLightbox()));
+    dl.addEventListener(
+      'click',
+      (e) => (e.stopPropagation(), downloadImage(lb.list[lb.index], 'image-' + (lb.index + 1)))
+    );
+    prev.addEventListener('click', (e) => (e.stopPropagation(), show(lb.index - 1)));
+    next.addEventListener('click', (e) => (e.stopPropagation(), show(lb.index + 1)));
+    zin.addEventListener('click', (e) => (e.stopPropagation(), zoom(0.25)));
+    zout.addEventListener('click', (e) => (e.stopPropagation(), zoom(-0.25)));
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay || e.target === stage) {
+        closeLightbox();
+      }
+    });
+    overlay.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      zoom(e.deltaY < 0 ? 0.2 : -0.2);
+    });
+    // Drag-to-pan when zoomed in.
+    let dragging = false;
+    let sx = 0;
+    let sy = 0;
+    img.addEventListener('pointerdown', (e) => {
+      if (lb.zoom <= 1) {
+        return;
+      }
+      dragging = true;
+      sx = e.clientX - lb.tx;
+      sy = e.clientY - lb.ty;
+      img.style.cursor = 'grabbing';
+      img.setPointerCapture(e.pointerId);
+      e.stopPropagation();
+    });
+    img.addEventListener('pointermove', (e) => {
+      if (!dragging) {
+        return;
+      }
+      lb.tx = e.clientX - sx;
+      lb.ty = e.clientY - sy;
+      apply();
+    });
+    img.addEventListener('pointerup', () => {
+      dragging = false;
+      apply();
+    });
+
+    show(index);
   }
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && lightboxEl) {
-      closeLightbox();
+    if (lightboxEl && lb) {
+      if (e.key === 'Escape') {
+        closeLightbox();
+        return;
+      }
+      if (e.key === 'ArrowRight') {
+        lb.show(lb.index + 1);
+        return;
+      }
+      if (e.key === 'ArrowLeft') {
+        lb.show(lb.index - 1);
+        return;
+      }
+      if (e.key === '+' || e.key === '=') {
+        lb.zoom = Math.min(8, +(lb.zoom + 0.25).toFixed(2));
+        lb.apply();
+        return;
+      }
+      if (e.key === '-' || e.key === '_') {
+        lb.zoom = Math.max(0.1, +(lb.zoom - 0.25).toFixed(2));
+        if (lb.zoom <= 1) {
+          lb.tx = lb.ty = 0;
+        }
+        lb.apply();
+        return;
+      }
     }
     if (e.key === 'Escape' && shotCountTimer) {
       // Overlay Esc is the primary cancel; this also handles the case where the chat kept focus.

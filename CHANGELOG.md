@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.33.0
+
+### New — full image viewer
+
+- Click any image (sent or received) to open a full viewer with **zoom in/out** (buttons, +/− keys, or scroll wheel) and a live **%** readout, **drag-to-pan** when zoomed, **download**, **‹ › next/previous** navigation across every image in the conversation (or ← → keys), a **thumbnail strip**, and **✕ / Esc** to close.
+
 ## 1.32.0
 
 ### New — design canvas (Artifacts), part 1: live HTML/SVG preview
