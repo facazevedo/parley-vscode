@@ -3,6 +3,7 @@ import { registerAskSelectionCommand } from './commands/askSelection';
 import type { CommandDependencies } from './commands/common';
 import { registerExplainFileCommand } from './commands/explainFile';
 import { registerExplainSymbolCommand } from './commands/explainSymbol';
+import { registerParleyCodeLens } from './completion/parleyCodeLens';
 import { registerAddDocsCommand } from './commands/addDocs';
 import { registerDiagramCommand } from './commands/diagram';
 import { registerTriageTodosCommand } from './commands/triageTodos';
@@ -299,6 +300,7 @@ export function activate(context: vscode.ExtensionContext): void {
   registerAuditDependenciesCommand(context, commandDeps);
   registerCoverageTestsCommand(context, commandDeps);
   registerParleyCodeActions(context);
+  registerParleyCodeLens(context);
   registerMcpStatusCommand(context, mcp);
   registerFixDiagnosticsCommand(context, commandDeps);
   registerSuggestTerminalCommand(context, commandDeps);

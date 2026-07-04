@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "1.66.0",
+  "version": "1.67.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -1005,6 +1005,11 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "Add an \"Explain with Parley\" link to the hover of symbols. It's just an entry point — no model call until you click it."
+        },
+        "parley.codeLens.enabled": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Show **Parley: Explain · Test · Doc** CodeLens actions above functions, methods, and classes. Off by default (CodeLens can be noisy)."
         },
         "parley.video.maxFrames": {
           "type": "number",

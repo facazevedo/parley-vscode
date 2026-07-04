@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.67.0
+
+### CodeLens actions
+
+- Optional **Parley: Explain · Test · Doc** CodeLens above functions, methods, and classes (from the language server document symbols). Each action focuses the symbol and runs Explain / Generate Tests / Add Docs. Off by default — enable with parley.codeLens.enabled.
+
+
 ## 1.66.0
 
 ### Hover to explain
