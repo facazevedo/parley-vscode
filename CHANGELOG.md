@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.13.0
+
+### New — click an inline image to enlarge it
+
+- Inline images in the chat — screenshots, generated images, pasted/attached pictures — are now **click-to-zoom**: click any thumbnail to open it full-size in a lightbox, click anywhere (or press Esc) to close. Previously they were stuck at thumbnail size. Delegated handler, so it covers every inline image everywhere in the transcript.
+
 ## 1.12.0
 
 ### Improved — `capture_screen` now feeds the screenshot to the model

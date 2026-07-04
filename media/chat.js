@@ -2400,6 +2400,36 @@ import hljs from 'highlight.js/lib/common';
     if (a && a.dataset.href) {
       e.preventDefault();
       vscode.postMessage({ type: 'openLink', url: a.dataset.href });
+      return;
+    }
+    // Click any inline image to open it full-size in a lightbox.
+    const img = e.target.closest && e.target.closest('img.msgimg');
+    if (img && img.src) {
+      openLightbox(img.src);
+    }
+  });
+
+  // ---------- image lightbox (click an inline image to enlarge) ----------
+  let lightboxEl = null;
+  function closeLightbox() {
+    if (lightboxEl) {
+      lightboxEl.remove();
+      lightboxEl = null;
+    }
+  }
+  function openLightbox(src) {
+    closeLightbox();
+    lightboxEl = document.createElement('div');
+    lightboxEl.className = 'lightbox';
+    const big = document.createElement('img');
+    big.src = src;
+    lightboxEl.appendChild(big);
+    lightboxEl.addEventListener('click', closeLightbox);
+    document.body.appendChild(lightboxEl);
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && lightboxEl) {
+      closeLightbox();
     }
   });
 
