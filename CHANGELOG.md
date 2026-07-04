@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.62.0
+
+### Predict Next Edit
+
+- New command "Parley: Predict Next Edit" (Ctrl+Alt+N / Cmd+Alt+N): from your recent edits + the current file, Parley predicts the single most likely next change — a sibling case/branch, a related call site, a type, an import, a matching test — jumps to that spot, and offers it as a reviewable diff. Applied only on your approval and checkpointed (revertible), reusing the inline-edit review flow.
+
+
 ## 1.61.0
 
 ### Coverage-guided test generation

@@ -22,6 +22,7 @@ import { registerGenerateTestsCommand } from './commands/generateTests';
 import { registerFixFailingTestsCommand } from './commands/fixFailingTests';
 import { registerInitProjectRulesCommand } from './commands/initProjectRules';
 import { registerInlineEditCommand } from './commands/inlineEdit';
+import { registerPredictNextEditCommand } from './commands/predictNextEdit';
 import { registerRunDiagnosticsCommand } from './commands/runDiagnostics';
 import { registerRefactorSelectionCommand } from './commands/refactorSelection';
 import { registerSetApiKeyCommand } from './commands/setApiKey';
@@ -277,6 +278,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   registerSetApiKeyCommand(context, commandDeps);
   registerInlineEditCommand(context, commandDeps, checkpoints);
+  registerPredictNextEditCommand(context, commandDeps, checkpoints);
   registerAskSelectionCommand(context, commandDeps);
   registerExplainFileCommand(context, commandDeps);
   registerRefactorSelectionCommand(context, commandDeps);
