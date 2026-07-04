@@ -1215,6 +1215,15 @@ import hljs from 'highlight.js/lib/common';
       } else if (e.kind === 'note') {
         const c = bubble('assistant', renderMd(e.text));
         c.parentNode.classList.add('note');
+        // Only actual warnings/heads-ups get the yellow rail dot; plain status notes
+        // (e.g. "captured your screen") stay neutral.
+        if (
+          /⚠|heads-?up|warning|failed|couldn'?t|can'?t|cannot|unavailable|not applied|no measurable effect/i.test(
+            e.text || ''
+          )
+        ) {
+          c.parentNode.classList.add('warn');
+        }
         if (e.images && e.images.length) {
           const wrap = document.createElement('div');
           wrap.className = 'msgimgs';

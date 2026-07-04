@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.42.2
+
+### Fixed — yellow dot only on real warnings
+
+- The yellow rail dot was applied to every note, including plain status ones like "Captured your screen…". Now only genuine warnings/heads-ups (⚠, "heads-up", "failed", "unavailable", etc.) get the yellow dot; informational notes use the normal neutral dot.
+
+
 ## 1.42.1
 
 ### Fixed — 📷 screenshot did nothing (no monitor picker)

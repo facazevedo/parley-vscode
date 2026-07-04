@@ -281,8 +281,9 @@ button:disabled {
 .history > .toolstep.err {
   --dot: var(--vscode-charts-red, #f85149);
 }
-/* Heads-up / warning notes get a yellow rail dot. */
-.history > .message.note {
+/* Only genuine warning / heads-up notes get a yellow rail dot; plain status notes stay
+   neutral (white), like a normal message. */
+.history > .message.note.warn {
   --dot: var(--vscode-charts-yellow, #cca700);
 }
 .history > .toolstep.run::after {
