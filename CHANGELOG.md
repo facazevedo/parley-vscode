@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.45.0
+
+### Generate PR Description
+
+- New command "Parley: Generate PR Description" (also in the Source Control title menu) diffs the current branch against its merge-base with main/master and writes a clean, paste-ready GitHub PR description (title, Summary, Changes, Test plan) — opens in a markdown doc and is copied to the clipboard. Unlike "Review Current Branch", it produces only the description, no code review.
+- Refactored the branch/merge-base resolution into a shared helper reused by Review Current Branch.
+
+
 ## 1.44.0
 
 ### @problems — pull diagnostics into context

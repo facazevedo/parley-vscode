@@ -1,17 +1,11 @@
 import * as vscode from 'vscode';
 import type { CommandDependencies } from './common';
 import { runPromptCommand } from './common';
-import { getGitApi, resolveRepository } from './generateCommitMessage';
+import { getGitApi, resolveRepository, resolveBranchBase } from './generateCommitMessage';
 import { runShellCommand } from '../webview/toolExecutor';
 
 const MAX_DIFF_CHARS = 30000;
 const GIT_TIMEOUT_MS = 15000;
-/** Base refs tried in order when finding what the branch forked from. */
-const BASE_CANDIDATES = ['origin/main', 'origin/master', 'main', 'master', 'origin/HEAD'];
-
-function looksLikeSha(s: string): boolean {
-  return /^[0-9a-f]{7,40}$/.test(s.trim());
-}
 
 /**
  * `Parley: Review Current Branch` — diff the branch against its merge-base with
@@ -36,36 +30,11 @@ export function registerReviewBranchCommand(context: vscode.ExtensionContext, de
       const root = repo.rootUri.fsPath;
       const git = (cmd: string): Promise<string> => runShellCommand(`git --no-pager ${cmd}`, root, GIT_TIMEOUT_MS);
 
-      const branch = (await git('rev-parse --abbrev-ref HEAD')).trim();
-      const head = (await git('rev-parse HEAD')).trim();
-      if (!looksLikeSha(head)) {
-        await vscode.window.showWarningMessage('Parley: could not resolve HEAD — is this a git repository?');
+      const info = await resolveBranchBase(git);
+      if (!info) {
         return;
       }
-
-      // Find the merge-base with the first base candidate that exists and is not
-      // simply HEAD itself (i.e. the branch actually diverges from it).
-      let base: string | undefined;
-      let mergeBase: string | undefined;
-      for (const candidate of BASE_CANDIDATES) {
-        if (candidate === branch || candidate.endsWith(`/${branch}`)) {
-          continue; // don't review a branch against itself
-        }
-        const mb = (await git(`merge-base HEAD "${candidate}"`)).trim();
-        if (looksLikeSha(mb)) {
-          base = candidate;
-          mergeBase = mb;
-          if (mb !== head) {
-            break; // proper divergence found — take it
-          }
-        }
-      }
-      if (!base || !mergeBase) {
-        await vscode.window.showWarningMessage(
-          'Parley: could not find a base branch (tried origin/main, origin/master, main, master).'
-        );
-        return;
-      }
+      const { branch, head, base, mergeBase } = info;
       if (mergeBase === head) {
         await vscode.window.showInformationMessage(
           `Parley: "${branch}" has no commits beyond ${base} — nothing to review. (Uncommitted changes? Use the @git mention.)`

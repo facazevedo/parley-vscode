@@ -5,6 +5,7 @@ import { registerExplainFileCommand } from './commands/explainFile';
 import { registerFixDiagnosticsCommand } from './commands/fixDiagnostics';
 import { registerGenerateCommitMessageCommand } from './commands/generateCommitMessage';
 import { registerReviewBranchCommand } from './commands/reviewBranch';
+import { registerGeneratePrDescriptionCommand } from './commands/generatePrDescription';
 import { registerFileEditHistoryCommand } from './commands/fileEditHistory';
 import { MEMORY_HEADER, memoryUri } from './context/projectMemory';
 import { registerFixLastCommandCommand } from './commands/fixLastCommand';
@@ -277,6 +278,7 @@ export function activate(context: vscode.ExtensionContext): void {
   registerGenerateImageCommand(context, commandDeps);
   registerGenerateCommitMessageCommand(context, commandDeps);
   registerReviewBranchCommand(context, commandDeps);
+  registerGeneratePrDescriptionCommand(context, commandDeps);
   registerFileEditHistoryCommand(context, commandDeps);
   registerFixLastCommandCommand(context, commandDeps);
   registerUsageHistoryCommand(context, commandDeps);

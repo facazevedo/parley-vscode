@@ -62,6 +62,58 @@ export async function resolveRepository(
   return picked?.repo;
 }
 
+/** Base refs tried in order when finding what the branch forked from. */
+const BASE_CANDIDATES = ['origin/main', 'origin/master', 'main', 'master', 'origin/HEAD'];
+
+export function looksLikeSha(s: string): boolean {
+  return /^[0-9a-f]{7,40}$/.test(s.trim());
+}
+
+export interface BranchBase {
+  readonly branch: string;
+  readonly head: string;
+  readonly base: string;
+  readonly mergeBase: string;
+}
+
+/**
+ * Resolve the current branch name, HEAD sha, and the merge-base with the first
+ * base candidate (origin/main, main, …) it can find — preferring one the branch
+ * actually diverges from. `mergeBase === head` means the branch has no commits
+ * beyond its base (callers should handle that). Returns undefined (with a warning
+ * shown) when HEAD or a base cannot be resolved. `git` runs `git --no-pager <cmd>`.
+ */
+export async function resolveBranchBase(git: (cmd: string) => Promise<string>): Promise<BranchBase | undefined> {
+  const branch = (await git('rev-parse --abbrev-ref HEAD')).trim();
+  const head = (await git('rev-parse HEAD')).trim();
+  if (!looksLikeSha(head)) {
+    await vscode.window.showWarningMessage('Parley: could not resolve HEAD — is this a git repository?');
+    return undefined;
+  }
+  let base: string | undefined;
+  let mergeBase: string | undefined;
+  for (const candidate of BASE_CANDIDATES) {
+    if (candidate === branch || candidate.endsWith(`/${branch}`)) {
+      continue; // don't compare a branch against itself
+    }
+    const mb = (await git(`merge-base HEAD "${candidate}"`)).trim();
+    if (looksLikeSha(mb)) {
+      base = candidate;
+      mergeBase = mb;
+      if (mb !== head) {
+        break; // proper divergence found — take it
+      }
+    }
+  }
+  if (!base || !mergeBase) {
+    await vscode.window.showWarningMessage(
+      'Parley: could not find a base branch (tried origin/main, origin/master, main, master).'
+    );
+    return undefined;
+  }
+  return { branch, head, base, mergeBase };
+}
+
 /**
  * `Parley: Generate Commit Message` — summarize the staged diff (or the working
  * tree if nothing is staged) into a Conventional Commits message and drop it into
