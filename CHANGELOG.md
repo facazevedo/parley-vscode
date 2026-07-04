@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.19.1
+
+### Changed — context checkboxes styled with a black background
+
+- The Context toggles (Selection / File / Open editors / Diagnostics / Pick files) now render as custom black-background checkboxes with a white checkmark when ticked, instead of the default OS checkbox.
+
 ## 1.19.0
 
 ### New — Agent Skills (Claude-style, progressive disclosure)

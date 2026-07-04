@@ -940,6 +940,35 @@ button:disabled {
   gap: 5px;
   color: var(--vscode-descriptionForeground);
 }
+/* Custom checkbox: black background, white checkmark when ticked. */
+.ctx input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  border: 1px solid var(--vscode-checkbox-border, rgba(127, 127, 127, 0.6));
+  border-radius: 3px;
+  background: #000;
+  cursor: pointer;
+  position: relative;
+  flex: none;
+}
+.ctx input[type='checkbox']:checked::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 3px;
+  height: 7px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.ctx input[type='checkbox']:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
 
 /* In-panel conversation history — a concise dropdown anchored to the top of the
    chat area (not a floating, screen-centered picker). */
