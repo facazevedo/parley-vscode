@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.36.4
+
+### Changed — larger tooltip text
+
+- The hover tooltip uses a slightly larger font (and a touch more padding) for easier reading.
+
+
 ## 1.36.3
 
 ### Changed — stronger slash keycap border
