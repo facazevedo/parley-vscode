@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.43.0
+
+### Image attachments show a clickable thumbnail
+
+- Attaching an image (screenshot, paste, drop, or @file) now shows a mini thumbnail chip in the composer instead of a plain text chip. Click it to open the full image viewer (zoom / pan / download / next-prev / thumbnails). Non-image attachments keep the labeled chip.
+
+
 ## 1.42.2
 
 ### Fixed — yellow dot only on real warnings

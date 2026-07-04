@@ -4137,7 +4137,13 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       voice: { autoRead: this.getSettings().voiceAutoRead, chime: this.getSettings().chimeOnDone },
       contextOptions: this.contextOptions,
       selectionInfo: this.currentSelectionInfo(),
-      attachments: this.attachments.map((a) => ({ id: a.id, label: a.label, kind: a.kind })),
+      attachments: this.attachments.map((a) => ({
+        id: a.id,
+        label: a.label,
+        kind: a.kind,
+        // Image attachments carry a data URI so the composer can show a clickable thumbnail.
+        ...(a.kind === 'image' && a.image ? { preview: a.image.dataUri } : {})
+      })),
       convTitle: this.currentTitle(),
       convId: this.conversationId,
       convBase: this.parleyBase(),

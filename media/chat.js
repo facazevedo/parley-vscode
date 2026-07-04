@@ -3183,15 +3183,38 @@ import hljs from 'highlight.js/lib/common';
   function renderAttachments(items) {
     attachmentsEl.replaceChildren();
     (items || []).forEach((att) => {
-      const chip = document.createElement('span');
-      chip.className = 'chip';
-      const icon = att.kind === 'image' ? '🖼 ' : att.kind === 'audio' ? '🎵 ' : '📄 ';
-      chip.textContent = icon + att.label;
       const x = document.createElement('button');
       x.type = 'button';
       x.className = 'chipx';
       x.textContent = '×';
-      x.addEventListener('click', () => vscode.postMessage({ type: 'removeAttachment', id: att.id }));
+      x.title = 'Remove';
+      x.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        vscode.postMessage({ type: 'removeAttachment', id: att.id });
+      });
+
+      if (att.kind === 'image' && att.preview) {
+        // Image attachments show a clickable thumbnail that opens the full viewer.
+        const thumb = document.createElement('span');
+        thumb.className = 'chip imgchip';
+        thumb.title = att.label + ' — click to open';
+        const img = document.createElement('img');
+        img.className = 'chipthumb';
+        img.src = att.preview;
+        img.alt = att.label;
+        const name = document.createElement('span');
+        name.className = 'chipname';
+        name.textContent = att.label;
+        thumb.append(img, name, x);
+        thumb.addEventListener('click', () => openLightbox(att.preview));
+        attachmentsEl.append(thumb);
+        return;
+      }
+
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+      const icon = att.kind === 'image' ? '🖼 ' : att.kind === 'audio' ? '🎵 ' : '📄 ';
+      chip.textContent = icon + att.label;
       chip.append(x);
       attachmentsEl.append(chip);
     });

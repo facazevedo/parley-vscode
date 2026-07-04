@@ -1693,6 +1693,29 @@ button:disabled {
 .chipx:hover {
   background: rgba(127, 127, 127, 0.3);
 }
+/* Image attachment: a clickable thumbnail + filename. */
+.chip.imgchip {
+  padding: 3px 4px 3px 3px;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.chip.imgchip:hover {
+  border-color: var(--vscode-focusBorder, rgba(127, 127, 127, 0.5));
+}
+.chipthumb {
+  width: 28px;
+  height: 28px;
+  object-fit: cover;
+  border-radius: 5px;
+  display: block;
+  background: rgba(127, 127, 127, 0.15);
+}
+.chip.imgchip .chipname {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* Unified input box: textarea + model/mode/send share one rounded container */
 .inputbox {
