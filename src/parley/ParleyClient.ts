@@ -518,9 +518,16 @@ export class ParleyClient implements ParleyProvider {
     // carries the full cumulative context, so summing prompts too would double-count.
     let accCompletion = 0;
     let lastPrompt = 0;
-    // Set once a model emits a TEXT-format <tool_call> (no native tool_calls). From then
-    // on we stop generation at </tool_call> so it can't fabricate a <tool_response>.
+    // Set once a model emits a TEXT-format tool call (no native tool_calls). From then on
+    // we stop generation at the call's closing tag so it can't fabricate a tool result.
     let textToolMode = false;
+    // Tool names, used to gate ambiguous text formats (fenced/bare JSON) so ordinary JSON
+    // in an answer isn't mistaken for a tool call.
+    const knownToolNames = new Set<string>(
+      ((options.tools as Array<{ function?: { name?: string } }> | undefined) ?? [])
+        .map((t) => t?.function?.name)
+        .filter((n): n is string => typeof n === 'string' && n.length > 0)
+    );
     for (let round = 0; round < maxRounds; round += 1) {
       // Steering: user messages typed while the agent works join the conversation
       // at the next round boundary, so the model sees them without a restart.
@@ -538,7 +545,7 @@ export class ParleyClient implements ParleyProvider {
         stream_options: { include_usage: true }
       };
       if (textToolMode) {
-        roundPayload.stop = ['</tool_call>']; // halt right after a text tool call
+        roundPayload.stop = ['</tool_call>', '</function_call>']; // halt right after a text tool call
       }
       this.applyExtras(roundPayload, model, thinking, responseFormat, serviceTier);
 
@@ -575,7 +582,7 @@ export class ParleyClient implements ParleyProvider {
         // model into a working agent instead of returning its (often fabricated) narration.
         const textTools =
           options.runTool && options.tools && options.tools.length > 0
-            ? parseTextToolCalls(result.content)
+            ? parseTextToolCalls(result.content, knownToolNames)
             : { calls: [], assistantContent: result.content };
         if (textTools.calls.length > 0) {
           textToolMode = true; // subsequent rounds stop at </tool_call>

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.28.0
+
+### Improved — more local models work as agents (broader text-tool parsing)
+
+- The text-protocol tool loop now understands the tool-call dialects emitted by more models beyond Hermes/Qwen `<tool_call>`: **`<function_call>` / `<tool_use>`**, **`<function=NAME>{…}</function>`** (Mistral/functionary), **DeepSeek's** `<｜tool▁call▁begin｜>…` tokens, and **fenced / bare JSON** `{"name","arguments"}`.
+- The ambiguous formats (fenced/bare JSON) only count as a tool call when they name a **real available tool**, so ordinary JSON in an answer is never mistaken for one. Generation also halts at `</tool_call>` / `</function_call>` in text-tool mode. Parser covered by unit tests (358 total).
+
 ## 1.27.0
 
 ### Changed — continuous step rail + animated Parley feather

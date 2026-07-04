@@ -70,3 +70,46 @@ test('nested braces in arguments parse correctly', () => {
   assert.equal(calls.length, 1);
   assert.deepEqual(JSON.parse(calls[0].argsJson), { edits: [{ a: { b: 1 } }] });
 });
+
+test('parses <function_call> and <tool_use> wrappers', () => {
+  const a = parseTextToolCalls('<function_call>{"name": "read_file", "arguments": {"path": "a"}}</function_call>');
+  assert.equal(a.calls[0].name, 'read_file');
+  const b = parseTextToolCalls('<tool_use>{"name": "grep", "arguments": {"q": "x"}}</tool_use>');
+  assert.equal(b.calls[0].name, 'grep');
+});
+
+test('parses <function=NAME>{args}</function> (Mistral/functionary style)', () => {
+  const { calls } = parseTextToolCalls('<function=list_directory>{"path": "C:/x"}</function>');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].name, 'list_directory');
+  assert.deepEqual(JSON.parse(calls[0].argsJson), { path: 'C:/x' });
+});
+
+test('parses DeepSeek tool-call tokens', () => {
+  const ds =
+    'Let me check.<｜tool▁call▁begin｜>function<｜tool▁sep｜>list_directory\n' +
+    '```json\n{"path": "C:/x"}\n```<｜tool▁call▁end｜>';
+  const { calls } = parseTextToolCalls(ds);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].name, 'list_directory');
+  assert.deepEqual(JSON.parse(calls[0].argsJson), { path: 'C:/x' });
+});
+
+test('fenced JSON is a tool call only when the name is a known tool', () => {
+  const fenced = '```json\n{"name": "list_directory", "arguments": {"path": "."}}\n```';
+  assert.equal(parseTextToolCalls(fenced).calls.length, 0, 'no knownTools → not treated as a call');
+  const known = parseTextToolCalls(fenced, new Set(['list_directory']));
+  assert.equal(known.calls.length, 1);
+  assert.equal(known.calls[0].name, 'list_directory');
+});
+
+test('bare JSON object is a call only when gated by a known tool name', () => {
+  const bare = '{"name": "read_file", "arguments": {"path": "a.ts"}}';
+  assert.equal(parseTextToolCalls(bare).calls.length, 0);
+  assert.equal(parseTextToolCalls(bare, new Set(['read_file'])).calls.length, 1);
+});
+
+test('ordinary JSON in an answer is not mistaken for a tool call', () => {
+  const answer = 'Here is a config:\n```json\n{"port": 8080, "host": "localhost"}\n```';
+  assert.equal(parseTextToolCalls(answer, new Set(['read_file', 'grep'])).calls.length, 0);
+});
