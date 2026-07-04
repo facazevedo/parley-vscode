@@ -17,6 +17,14 @@ export function registerFixFailingTestsCommand(context: vscode.ExtensionContext,
         await vscode.window.showInformationMessage('Parley: open a workspace folder to run tests.');
         return;
       }
+      // The test command (from settings or auto-detected, e.g. the repo's own `npm test`
+      // script) is workspace-controlled code — never run it in an untrusted workspace.
+      if (!vscode.workspace.isTrusted) {
+        await vscode.window.showWarningMessage(
+          'Parley: Fix Failing Tests runs the project test command, which is workspace-controlled — trust this workspace first.'
+        );
+        return;
+      }
       const root = folder.uri.fsPath;
       const settings = deps.getSettings();
       let command = detectTestCommand(root, settings.testCommand || settings.verifyCommand);

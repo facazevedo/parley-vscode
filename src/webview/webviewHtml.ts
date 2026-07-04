@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
 
 /**
@@ -149,10 +150,8 @@ export function buildChatHtml(webview: vscode.Webview, extensionUri: vscode.Uri)
 }
 
 function getNonce(): string {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let value = '';
-  for (let i = 0; i < 32; i += 1) {
-    value += alphabet.charAt(Math.floor(Math.random() * alphabet.length));
-  }
-  return value;
+  // Cryptographically random so the CSP nonce can't be predicted.
+  return randomBytes(24)
+    .toString('base64')
+    .replace(/[^A-Za-z0-9]/g, '');
 }

@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import { Artifact, RuntimeCode, buildArtifactDocument, needsTailwind, detectArtifacts } from './artifacts';
@@ -227,7 +228,9 @@ export class ArtifactPanel {
 
   private shell(): string {
     const w = this.panel.webview;
-    const nonce = `${Date.now()}${Math.random().toString(36).slice(2)}`;
+    const nonce = randomBytes(24)
+      .toString('base64')
+      .replace(/[^A-Za-z0-9]/g, '');
     const csp =
       `default-src 'none'; frame-src data:; img-src ${w.cspSource} data: https:; ` +
       `style-src 'unsafe-inline'; script-src 'nonce-${nonce}'; font-src ${w.cspSource} data:;`;

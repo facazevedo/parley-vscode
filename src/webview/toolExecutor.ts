@@ -166,7 +166,9 @@ export class ToolExecutor {
 
   private async dispatch(call: ToolCall, opts?: { subagent?: boolean }): Promise<string> {
     if (isMcpTool(call.name)) {
-      return this.host.mcp.callTool(call.name, call.arguments);
+      // MCP servers are external; their output could carry prompt-injection, so mark it
+      // untrusted like fetch_url / web_search / browser results do.
+      return wrapUntrusted(`MCP tool result (${call.name})`, await this.host.mcp.callTool(call.name, call.arguments));
     }
     if (call.name === 'read_file') {
       const result = await runAgentTool(call);
@@ -1067,10 +1069,12 @@ export class ToolExecutor {
    */
   private async confirmRunCommand(command: string): Promise<boolean> {
     const mode = this.host.getMode();
-    if (mode === 'full') {
+    // Full mode auto-runs only in a TRUSTED workspace; an untrusted workspace still
+    // prompts even in Full, matching VS Code's Workspace Trust model.
+    if (mode === 'full' && vscode.workspace.isTrusted) {
       return true;
     }
-    if (isCommandAllowed(command, this.allowedCommands())) {
+    if (vscode.workspace.isTrusted && isCommandAllowed(command, this.allowedCommands())) {
       dbg('tool', 'command auto-approved by allowlist', command.slice(0, 120));
       return true;
     }

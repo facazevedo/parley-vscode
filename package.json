@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "1.55.0",
+  "version": "1.56.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -37,12 +37,19 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "description": "Parley runs, but settings that can execute code or redirect your API key are ignored from an untrusted workspace's settings (they fall back to your user settings). Trust the workspace to let its .vscode/settings.json configure the API endpoint, lifecycle hooks, MCP servers, and the ffmpeg path.",
+      "description": "Parley runs, but settings that can execute code, redirect network traffic, or change where data is written are ignored from an untrusted workspace's settings (they fall back to your user settings). Trust the workspace to let its .vscode/settings.json configure the API endpoint, lifecycle hooks, MCP servers, the ffmpeg path, the test command, the conversations directory, and web-search credentials.",
       "restrictedConfigurations": [
         "parley.endpoint",
         "parley.hooks",
         "parley.mcpServers",
-        "parley.video.ffmpegPath"
+        "parley.video.ffmpegPath",
+        "parley.testCommand",
+        "parley.verifyCommand",
+        "parley.conversationsDir",
+        "parley.webSearch.provider",
+        "parley.webSearch.apiKey",
+        "parley.webSearch.googleCx",
+        "parley.computerUse.enabled"
       ]
     }
   },

@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.56.0
+
+### Security hardening (audit fixes)
+
+- **Untrusted workspaces can no longer run code via the test command.** "Parley: Fix Failing Tests" now refuses to run in an untrusted workspace (the test command — from settings or the repo own npm test script — is workspace-controlled code). And parley.testCommand, parley.verifyCommand, parley.conversationsDir, parley.webSearch.* and parley.computerUse.enabled are now in restrictedConfigurations, so a malicious repo .vscode/settings.json cannot set them.
+- **Full mode respects Workspace Trust.** The agent auto-runs shell commands (run_command / run_tests) without a prompt only in a trusted workspace; an untrusted workspace prompts even in Full mode, and the command allowlist is honored only when trusted.
+- **MCP tool results are now marked untrusted** (like fetch_url / web_search / browser output), so a compromised MCP server output carries a prompt-injection boundary.
+- **Cryptographic CSP nonces.** The chat and design-canvas webviews now generate their script nonce with crypto.randomBytes instead of Math.random.
+
+_Confirmed clean by the audit: the API key never leaves SecretStorage / the Authorization header (not logged, transcribed, or exported); the webview blocks XSS (markdown html:false, nonce-only CSP with no connect-src, artifact iframe sandboxed without allow-same-origin); command allowlist, SSRF vetting, path containment and secret redaction all hold._
+
+
 ## 1.55.0
 
 ### Close the fetch_url DNS-rebinding SSRF gap
