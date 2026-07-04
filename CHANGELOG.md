@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.29.0
+
+### New — tool-step inspector
+
+- Click any **⏺ tool step** on the timeline to expand it and see the **exact arguments** the agent passed and the **full raw result** (collapsed by default; long results scroll). Works live and on reloaded conversations. Invaluable for seeing exactly what an agent did — especially local-model agents.
+
 ## 1.28.0
 
 ### Improved — more local models work as agents (broader text-tool parsing)

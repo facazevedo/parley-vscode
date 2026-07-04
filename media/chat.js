@@ -680,11 +680,56 @@ import hljs from 'highlight.js/lib/common';
   }
   // Claude Code style: each tool call is its own step row on the timeline rail,
   // pulsing while it runs; narration that follows opens a fresh bubble below it.
-  function streamActionLine(text) {
+  // Make a tool step click-to-expand, revealing the exact arguments + full raw result.
+  function attachToolInspector(row, argsJson, detailText) {
+    if (!row || (!argsJson && !detailText)) {
+      return;
+    }
+    const line = row.querySelector('.toolline');
+    if (!line || row.classList.contains('expandable')) {
+      return;
+    }
+    row.classList.add('expandable');
+    const detail = document.createElement('div');
+    detail.className = 'tooldetail';
+    detail.style.display = 'none';
+    if (argsJson) {
+      let pretty = argsJson;
+      try {
+        pretty = JSON.stringify(JSON.parse(argsJson), null, 2);
+      } catch {
+        /* keep raw */
+      }
+      const h = document.createElement('div');
+      h.className = 'tooldetail-h';
+      h.textContent = 'Arguments';
+      const pre = document.createElement('pre');
+      pre.textContent = pretty;
+      detail.append(h, pre);
+    }
+    if (detailText) {
+      const h = document.createElement('div');
+      h.className = 'tooldetail-h';
+      h.textContent = 'Result';
+      const pre = document.createElement('pre');
+      pre.textContent = detailText;
+      detail.append(h, pre);
+    }
+    row.querySelector('.content').append(detail);
+    line.addEventListener('click', () => {
+      const open = detail.style.display !== 'none';
+      detail.style.display = open ? 'none' : 'block';
+      row.classList.toggle('open', !open);
+    });
+  }
+  function streamActionLine(text, argsJson) {
     settleToolStep('ok'); // a step that never reported a result counts as done
     closeStreamBubble();
     const wrap = document.createElement('div');
     wrap.className = 'message assistant toolstep run';
+    if (argsJson) {
+      wrap.dataset.args = argsJson;
+    }
     const c = document.createElement('div');
     c.className = 'content';
     const line = document.createElement('div');
@@ -697,7 +742,7 @@ import hljs from 'highlight.js/lib/common';
     maybeScroll();
   }
   // Claude-style "⎿ result" line under its action; settles the step's dot green/red.
-  function streamResultLine(text) {
+  function streamResultLine(text, detailText) {
     if (!lastToolStep) {
       return;
     }
@@ -706,6 +751,7 @@ import hljs from 'highlight.js/lib/common';
     line.textContent = '⎿ ' + text;
     lastToolStep.querySelector('.content').append(line);
     settleToolStep(/^(error|✗|failed|denied)/i.test(text || '') ? 'err' : 'ok');
+    attachToolInspector(lastToolStep, lastToolStep.dataset.args || '', detailText || '');
     maybeScroll();
   }
   // Centered "Switched to <model>" divider with wavy rules on both sides.
@@ -1135,6 +1181,7 @@ import hljs from 'highlight.js/lib/common';
         }
         wrap.append(c);
         history.append(wrap);
+        attachToolInspector(wrap, e.args || '', e.detail || '');
       } else if (e.kind === 'divider') {
         history.append(dividerRow(e.text));
       } else if (e.kind === 'fileEdit') {
@@ -2958,7 +3005,7 @@ import hljs from 'highlight.js/lib/common';
       return;
     }
     if (msg.type === 'toolEvent') {
-      streamActionLine(activityLabel(msg.name, msg.args));
+      streamActionLine(activityLabel(msg.name, msg.args), msg.args);
       setStatus(activityLabel(msg.name, msg.args) + '…');
       return;
     }
@@ -2968,7 +3015,7 @@ import hljs from 'highlight.js/lib/common';
       return;
     }
     if (msg.type === 'toolResult') {
-      streamResultLine(msg.text);
+      streamResultLine(msg.text, msg.detail);
       return;
     }
     if (msg.type === 'fileEdit') {

@@ -33,7 +33,7 @@ export type TranscriptEntry =
       tokens?: number;
       at: string;
     }
-  | { kind: 'tool'; action: string; result?: string; at: string }
+  | { kind: 'tool'; action: string; result?: string; args?: string; detail?: string; at: string }
   | {
       kind: 'fileEdit';
       id?: string;

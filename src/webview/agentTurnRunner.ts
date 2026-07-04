@@ -73,6 +73,7 @@ export class AgentTurnRunner {
   private abortController?: AbortController;
   private queuedSteering: string[] = [];
   private lastToolAction = ''; // pairs a tool's ⏺ action with its ⎿ result for the transcript
+  private lastToolArgs = ''; // raw arguments of the current tool call (for the inspector)
 
   public constructor(private readonly host: TurnRunnerHost) {}
 
@@ -258,6 +259,7 @@ export class AgentTurnRunner {
                   const action = describeToolEvent(event.name, event.args);
                   stepActions.push(action);
                   this.lastToolAction = action;
+                  this.lastToolArgs = event.args || '';
                   this.host.post({ type: 'toolEvent', name: event.name, args: event.args });
                 }
               : undefined,
@@ -266,12 +268,17 @@ export class AgentTurnRunner {
                   // write/edit show a diff card already; others get a Claude-style ⎿ result line.
                   if (name !== 'write_file' && name !== 'edit_file' && name !== 'multi_edit') {
                     const text = summarizeToolResult(name, result);
-                    this.host.post({ type: 'toolResult', text });
+                    // Full (clamped) raw result + exact args power the click-to-expand inspector.
+                    const detail = result.length > 8000 ? result.slice(0, 8000) + '\n… (truncated)' : result;
+                    const args = this.lastToolArgs;
+                    this.host.post({ type: 'toolResult', text, args, detail });
                     // Record the ⏺ action + ⎿ result together in the persisted transcript.
                     this.host.recorder.append({
                       kind: 'tool',
                       action: this.lastToolAction || name,
                       result: text,
+                      args,
+                      detail,
                       at: new Date().toISOString()
                     });
                   }
