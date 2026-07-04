@@ -188,6 +188,75 @@ button:disabled {
   max-width: 100%;
   margin-top: var(--chat-action-reserved-space);
 }
+/* Claude Code-style timeline: a state-colored dot per step on a vertical rail
+   (gray = narration, green = tool done, red = tool error, pulsing = running). */
+.history > .message {
+  position: relative;
+  padding-left: 18px;
+}
+.history > .message::after {
+  /* the dot */
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--vscode-descriptionForeground);
+  opacity: 0.55;
+}
+/* Rail segment from this dot toward the next step. Shown only between two
+   consecutive non-user steps; overshoots into the next node (a faint 1px line
+   behind an opaque dot is invisible), so a too-long segment never shows. */
+.history > .message:not(.user):has(+ .message:not(.user))::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 10px;
+  bottom: -18px;
+  width: 1px;
+  background: var(--vscode-sideBar-border, rgba(127, 127, 127, 0.4));
+}
+/* Compact tool-step rows so the step timeline reads as a dense rail. */
+.history > .message.toolstep {
+  margin-top: 2px;
+}
+.history > .message.user {
+  padding-left: 0;
+}
+.history > .message.user::after {
+  content: none;
+}
+.history > .message.toolstep::after {
+  background: var(--vscode-charts-green, #3fb950);
+  opacity: 0.95;
+}
+.history > .message.toolstep.err::after {
+  background: var(--vscode-charts-red, #f85149);
+  opacity: 0.95;
+}
+.history > .message.toolstep.run::after {
+  animation: pulse 1.1s ease-in-out infinite;
+}
+/* Centered divider ("Switched to <model>") with wavy rules on both sides. */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 2px 0;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.8em;
+  white-space: nowrap;
+}
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 6px;
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='6'><path d='M0 3 Q3 0.5 6 3 T12 3' fill='none' stroke='%23808080' stroke-opacity='0.5' stroke-width='1'/></svg>")
+    repeat-x left center / 12px 6px;
+}
 .message.user {
   position: relative;
   align-self: flex-end;
@@ -917,13 +986,59 @@ button:disabled {
   color: var(--vscode-descriptionForeground);
   border-top: 1px solid var(--vscode-sideBar-border);
 }
-.status::before {
-  content: '';
-  width: 7px;
+/* Animated MIT-bars logo shown while Parley works (the status line's spinner).
+   Five bottom-aligned maroon bars + a T crossbar, each pulsing in a left-to-right wave. */
+.mitlogo {
+  position: relative;
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 13px;
+  width: 30px;
+  flex: none;
+}
+.mitlogo i,
+.mitlogo b {
+  display: block;
+  width: 3px;
+  background: #a31f34;
+  animation: mitwave 1.2s ease-in-out infinite;
+}
+.mitlogo i:nth-child(1) {
+  height: 13px;
+}
+.mitlogo i:nth-child(2) {
   height: 7px;
-  border-radius: 50%;
-  background: var(--vscode-progressBar-background, var(--vscode-focusBorder));
-  animation: pulse 1.1s ease-in-out infinite;
+  animation-delay: 0.1s;
+}
+.mitlogo i:nth-child(3) {
+  height: 13px;
+  animation-delay: 0.2s;
+}
+.mitlogo i:nth-child(4) {
+  height: 13px; /* the "I" */
+  animation-delay: 0.3s;
+}
+.mitlogo i:nth-child(5) {
+  height: 7px; /* the "T" stem (crossbar sits above via <b>) */
+  animation-delay: 0.4s;
+}
+.mitlogo b {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 8px; /* the T crossbar, overhanging to the right */
+  height: 3px;
+  animation-delay: 0.4s;
+}
+@keyframes mitwave {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 @keyframes pulse {
   0%,

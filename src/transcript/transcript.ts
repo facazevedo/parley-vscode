@@ -23,7 +23,16 @@ export interface TranscriptMeta {
 
 export type TranscriptEntry =
   | { kind: 'user'; text: string; images?: string[]; at: string }
-  | { kind: 'assistant'; text: string; model?: string; thinking?: string; tokens?: number; at: string }
+  | {
+      kind: 'assistant';
+      text: string;
+      model?: string;
+      thinking?: string;
+      /** Wall-clock seconds spent thinking (renders as "Thought for Ns"). */
+      thinkingSecs?: number;
+      tokens?: number;
+      at: string;
+    }
   | { kind: 'tool'; action: string; result?: string; at: string }
   | {
       kind: 'fileEdit';
@@ -46,6 +55,8 @@ export type TranscriptEntry =
       at: string;
     }
   | { kind: 'note'; text: string; images?: string[]; at: string }
+  /** Centered divider line in the transcript (e.g. "Switched to <model>"). */
+  | { kind: 'divider'; text: string; at: string }
   | {
       kind: 'compare';
       id: string;
@@ -188,6 +199,9 @@ export function transcriptToMarkdown(meta: TranscriptMeta, entries: readonly Tra
       case 'note':
         lines.push(`_${e.text}_`, '');
         break;
+      case 'divider':
+        lines.push(`--- ${e.text} ---`, '');
+        break;
       case 'compare':
         lines.push(`**Model comparison** — _${e.prompt}_`, '');
         for (const [key, col] of [
@@ -253,6 +267,9 @@ export function transcriptToPlainText(meta: TranscriptMeta, entries: readonly Tr
         break;
       case 'note':
         lines.push(`  (${e.text})`, '');
+        break;
+      case 'divider':
+        lines.push(`--- ${e.text} ---`, '');
         break;
       case 'compare':
         lines.push(`[Comparison] ${e.prompt}`, '');

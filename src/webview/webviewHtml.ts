@@ -69,7 +69,7 @@ export function buildChatHtml(webview: vscode.Webview, extensionUri: vscode.Uri)
       <div id="menuPanel" class="historypanel menupanel" style="display:none" tabindex="-1" role="menu"></div>
       <button id="jump" type="button" title="Jump to latest" aria-label="Jump to latest">↓</button>
     </div>
-    <div id="status" class="status" style="display:none"></div>
+    <div id="status" class="status" style="display:none"><span class="mitlogo" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><b></b></span><span id="statusText"></span></div>
     <form id="composer" class="composer">
       <details class="ctx-wrap">
         <summary>Context</summary>

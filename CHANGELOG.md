@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.23.0
+
+### New — Claude Code-style agent timeline + animated MIT spinner
+
+- **Step timeline:** each step of an agent turn now shows as a node on a vertical rail — a **gray** dot for narration, a **green** dot when a tool finishes, **red** on a tool error, and a **pulsing** dot for the step that's currently running. Tool calls each get their own compact row (`⏺ action` → `⎿ result`).
+- **Thinking:** the reasoning panel now reads **"Thinking…"** live and collapses to **"Thought for Ns"** (wall-clock) — persisted, so it stays after reload.
+- **Working indicator:** the status line's spinner is now an **animated MIT logo** (the maroon bars wave left-to-right) next to the live "…· N tokens" counter.
+- **Model switches:** changing the model mid-conversation drops a centered **"Switched to <model>"** divider (wavy rules on both sides) into the transcript. It's a visual marker only — the model never sees it.
+
 ## 1.22.0
 
 ### Improved — monitor screenshots carry real-pixel coordinates

@@ -101,15 +101,17 @@ import hljs from 'highlight.js/lib/common';
     const s = Math.floor((Date.now() - turnStart) / 1000);
     return ' (' + Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') + ')';
   }
+  const statusTextEl = $('statusText');
   function renderStatus() {
     if (!statusBase) {
       statusEl.style.display = 'none';
-      statusEl.textContent = '';
+      statusTextEl.textContent = '';
       return;
     }
     const total = exactTokens + Math.round(liveChars / 4);
-    statusEl.textContent = statusBase + elapsedText() + (total > 0 ? ' · ' + total.toLocaleString() + ' tokens' : '');
-    statusEl.style.display = 'block';
+    statusTextEl.textContent =
+      statusBase + elapsedText() + (total > 0 ? ' · ' + total.toLocaleString() + ' tokens' : '');
+    statusEl.style.display = 'flex';
   }
   function setStatus(base) {
     statusBase = base;
@@ -147,6 +149,9 @@ import hljs from 'highlight.js/lib/common';
   let thinkingDet = null;
   let thinkingBody = null;
   let planEl = null;
+  let lastToolStep = null; // the in-flight tool step row (pulsing dot until its result lands)
+  let thinkStartAt = 0; // first/last thinking delta timestamps → "Thought for Ns"
+  let thinkLastAt = 0;
 
   function activityLabel(name, argsStr) {
     let a = {};
@@ -590,46 +595,84 @@ import hljs from 'highlight.js/lib/common';
     thinkingDet.className = 'thinking';
     thinkingDet.open = true;
     const sum = document.createElement('summary');
-    sum.textContent = '💭 Thinking…';
+    sum.textContent = 'Thinking…';
     thinkingBody = document.createElement('div');
     thinkingBody.className = 'think-body';
     thinkingDet.append(sum, thinkingBody);
     streamNode.insertBefore(thinkingDet, streamContent);
+    thinkStartAt = Date.now();
+    thinkLastAt = thinkStartAt;
   }
   function finishThinkingBlock() {
     if (thinkingDet) {
       thinkingDet.open = false;
       const sum = thinkingDet.querySelector('summary');
       if (sum) {
-        sum.textContent = '💭 Thought';
+        // Claude Code style: "Thought for 51s" (duration of the reasoning burst).
+        const secs = thinkStartAt ? Math.max(0, Math.round((thinkLastAt - thinkStartAt) / 1000)) : null;
+        sum.textContent = secs === null ? 'Thought' : 'Thought for ' + secs + 's';
       }
     }
     thinkingDet = null;
     thinkingBody = null;
+    thinkStartAt = 0;
+    thinkLastAt = 0;
   }
+  // Close the live bubble so the next step (tool row / narration) starts a fresh row.
+  function closeStreamBubble() {
+    finishThinkingBlock();
+    if (streamContent) {
+      streamContent.classList.remove('cursor');
+    }
+    streamNode = null;
+    streamContent = null;
+    currentSeg = null;
+  }
+  function settleToolStep(cls) {
+    if (lastToolStep) {
+      lastToolStep.classList.remove('run');
+      lastToolStep.classList.add(cls);
+      lastToolStep = null;
+    }
+  }
+  // Claude Code style: each tool call is its own step row on the timeline rail,
+  // pulsing while it runs; narration that follows opens a fresh bubble below it.
   function streamActionLine(text) {
-    ensureStreamBubble();
+    settleToolStep('ok'); // a step that never reported a result counts as done
+    closeStreamBubble();
+    const wrap = document.createElement('div');
+    wrap.className = 'message assistant toolstep run';
+    const c = document.createElement('div');
+    c.className = 'content';
     const line = document.createElement('div');
     line.className = 'toolline';
     line.textContent = text;
-    streamContent.append(line);
-    // Start a fresh text segment so subsequent narration appears below the action.
-    currentSeg = document.createElement('div');
-    currentSeg.className = 'seg';
-    streamContent.append(currentSeg);
+    c.append(line);
+    wrap.append(c);
+    history.append(wrap);
+    lastToolStep = wrap;
     maybeScroll();
   }
-  // Claude-style "⎿ result" line shown under the preceding "⏺ action".
+  // Claude-style "⎿ result" line under its action; settles the step's dot green/red.
   function streamResultLine(text) {
-    ensureStreamBubble();
+    if (!lastToolStep) {
+      return;
+    }
     const line = document.createElement('div');
     line.className = 'toolresult';
     line.textContent = '⎿ ' + text;
-    streamContent.append(line);
-    currentSeg = document.createElement('div');
-    currentSeg.className = 'seg';
-    streamContent.append(currentSeg);
+    lastToolStep.querySelector('.content').append(line);
+    settleToolStep(/^(error|✗|failed|denied)/i.test(text || '') ? 'err' : 'ok');
     maybeScroll();
+  }
+  // Centered "Switched to <model>" divider with wavy rules on both sides.
+  function dividerRow(text) {
+    const row = document.createElement('div');
+    row.className = 'divider';
+    const label = document.createElement('span');
+    label.textContent = text;
+    row.append(label);
+    return row;
   }
   // Live task checklist (update_plan). One card per turn, updated in place.
   function renderPlan(steps) {
@@ -662,7 +705,7 @@ import hljs from 'highlight.js/lib/common';
   }
   // Claude-Code-style inline diff card for an applied file edit.
   function renderFileEdit(msg) {
-    ensureStreamBubble();
+    settleToolStep('ok'); // the edit card is this step's result
     const card = document.createElement('div');
     card.className = 'diffcard';
 
@@ -708,10 +751,10 @@ import hljs from 'highlight.js/lib/common';
     }
 
     card.append(head, body);
-    streamContent.append(card);
-    currentSeg = document.createElement('div');
-    currentSeg.className = 'seg';
-    streamContent.append(currentSeg);
+    // Each edit is its own step: close any open bubble and append the card standalone,
+    // so later narration opens a fresh bubble below it (matching the timeline model).
+    closeStreamBubble();
+    history.append(card);
     maybeScroll();
   }
 
@@ -745,6 +788,8 @@ import hljs from 'highlight.js/lib/common';
     return body;
   }
   function renderProposedChange(msg) {
+    settleToolStep('ok'); // settle any preceding tool step (no-op if none)
+    closeStreamBubble();
     const card = document.createElement('div');
     card.className = 'diffcard proposed';
 
@@ -982,6 +1027,7 @@ import hljs from 'highlight.js/lib/common';
   }
   function renderTranscript(entries, pendingIds) {
     history.replaceChildren();
+    lastToolStep = null; // any prior in-flight step reference is now detached
     pendingIds = pendingIds || [];
     let userOrdinal = 0;
     let tindex = -1;
@@ -1012,7 +1058,7 @@ import hljs from 'highlight.js/lib/common';
           const det = document.createElement('details');
           det.className = 'thinking';
           const sum = document.createElement('summary');
-          sum.textContent = '💭 Thought';
+          sum.textContent = e.thinkingSecs != null ? 'Thought for ' + e.thinkingSecs + 's' : 'Thought';
           const body = document.createElement('div');
           body.className = 'think-body';
           body.textContent = e.thinking;
@@ -1029,13 +1075,14 @@ import hljs from 'highlight.js/lib/common';
           c.parentNode.append(meta);
         }
       } else if (e.kind === 'tool') {
+        const isErr = !!e.result && /^(error|✗|failed|denied)/i.test(e.result);
         const wrap = document.createElement('div');
-        wrap.className = 'message assistant';
+        wrap.className = 'message assistant toolstep ' + (isErr ? 'err' : 'ok');
         const c = document.createElement('div');
         c.className = 'content';
         const a = document.createElement('div');
         a.className = 'toolline';
-        a.textContent = '⏺ ' + e.action;
+        a.textContent = e.action;
         c.append(a);
         if (e.result) {
           const r = document.createElement('div');
@@ -1045,6 +1092,8 @@ import hljs from 'highlight.js/lib/common';
         }
         wrap.append(c);
         history.append(wrap);
+      } else if (e.kind === 'divider') {
+        history.append(dividerRow(e.text));
       } else if (e.kind === 'fileEdit') {
         renderStaticDiffCard(e, pendingIds);
       } else if (e.kind === 'plan') {
@@ -2781,7 +2830,7 @@ import hljs from 'highlight.js/lib/common';
       ensureStreamBubble();
       liveChars = 0;
       liveText = '';
-      setStatus('Parley is working…');
+      setStatus('Working…');
       return;
     }
     if (msg.type === 'retry' || msg.type === 'status') {
@@ -2809,6 +2858,7 @@ import hljs from 'highlight.js/lib/common';
     if (msg.type === 'steerInjected') {
       // A queued steering message just joined the conversation: close the current
       // assistant bubble so the reply to it starts fresh underneath.
+      settleToolStep('ok');
       if (streamContent) {
         streamContent.classList.remove('cursor');
       }
@@ -2825,9 +2875,9 @@ import hljs from 'highlight.js/lib/common';
     if (msg.type === 'thinkingDelta') {
       ensureThinkingBlock();
       thinkingBody.textContent += msg.delta;
-      if (!liveChars) {
-        setStatus('Parley is thinking…');
-      }
+      thinkLastAt = Date.now();
+      liveChars += msg.delta.length; // thinking tokens tick the live "· N tokens" counter
+      setStatus('Thinking…');
       maybeScroll();
       return;
     }
@@ -2836,16 +2886,21 @@ import hljs from 'highlight.js/lib/common';
       currentSeg.textContent += msg.delta;
       liveChars += msg.delta.length;
       liveText += msg.delta;
-      if (!statusBase) {
-        statusBase = 'Parley is working…';
+      if (!statusBase || statusBase === 'Thinking…') {
+        statusBase = 'Working…';
       }
       renderStatus();
       maybeScroll();
       return;
     }
     if (msg.type === 'toolEvent') {
-      streamActionLine('⏺ ' + activityLabel(msg.name, msg.args));
+      streamActionLine(activityLabel(msg.name, msg.args));
       setStatus(activityLabel(msg.name, msg.args) + '…');
+      return;
+    }
+    if (msg.type === 'divider') {
+      history.append(dividerRow(msg.text || ''));
+      maybeScroll();
       return;
     }
     if (msg.type === 'toolResult') {
@@ -2883,6 +2938,7 @@ import hljs from 'highlight.js/lib/common';
       }
       liveText = '';
       finishThinkingBlock();
+      settleToolStep('ok'); // a step with no reported result (e.g. a file edit) is done
       streamNode = null;
       streamContent = null;
       currentSeg = null;

@@ -798,13 +798,21 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       case 'reviewChanges':
         await this.reviewChanges(message.paths ?? []);
         return;
-      case 'agentChanged':
+      case 'agentChanged': {
+        const previous = this.selectedAgentId;
         this.selectedAgentId = message.agentId ?? this.selectedAgentId;
         this.save();
+        // Claude Code-style divider marking the switch point in the transcript.
+        if (this.selectedAgentId !== previous && this.transcript.length > 0) {
+          const text = `Switched to ${this.selectedAgentId}`;
+          this.appendTranscript({ kind: 'divider', text, at: new Date().toISOString() });
+          this.post({ type: 'divider', text }); // immediate render (state re-renders are suppressed mid-turn)
+        }
         if (this.maybeWarnOpenAiReasoning()) {
           await this.postState();
         }
         return;
+      }
       case 'modeChanged':
         this.mode = normalizeMode(message.mode);
         this.save();

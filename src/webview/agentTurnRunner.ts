@@ -164,6 +164,8 @@ export class AgentTurnRunner {
     // rounds are already pushed to history/recorder below.
     let streamedText = '';
     let streamedThinking = '';
+    let thinkingStartAt = 0; // first thinking delta of the round (for "Thought for Ns")
+    let thinkingMs = 0;
     const cpStart = this.host.checkpoints.size;
     this.host.post({ type: 'tokens', total: 0 });
     dbg('turn', 'start', {
@@ -188,6 +190,8 @@ export class AgentTurnRunner {
         const stepActions: string[] = []; // tool activity for this step (persisted if the model doesn't narrate)
         streamedText = '';
         streamedThinking = '';
+        thinkingStartAt = 0;
+        thinkingMs = 0;
         if (useStream) {
           this.host.post({ type: 'streamStart' });
         }
@@ -227,6 +231,10 @@ export class AgentTurnRunner {
               : undefined,
             onThinking: useStream
               ? (delta) => {
+                  if (!thinkingStartAt) {
+                    thinkingStartAt = Date.now();
+                  }
+                  thinkingMs = Date.now() - thinkingStartAt;
                   streamedThinking += delta;
                   this.host.post({ type: 'thinkingDelta', delta });
                 }
@@ -360,6 +368,7 @@ export class AgentTurnRunner {
             text: cleaned,
             model: agentId,
             thinking: response.message.thinking,
+            thinkingSecs: response.message.thinking ? Math.round(thinkingMs / 1000) : undefined,
             tokens: response.usage?.total,
             at: new Date().toISOString()
           });
@@ -433,6 +442,7 @@ export class AgentTurnRunner {
             text,
             model: agentId,
             thinking: partialThinking || undefined,
+            thinkingSecs: partialThinking ? Math.round(thinkingMs / 1000) : undefined,
             at: new Date().toISOString()
           });
         }
