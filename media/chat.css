@@ -1872,7 +1872,7 @@ button:disabled {
 }
 .inputbox textarea {
   min-height: 54px;
-  resize: vertical;
+  resize: none; /* hides the diagonal grip that sat above Send */
   width: 100%;
   box-sizing: border-box;
   border: 0;

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.40.3
+
+### Changed — removed the textarea resize grip
+
+- Turned off the composer textarea's resize handle (the diagonal grip that showed just above the Send button).
+
+
 ## 1.40.2
 
 ### Changed — mode button matches the model selector
