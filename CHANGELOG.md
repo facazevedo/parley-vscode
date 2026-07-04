@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.44.0
+
+### @problems — pull diagnostics into context
+
+- New @problems mention attaches the current errors and warnings from the Problems panel (errors first, grouped by file with line:col and the source/rule). Ask things like "fix the errors in @problems" or "why is @problems complaining". Shows in the @ autocomplete alongside @git / @terminal / @codebase.
+
+
 ## 1.43.0
 
 ### Image attachments show a clickable thumbnail

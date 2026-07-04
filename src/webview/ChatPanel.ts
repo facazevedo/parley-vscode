@@ -15,6 +15,7 @@ import {
 import { totalCharacters } from '../context/contextPreview';
 import { parseRuleFile, ruleApplies } from '../context/rulesDir';
 import { terminalSnapshot } from '../context/terminalLog';
+import { diagnosticsSnapshot } from '../context/diagnostics';
 import { loadProjectMemory } from '../context/projectMemory';
 import { findExistingRulesFile, writeRulesTemplate } from '../commands/initProjectRules';
 import { UNTRUSTED_SYSTEM_NOTE, wrapUntrusted } from '../parley/untrusted';
@@ -92,6 +93,7 @@ const SPECIAL_MENTIONS: ReadonlyArray<{ path: string; hint: string }> = [
   { path: 'codebase', hint: 'most relevant files for your question' },
   { path: 'git', hint: 'uncommitted diff vs HEAD' },
   { path: 'terminal', hint: 'recent terminal commands + output' },
+  { path: 'problems', hint: 'current errors & warnings (Problems panel)' },
   { path: 'browser', hint: 'open a URL and attach the rendered page (add the URL after)' },
   { path: 'sym:', hint: 'a function/class/symbol by name (language server) — type the name after' }
 ];
@@ -3652,6 +3654,21 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       });
     }
 
+    // @problems — current diagnostics (errors + warnings) from the Problems panel.
+    if (/(?:^|\s)@problems\b/i.test(prompt)) {
+      const snap = diagnosticsSnapshot({ maxItems: 200 });
+      const sliced = snap.slice(0, cap);
+      const content = wrapUntrusted('diagnostics', sliced);
+      out.push({
+        id: 'mention-problems',
+        kind: 'user-file',
+        label: '@problems (errors & warnings)',
+        content,
+        characterCount: content.length,
+        truncated: snap.length > sliced.length
+      });
+    }
+
     // @<url> — fetch the page text.
     for (const m of prompt.matchAll(/(?:^|\s)@(https?:\/\/\S+)/gi)) {
       const url = m[1].replace(/[)\].,;]+$/, '');
@@ -3674,6 +3691,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         token === 'codebase' ||
         token === 'terminal' ||
         token === 'browser' ||
+        token === 'problems' ||
         /^https?:/i.test(token)
       ) {
         continue;
