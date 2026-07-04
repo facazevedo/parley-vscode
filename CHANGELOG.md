@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.36.0
+
+### New — composer "add" menu + slash and regenerate buttons
+
+- **＋** in the composer opens an **Add** menu: **Upload from computer** (attach a file/image), **Add context** (insert `@` to reference a file or symbol), and **Browse the web** (insert `@browser ` to open a URL and attach the rendered page).
+- **/** opens the slash-command menu.
+- **↻** regenerates the last reply.
+
 ## 1.35.0
 
 ### Changed — split app-level vs conversation-level actions across the two header rows

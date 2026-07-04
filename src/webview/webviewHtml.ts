@@ -122,6 +122,7 @@ export function buildChatHtml(webview: vscode.Webview, extensionUri: vscode.Uri)
         <div class="actions">
           <select id="agent" class="model" aria-label="Parley model"></select>
           <button type="button" id="modeBtn" class="modebtn" title="Mode &amp; thinking" aria-label="Mode">Chat ▾</button>
+          <button type="button" id="plus" title="Add — upload a file, add context, or browse the web" aria-label="Add">＋</button>
           <button type="button" id="attach" title="Attach files or images" aria-label="Attach files or images">📎</button>
           <button type="button" id="mic" title="Voice input (click to record, click again to transcribe)" aria-label="Voice input">🎤</button>
           <button type="button" id="voiceMode" title="Voice mode: hands-free conversation (🎤 auto-sends, replies read aloud)" aria-label="Toggle voice mode">🗣</button>
@@ -129,6 +130,8 @@ export function buildChatHtml(webview: vscode.Webview, extensionUri: vscode.Uri)
           <button type="button" id="rec" title="Record your screen (frames + mic narration; click again to stop, max 60s)" aria-label="Record screen">🎥</button>
           <button type="button" id="computer" title="Computer control — let Parley drive your mouse &amp; keyboard for a task (enable parley.computerUse.enabled)" aria-label="Computer control">🖱️</button>
           <button type="button" id="settings" title="Parley settings" aria-label="Parley settings">⚙️</button>
+          <button type="button" id="slashBtn" title="Slash commands" aria-label="Slash commands">/</button>
+          <button type="button" id="regenBtn" title="Regenerate the last reply" aria-label="Regenerate last reply">↻</button>
           <span class="grow"></span>
           <button type="button" id="queueMode" class="queuemode" style="display:none" title="How a message sent while Parley is working is handled">⏳ Queue</button>
           <button type="button" id="stop" style="display:none">Stop</button>

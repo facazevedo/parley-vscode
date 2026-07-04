@@ -1891,6 +1891,9 @@ button:disabled {
 }
 /* Icon buttons in the composer toolbar — flat/transparent, not filled buttons. */
 .actions #attach,
+.actions #plus,
+.actions #slashBtn,
+.actions #regenBtn,
 .actions #mic,
 .actions #voiceMode,
 .actions #shot,
@@ -1906,6 +1909,9 @@ button:disabled {
   cursor: pointer;
 }
 .actions #attach:hover,
+.actions #plus:hover,
+.actions #slashBtn:hover,
+.actions #regenBtn:hover,
 .actions #mic:hover,
 .actions #voiceMode:hover,
 .actions #shot:hover,

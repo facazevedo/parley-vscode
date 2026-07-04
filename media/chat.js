@@ -1942,6 +1942,58 @@ import hljs from 'highlight.js/lib/common';
   if (settingsBtn) {
     settingsBtn.addEventListener('click', () => vscode.postMessage({ type: 'openSettings' }));
   }
+  // Append text to the composer and re-fire the input handler so the slash / @-mention
+  // menus open for what we just inserted.
+  function insertAtPrompt(text) {
+    const sep = prompt.value && !/\s$/.test(prompt.value) ? ' ' : '';
+    prompt.value = prompt.value + sep + text;
+    prompt.focus();
+    prompt.setSelectionRange(prompt.value.length, prompt.value.length);
+    prompt.dispatchEvent(new Event('input'));
+  }
+  // ＋ menu — Codex/ChatGPT-style "add" affordance.
+  function openPlusMenu() {
+    openMenu({
+      kind: 'plus',
+      title: 'Add',
+      items: [
+        {
+          label: 'Upload from computer',
+          detail: 'Attach a file or image to your message',
+          onPick: () => vscode.postMessage({ type: 'attachFiles' })
+        },
+        {
+          label: 'Add context',
+          detail: 'Reference a file or symbol with @',
+          onPick: () => insertAtPrompt('@')
+        },
+        {
+          label: 'Browse the web',
+          detail: 'Open a URL and attach the rendered page — type the address after @browser',
+          onPick: () => insertAtPrompt('@browser ')
+        }
+      ]
+    });
+  }
+  const plusBtn = $('plus');
+  if (plusBtn) {
+    plusBtn.addEventListener('click', () => toggleMenu('plus', openPlusMenu));
+  }
+  const slashBtn = $('slashBtn');
+  if (slashBtn) {
+    slashBtn.addEventListener('click', () => {
+      if (!prompt.value.trim()) {
+        prompt.value = '/'; // slash commands apply to an empty composer
+      }
+      prompt.focus();
+      prompt.setSelectionRange(prompt.value.length, prompt.value.length);
+      prompt.dispatchEvent(new Event('input'));
+    });
+  }
+  const regenBtn = $('regenBtn');
+  if (regenBtn) {
+    regenBtn.addEventListener('click', () => vscode.postMessage({ type: 'regenerate' }));
+  }
 
   // ---------- Voice input (🎤 → PCM capture → WAV → host transcription) ----------
   // MediaRecorder emits webm/opus, which the gateway's input_audio doesn't accept —
