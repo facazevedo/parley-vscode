@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.35.0
+
+### Changed — split app-level vs conversation-level actions across the two header rows
+
+- **Top row (Parley):** now app/session-level — New, History, Usage, Design preview, Refresh models, and **Settings** (moved up from the title row).
+- **Title row:** now conversation-level — back, the title, and the actions that act on *this* conversation: **Compact, Export, Archive, Delete**, New, and Rename (moved down from the top row).
+- Removed the duplicate Rename icon from the top row and the redundant `⋯` menu (its actions are now explicit icons).
+
 ## 1.34.3
 
 ### Fixed — green/red tool-step dots weren't showing
