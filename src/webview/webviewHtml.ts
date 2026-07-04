@@ -122,7 +122,9 @@ export function buildChatHtml(webview: vscode.Webview, extensionUri: vscode.Uri)
         <div class="actions">
           <select id="agent" class="model" aria-label="Parley model"></select>
           <button type="button" id="modeBtn" class="modebtn" title="Mode &amp; thinking" aria-label="Mode">Chat ▾</button>
-          <button type="button" id="plus" title="Add — upload a file, add context, or browse the web" aria-label="Add">＋</button>
+          <button type="button" id="upload" title="Upload from computer" aria-label="Upload from computer">📤</button>
+          <button type="button" id="addContext" title="Add context — reference a file or symbol with @" aria-label="Add context">📄</button>
+          <button type="button" id="browseWeb" title="Browse the web — open a URL and attach the rendered page" aria-label="Browse the web">🌐</button>
           <button type="button" id="attach" title="Attach files or images" aria-label="Attach files or images">📎</button>
           <button type="button" id="mic" title="Voice input (click to record, click again to transcribe)" aria-label="Voice input">🎤</button>
           <button type="button" id="voiceMode" title="Voice mode: hands-free conversation (🎤 auto-sends, replies read aloud)" aria-label="Toggle voice mode">🗣</button>

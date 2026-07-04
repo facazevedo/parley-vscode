@@ -1951,33 +1951,18 @@ import hljs from 'highlight.js/lib/common';
     prompt.setSelectionRange(prompt.value.length, prompt.value.length);
     prompt.dispatchEvent(new Event('input'));
   }
-  // ＋ menu — Codex/ChatGPT-style "add" affordance.
-  function openPlusMenu() {
-    openMenu({
-      kind: 'plus',
-      title: 'Add',
-      items: [
-        {
-          label: 'Upload from computer',
-          detail: 'Attach a file or image to your message',
-          onPick: () => vscode.postMessage({ type: 'attachFiles' })
-        },
-        {
-          label: 'Add context',
-          detail: 'Reference a file or symbol with @',
-          onPick: () => insertAtPrompt('@')
-        },
-        {
-          label: 'Browse the web',
-          detail: 'Open a URL and attach the rendered page — type the address after @browser',
-          onPick: () => insertAtPrompt('@browser ')
-        }
-      ]
-    });
+  // Codex/ChatGPT-style "add" affordances — three explicit icons in the composer bar.
+  const uploadBtn = $('upload');
+  if (uploadBtn) {
+    uploadBtn.addEventListener('click', () => vscode.postMessage({ type: 'attachFiles' }));
   }
-  const plusBtn = $('plus');
-  if (plusBtn) {
-    plusBtn.addEventListener('click', () => toggleMenu('plus', openPlusMenu));
+  const addContextBtn = $('addContext');
+  if (addContextBtn) {
+    addContextBtn.addEventListener('click', () => insertAtPrompt('@'));
+  }
+  const browseWebBtn = $('browseWeb');
+  if (browseWebBtn) {
+    browseWebBtn.addEventListener('click', () => insertAtPrompt('@browser '));
   }
   const slashBtn = $('slashBtn');
   if (slashBtn) {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.36.1
+
+### Changed — Add actions are now three explicit icons
+
+- Replaced the composer's `＋` menu with three direct icons: **📤 Upload from computer**, **📄 Add context** (`@`), and **🌐 Browse the web** (`@browser `).
+
 ## 1.36.0
 
 ### New — composer "add" menu + slash and regenerate buttons
