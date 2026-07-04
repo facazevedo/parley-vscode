@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.36.2
+
+### Changed — styled tooltips + framed slash key
+
+- Hover tooltips are now **dark, rounded, theme-matched** (like VS Code's hover widget) instead of the OS's white native box — applied to every element with a `title`, including dynamically-added ones.
+- The **/** slash-command button is now framed as a **keycap** rather than a bare "/".
+
 ## 1.36.1
 
 ### Changed — Add actions are now three explicit icons

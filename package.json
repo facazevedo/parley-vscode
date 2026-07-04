@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "1.36.1",
+  "version": "1.36.2",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",

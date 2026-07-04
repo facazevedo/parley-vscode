@@ -1980,6 +1980,73 @@ import hljs from 'highlight.js/lib/common';
     regenBtn.addEventListener('click', () => vscode.postMessage({ type: 'regenerate' }));
   }
 
+  // ---------- Styled tooltips (replace the OS's native white title box) ----------
+  // Any element with a `title` gets a dark, theme-matched tooltip instead. We steal the
+  // native title into data-tip on first hover so the OS tooltip never appears; a delegated
+  // listener covers dynamically-added elements (history rows, tool steps, links) too.
+  const tipEl = document.createElement('div');
+  tipEl.className = 'tooltip';
+  tipEl.style.display = 'none';
+  document.body.appendChild(tipEl);
+  let tipTarget = null;
+  let tipTimer = null;
+  function positionTip(el) {
+    const r = el.getBoundingClientRect();
+    const tr = tipEl.getBoundingClientRect();
+    let top = r.top - tr.height - 6;
+    if (top < 4) {
+      top = r.bottom + 6; // not enough room above — drop below
+    }
+    let left = r.left + r.width / 2 - tr.width / 2;
+    left = Math.max(6, Math.min(left, window.innerWidth - tr.width - 6));
+    tipEl.style.top = top + 'px';
+    tipEl.style.left = left + 'px';
+  }
+  function showTip(el) {
+    const text = el.getAttribute('data-tip');
+    if (!text) {
+      return;
+    }
+    tipEl.textContent = text;
+    tipEl.style.display = 'block';
+    positionTip(el);
+    tipTarget = el;
+  }
+  function hideTip() {
+    clearTimeout(tipTimer);
+    tipEl.style.display = 'none';
+    tipTarget = null;
+  }
+  document.addEventListener('mouseover', (e) => {
+    const el = e.target.closest && e.target.closest('[title], [data-tip]');
+    if (!el) {
+      return;
+    }
+    if (el.hasAttribute('title')) {
+      const t = el.getAttribute('title');
+      el.setAttribute('data-tip', t);
+      if (!el.getAttribute('aria-label')) {
+        el.setAttribute('aria-label', t); // keep an accessible name after dropping title
+      }
+      el.removeAttribute('title');
+    }
+    if (el === tipTarget) {
+      return;
+    }
+    clearTimeout(tipTimer);
+    tipTimer = setTimeout(() => showTip(el), 320);
+  });
+  document.addEventListener('mouseout', (e) => {
+    const el = e.target.closest && e.target.closest('[data-tip]');
+    if (el && el === tipTarget) {
+      hideTip();
+    } else {
+      clearTimeout(tipTimer);
+    }
+  });
+  document.addEventListener('mousedown', hideTip);
+  window.addEventListener('scroll', hideTip, true);
+
   // ---------- Voice input (🎤 → PCM capture → WAV → host transcription) ----------
   // MediaRecorder emits webm/opus, which the gateway's input_audio doesn't accept —
   // so capture raw PCM via WebAudio, downsample to 16 kHz mono, and encode WAV here.
