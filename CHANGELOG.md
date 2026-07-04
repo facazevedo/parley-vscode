@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.25.0
+
+### Improved — tidy rendering of text-format tool calls
+
+- Some models (especially local/open ones without native tool-calling) emit tool calls as **text tags** — `<tool_call>{…}</tool_call>` and `<tool_response>…</tool_response>` — which previously rendered as an unreadable wall of raw JSON. Parley now turns each into a **clean labeled block**: `🔧 <tool name>` with pretty-printed, syntax-highlighted arguments, and `⎿ result` for the response (long results are clipped in the display). Models with native tool-calling continue to use the compact `⏺`/`⎿` step timeline.
+
 ## 1.24.0
 
 ### New — Codex-style conversation switcher

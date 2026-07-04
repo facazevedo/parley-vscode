@@ -224,6 +224,49 @@ import hljs from 'highlight.js/lib/common';
       return '';
     }
   });
+  // Some models (esp. local/open ones without native tool-calling) emit tool calls as
+  // TEXT tags — <tool_call>{…}</tool_call> / <tool_response>…</tool_response> — instead of
+  // structured tool-calls. Left as-is they render as a raw wall of JSON. Turn each into a
+  // clean labeled, syntax-highlighted (collapsible) block so the transcript stays organized.
+  function organizeToolText(src) {
+    if (!src || src.indexOf('<tool_') === -1) {
+      return src;
+    }
+    const pretty = (raw) => {
+      try {
+        return JSON.stringify(JSON.parse(raw.trim()), null, 2);
+      } catch {
+        return raw.trim();
+      }
+    };
+    const clip = (text, max) => {
+      const lines = text.split('\n');
+      return lines.length <= max
+        ? text
+        : lines.slice(0, max).join('\n') + '\n… (' + (lines.length - max) + ' more lines)';
+    };
+    let out = src.replace(/<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/g, (_m, body) => {
+      let name = 'tool';
+      let args = body.trim();
+      try {
+        const o = JSON.parse(body.trim());
+        if (o && o.name) {
+          name = o.name;
+        }
+        args = JSON.stringify(o && o.arguments !== undefined ? o.arguments : o, null, 2);
+      } catch {
+        /* not JSON — show raw */
+      }
+      return '\n\n**🔧 ' + name + '**\n\n```json\n' + clip(args, 40) + '\n```\n\n';
+    });
+    out = out.replace(
+      /<tool_(?:response|result|output)>\s*([\s\S]*?)\s*<\/tool_(?:response|result|output)>/g,
+      (_m, body) => {
+        return '\n\n**⎿ result**\n\n```json\n' + clip(pretty(body), 30) + '\n```\n\n';
+      }
+    );
+    return out;
+  }
   // Memoized: full re-renders (postState) re-feed every prior message through
   // markdown-it, which is O(n) jank in long sessions — cache by source string.
   const mdCache = new Map();
@@ -234,7 +277,7 @@ import hljs from 'highlight.js/lib/common';
       if (mdCache.size > 2000) {
         mdCache.clear(); // crude cap so the cache can't grow unbounded
       }
-      html = md.render(k);
+      html = md.render(organizeToolText(k));
       mdCache.set(k, html);
     }
     return html;
