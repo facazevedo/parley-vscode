@@ -399,7 +399,7 @@ export const AGENT_TOOLS: readonly ToolDefinition[] = [
     function: {
       name: 'capture_screen',
       description:
-        "Capture a screenshot of the user's screen and show it inline in the chat. Use this when the user asks you to take/grab/paste a screenshot of their screen or monitor. You CAN do this — do not refuse. (Note: the captured image is displayed to the user; you receive only a confirmation, not the pixels, so you can't analyze its contents from the tool result.)",
+        "Capture a screenshot of the user's screen and show it inline in the chat. Use this when the user asks you to take/grab/paste a screenshot of their screen or monitor, or to look at what's on their screen. You CAN do this — do not refuse. The captured screenshot is automatically added to the conversation as an image, so on your NEXT turn you will actually see it and can analyze/describe it. After calling this, continue and address what the user asked about the screen.",
       parameters: { type: 'object', properties: {} }
     }
   },

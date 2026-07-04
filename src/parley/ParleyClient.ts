@@ -596,6 +596,18 @@ export class ParleyClient implements ParleyProvider {
         // so the model knows output was cut instead of reasoning over a silent gap.
         convo.push({ role: 'tool', tool_call_id: tc.id, content: clampToolResult(tc.name, toolResult) });
       }
+      // Tool-produced images (e.g. capture_screen) can't ride in a text tool result,
+      // so inject them as a user image message the next round actually sees.
+      const toolImages = options.drainToolImages?.() ?? [];
+      if (toolImages.length > 0) {
+        convo.push({
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Here is the screenshot you just captured with capture_screen:' },
+            ...toolImages.map((url) => ({ type: 'image_url', image_url: { url } }))
+          ]
+        });
+      }
     }
 
     // Out of tool rounds for this step. Return the work done so far and let the chat

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.12.0
+
+### Improved — `capture_screen` now feeds the screenshot to the model
+
+- When the agent calls `capture_screen`, the screenshot is now **injected into the conversation as an image on the next round**, so the model actually **sees** it and can analyze/describe what's on your screen — not just display it. Ask "look at my screen and tell me what's wrong" in an agent mode and it works end to end.
+- Mechanism: tool results are text-only, so a tool-produced image is drained after the tool round and appended as a user image message (the same `image_url` block normal attachments use). The tool description no longer tells the model it "can't see the pixels" — it can, next turn — which also curbs the reflexive refusal. Still shown inline to you as well.
+
 ## 1.11.0
 
 ### New — agents can screenshot your screen on request (`capture_screen` tool)

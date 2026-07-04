@@ -72,6 +72,9 @@ export class ToolExecutor {
     { uri: vscode.Uri; rel: string; original: string; proposedText: string; deleteFile?: boolean }
   >();
   private changeSeq = 0;
+  // Images produced by tools (capture_screen) awaiting injection into the turn as
+  // an image message the model can see — drained by the turn runner each round.
+  private pendingImages: string[] = [];
   // Ask-mode approvals: proposed-change cards whose tool call awaits an Apply/Reject click.
   private approvalSeq = 0;
   private readonly pendingApprovals = new Map<
@@ -99,6 +102,14 @@ export class ToolExecutor {
     this.pendingChanges.clear();
     this.fileReadHashes.clear();
     this.subagentReadHashes.clear();
+    this.pendingImages = [];
+  }
+
+  /** Drain tool-produced images (capture_screen) for injection into the turn. */
+  public drainImages(): string[] {
+    const images = this.pendingImages;
+    this.pendingImages = [];
+    return images;
   }
 
   /** Absolute paths of files the agent has read/edited this conversation (for glob-scoped rules). */
@@ -352,8 +363,12 @@ export class ToolExecutor {
     if (!base64) {
       return 'Error: screen capture is unavailable here (needs the built-in Windows backend or nut.js). Tell the user they can also run the /screenshot command or click the 📷 button.';
     }
-    this.host.showImage(`data:image/png;base64,${base64}`, 'screenshot');
-    return 'Captured the screen and displayed it in the chat. The user can see it; you cannot read its pixels from this result.';
+    const dataUri = `data:image/png;base64,${base64}`;
+    this.host.showImage(dataUri, 'screenshot');
+    // Queue it so the turn runner feeds it to the model as an image on the next
+    // round — the model can then actually SEE and analyze the screen.
+    this.pendingImages.push(dataUri);
+    return 'Captured the screen and displayed it. The screenshot image is being attached to the conversation now — you WILL see it on your next turn, so continue and analyze it (do not claim you cannot see it).';
   }
 
   /** Generate an image from a prompt and show it inline in the chat. */

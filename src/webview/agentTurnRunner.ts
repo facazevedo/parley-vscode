@@ -206,6 +206,9 @@ export class AgentTurnRunner {
               : undefined,
             tools: req.turnTools,
             runTool: toolsEnabled ? (call) => this.host.executor.run(call) : undefined,
+            // Images a tool produced this round (capture_screen) → injected as an
+            // image message so the model sees the screenshot on its next round.
+            drainToolImages: toolsEnabled ? () => this.host.executor.drainImages() : undefined,
             onToolEvent: toolsEnabled
               ? (event) => {
                   const action = describeToolEvent(event.name, event.args);

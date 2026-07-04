@@ -46,6 +46,13 @@ export interface SendMessageOptions {
    * visible history/transcript.
    */
   readonly getQueuedUserMessages?: () => readonly string[];
+  /**
+   * Drained after each tool round: any returned image data URIs are appended to
+   * the conversation as a user image message, so a tool that produces an image
+   * (e.g. capture_screen) can make the model actually SEE it on the next round —
+   * tool results themselves are text-only.
+   */
+  readonly drainToolImages?: () => readonly string[];
   readonly maxToolRounds?: number;
 }
 
