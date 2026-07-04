@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.68.0
+
+### Create PR & Release notes
+
+- **Parley: Create Pull Request** (also in the Source Control menu) — generates a PR description from the branch diff, confirms with you, pushes the branch, and opens the PR via the GitHub CLI (gh), returning the URL. Outward-facing, so it always confirms first; the title is sanitized and the body passed via --body-file.
+- **Parley: Generate Release Notes** — drafts grouped release notes / CHANGELOG entries (Features/Fixes/Docs/Chore + a suggested version bump) from the commits since the last tag, opened in a markdown doc and copied to the clipboard.
+
+
 ## 1.67.0
 
 ### CodeLens actions

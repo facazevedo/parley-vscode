@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "1.67.0",
+  "version": "1.68.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -183,6 +183,16 @@
       {
         "command": "parley.generatePrDescription",
         "title": "Parley: Generate PR Description",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.createPr",
+        "title": "Parley: Create Pull Request",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.releaseNotes",
+        "title": "Parley: Generate Release Notes",
         "category": "Parley"
       },
       {
@@ -490,6 +500,11 @@
           "command": "parley.generatePrDescription",
           "when": "scmProvider == git",
           "group": "9_parley@3"
+        },
+        {
+          "command": "parley.createPr",
+          "when": "scmProvider == git",
+          "group": "9_parley@4"
         }
       ]
     },

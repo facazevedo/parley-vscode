@@ -15,6 +15,8 @@ import { registerFixDiagnosticsCommand } from './commands/fixDiagnostics';
 import { registerGenerateCommitMessageCommand } from './commands/generateCommitMessage';
 import { registerReviewBranchCommand } from './commands/reviewBranch';
 import { registerGeneratePrDescriptionCommand } from './commands/generatePrDescription';
+import { registerCreatePrCommand } from './commands/createPr';
+import { registerReleaseNotesCommand } from './commands/releaseNotes';
 import { registerFileEditHistoryCommand } from './commands/fileEditHistory';
 import { MEMORY_HEADER, memoryUri } from './context/projectMemory';
 import { registerFixLastCommandCommand } from './commands/fixLastCommand';
@@ -308,6 +310,8 @@ export function activate(context: vscode.ExtensionContext): void {
   registerGenerateCommitMessageCommand(context, commandDeps);
   registerReviewBranchCommand(context, commandDeps);
   registerGeneratePrDescriptionCommand(context, commandDeps);
+  registerCreatePrCommand(context, commandDeps);
+  registerReleaseNotesCommand(context, commandDeps);
   registerFileEditHistoryCommand(context, commandDeps);
   registerFixLastCommandCommand(context, commandDeps);
   registerUsageHistoryCommand(context, commandDeps);
