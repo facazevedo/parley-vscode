@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.39.0
+
+### New — design-canvas icon in the composer
+
+- Added a persistent **design canvas** icon (palette) to the composer bar that opens the live preview of the latest HTML/SVG the model built. If nothing is previewable yet, it says so instead of doing nothing. (The top-row preview button still auto-appears when a reply contains previewable code.)
+
+
 ## 1.38.0
 
 ### Changed — monochrome line icons everywhere + yellow warning dot

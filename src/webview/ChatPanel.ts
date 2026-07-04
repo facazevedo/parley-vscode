@@ -770,7 +770,13 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         await this.regenerateLast();
         return;
       case 'openArtifacts':
-        ArtifactPanel.show(this.extensionUri, this.currentArtifacts);
+        if (this.currentArtifacts.length > 0) {
+          ArtifactPanel.show(this.extensionUri, this.currentArtifacts);
+        } else {
+          void vscode.window.showInformationMessage(
+            'Parley: no preview yet — ask for a UI (HTML or SVG) and it will open in the design canvas.'
+          );
+        }
         return;
       case 'openHistory':
         await this.openPastConversation();

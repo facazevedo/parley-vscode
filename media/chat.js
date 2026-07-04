@@ -1964,6 +1964,10 @@ import hljs from 'highlight.js/lib/common';
   if (browseWebBtn) {
     browseWebBtn.addEventListener('click', () => insertAtPrompt('@browser '));
   }
+  const designBtn = $('designBtn');
+  if (designBtn) {
+    designBtn.addEventListener('click', () => vscode.postMessage({ type: 'openArtifacts' }));
+  }
   const slashBtn = $('slashBtn');
   if (slashBtn) {
     slashBtn.addEventListener('click', () => {
