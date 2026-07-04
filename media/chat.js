@@ -2069,9 +2069,9 @@ import hljs from 'highlight.js/lib/common';
     if (!micBtn) {
       return;
     }
-    micBtn.classList.toggle('recording', state === 'recording');
+    micBtn.classList.toggle('recording', state === 'recording'); // red pulse via CSS
+    micBtn.classList.toggle('busy', state === 'busy');
     micBtn.disabled = state === 'busy';
-    micBtn.textContent = state === 'recording' ? '⏺' : state === 'busy' ? '…' : '🎤';
     micBtn.title =
       state === 'recording'
         ? 'Recording — click to stop and transcribe (max 60s)'
@@ -2323,8 +2323,7 @@ import hljs from 'highlight.js/lib/common';
       recMicNode.connect(recMicCtx.destination);
     }
     if (recBtn) {
-      recBtn.classList.add('recording');
-      recBtn.textContent = '⏹';
+      recBtn.classList.add('recording'); // red pulse via CSS; icon stays
       recBtn.title = 'Stop recording and attach frames + narration';
     }
     recStopTimer = setTimeout(() => stopScreenRecording(), REC_MAX_MS);
@@ -2374,7 +2373,6 @@ import hljs from 'highlight.js/lib/common';
     recVideo = null;
     if (recBtn) {
       recBtn.classList.remove('recording');
-      recBtn.textContent = '🎥';
       recBtn.title = 'Record your screen (frames + mic narration; click again to stop, max 60s)';
     }
     recFrames.forEach((dataUri, i) => {

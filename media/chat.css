@@ -1902,13 +1902,22 @@ button:disabled {
 .actions #rec,
 .actions #computer,
 .actions #settings {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   color: var(--vscode-foreground);
-  opacity: 0.8;
+  opacity: 0.75;
   border: 0;
   border-radius: 6px;
-  padding: 3px 6px;
+  padding: 4px 6px;
   cursor: pointer;
+}
+/* Monochrome line icons (Lucide-style) in the composer bar. */
+.actions button svg {
+  width: 17px;
+  height: 17px;
+  display: block;
 }
 .actions #attach:hover,
 .actions #upload:hover,

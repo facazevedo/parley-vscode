@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.37.0
+
+### Changed — professional monochrome icons in the composer
+
+- Replaced the composer bar's colorful emoji with clean, monochrome **line icons** (Lucide/Feather style, theme-colored) — Upload, Add context, Browse the web, Attach, Mic, Voice mode, Screenshot, Record, Computer control, Settings, and Regenerate. Mic/record now show state via the red pulse rather than swapping to an emoji.
+
+
 ## 1.36.4
 
 ### Changed — larger tooltip text
