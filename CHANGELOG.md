@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.42.1
+
+### Fixed — 📷 screenshot did nothing (no monitor picker)
+
+- Clicking 📷 only focused the composer and never showed the monitor picker. Root cause: monitor enumeration (`Screen::AllScreens`) returns an empty list when the PowerShell script is piped over stdin, so Parley thought there were 0 monitors and silently fell back. `listMonitors` and `captureMonitor` now run via `-File` (the same reliable path the picker uses), so the per-monitor overlays appear and the chosen screen is captured.
+
+
 ## 1.42.0
 
 ### New — the Parley Design canvas has its own chat

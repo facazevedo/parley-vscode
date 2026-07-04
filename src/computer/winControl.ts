@@ -224,9 +224,10 @@ export function parseMonitors(stdout: string): Monitor[] {
   return monitors;
 }
 
-/** Enumerate physical monitors (Windows only). */
+/** Enumerate physical monitors (Windows only). Must run via -File: Screen::AllScreens
+ *  returns an empty list when the script is piped through stdin (`-Command -`). */
 export async function listMonitors(): Promise<Monitor[]> {
-  return parseMonitors(await runPowerShell(ENUMERATE_SCRIPT, {}, 8000));
+  return parseMonitors(await runPowerShellFile(ENUMERATE_SCRIPT, {}, 8000));
 }
 
 const CAPTURE_REGION_SCRIPT = `
@@ -252,14 +253,19 @@ Write-Output "$x $y $w $h $sw $sh"
 Write-Output ([Convert]::ToBase64String($ms.ToArray()))
 `;
 
-/** Capture exactly one monitor's bounds, downscaled to <=1280px wide. */
+/** Capture exactly one monitor's bounds, downscaled to <=1280px wide. Runs via -File for
+ *  the same reason as listMonitors — reliable screen access outside a stdin context. */
 export async function captureMonitor(m: Monitor): Promise<Screenshot> {
-  const out = await runPowerShell(CAPTURE_REGION_SCRIPT, {
-    PARLEY_CAP_X: String(m.x),
-    PARLEY_CAP_Y: String(m.y),
-    PARLEY_CAP_W: String(m.w),
-    PARLEY_CAP_H: String(m.h)
-  });
+  const out = await runPowerShellFile(
+    CAPTURE_REGION_SCRIPT,
+    {
+      PARLEY_CAP_X: String(m.x),
+      PARLEY_CAP_Y: String(m.y),
+      PARLEY_CAP_W: String(m.w),
+      PARLEY_CAP_H: String(m.h)
+    },
+    15000
+  );
   const nl = out.indexOf('\n');
   const dims = out.slice(0, nl).trim().split(/\s+/).map(Number);
   const base64 = out.slice(nl + 1).trim();
