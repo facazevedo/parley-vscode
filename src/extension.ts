@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import { registerAskSelectionCommand } from './commands/askSelection';
 import type { CommandDependencies } from './commands/common';
 import { registerExplainFileCommand } from './commands/explainFile';
+import { registerAddDocsCommand } from './commands/addDocs';
+import { registerParleyCodeActions } from './commands/parleyCodeActions';
 import { registerFixDiagnosticsCommand } from './commands/fixDiagnostics';
 import { registerGenerateCommitMessageCommand } from './commands/generateCommitMessage';
 import { registerReviewBranchCommand } from './commands/reviewBranch';
@@ -273,6 +275,8 @@ export function activate(context: vscode.ExtensionContext): void {
   registerExplainFileCommand(context, commandDeps);
   registerRefactorSelectionCommand(context, commandDeps);
   registerGenerateTestsCommand(context, commandDeps);
+  registerAddDocsCommand(context, commandDeps);
+  registerParleyCodeActions(context);
   registerFixDiagnosticsCommand(context, commandDeps);
   registerSuggestTerminalCommand(context, commandDeps);
   registerGenerateImageCommand(context, commandDeps);

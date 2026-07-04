@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.46.0
+
+### Code actions: Add Docs, selection-aware Explain, Ctrl+. menu
+
+- New command "Parley: Add Docs" (right-click submenu + Ctrl+. menu) adds idiomatic doc comments (JSDoc/docstrings) to the selection or file without changing behavior.
+- "Explain" now explains your selection when you have one, instead of always explaining the whole file.
+- Parley selection commands (Refactor / Edit / Generate tests / Add docs / Explain) now appear in the Ctrl+. lightbulb (Refactor) menu when text is selected, not just the right-click submenu.
+
+
 ## 1.45.0
 
 ### Generate PR Description
