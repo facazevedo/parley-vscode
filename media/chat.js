@@ -1964,9 +1964,22 @@ import hljs from 'highlight.js/lib/common';
   if (browseWebBtn) {
     browseWebBtn.addEventListener('click', () => insertAtPrompt('@browser '));
   }
+  let artifactCount = 0; // # of previewable artifacts in the latest turn (from state)
   const designBtn = $('designBtn');
   if (designBtn) {
-    designBtn.addEventListener('click', () => vscode.postMessage({ type: 'openArtifacts' }));
+    designBtn.addEventListener('click', () => {
+      if (artifactCount > 0) {
+        vscode.postMessage({ type: 'openArtifacts' }); // open the live preview
+        return;
+      }
+      // Nothing to preview yet — kick off a design request instead of a dead-end notice.
+      if (!prompt.value.trim()) {
+        prompt.value = 'Design a ';
+      }
+      prompt.focus();
+      prompt.setSelectionRange(prompt.value.length, prompt.value.length);
+      prompt.dispatchEvent(new Event('input'));
+    });
   }
   const slashBtn = $('slashBtn');
   if (slashBtn) {
@@ -3503,10 +3516,10 @@ import hljs from 'highlight.js/lib/common';
       // Icon is a constant SVG now; only the tooltip reflects the archived state.
       archiveCurrentBtn.title = convArchived ? 'Unarchive this conversation' : 'Archive this conversation';
     }
+    artifactCount = (msg.artifacts || []).length;
     if (artifactBtn) {
-      const n = (msg.artifacts || []).length;
-      artifactBtn.style.display = n ? '' : 'none';
-      artifactBtn.title = n ? 'Open design preview (' + n + ')' : 'Open design preview';
+      artifactBtn.style.display = artifactCount ? '' : 'none';
+      artifactBtn.title = artifactCount ? 'Open design preview (' + artifactCount + ')' : 'Open design preview';
     }
 
     stopBtn.style.display = msg.busy ? '' : 'none';

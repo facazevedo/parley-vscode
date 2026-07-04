@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.40.5
+
+### Changed — design button prefills a request when empty
+
+- Clicking the composer 🎨 design button when there is nothing to preview now prefills "Design a " in the composer and focuses it (instead of a dead-end notice), so it kicks off a UI. If a preview already exists it opens the canvas as before; an existing draft is never overwritten.
+
+
 ## 1.40.4
 
 ### Changed — smaller slash keycap
