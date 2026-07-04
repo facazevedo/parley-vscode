@@ -357,6 +357,23 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private currentArtifacts: Artifact[] = [];
   // Last artifact id auto-opened in the design canvas (so it opens once per new design).
   private autoOpenedArtifactId?: string;
+  /** The Parley Design chat runs a tool-less streamed turn to iterate an artifact — its own
+   *  conversation, separate from the main chat. Bound so it can be handed to ArtifactPanel. */
+  private readonly runDesignTurn = (
+    messages: readonly ChatMessage[],
+    systemExtra: string,
+    opts: { onToken?: (delta: string) => void; signal?: AbortSignal }
+  ): Promise<ChatResponse> =>
+    this.getProvider().sendMessage(
+      {
+        prompt: messages[messages.length - 1]?.content ?? '',
+        messages,
+        context: [],
+        agentId: this.selectedAgentId || this.getSettings().defaultAgent,
+        systemExtra
+      },
+      { onToken: opts.onToken, signal: opts.signal }
+    );
   // Workspace file/folder candidates for the @-mention autocomplete (short TTL so
   // per-keystroke queries don't re-walk the workspace).
   private mentionCache?: { at: number; files: string[]; dirs: string[] };
@@ -774,7 +791,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         return;
       case 'openArtifacts':
         if (this.currentArtifacts.length > 0) {
-          ArtifactPanel.show(this.extensionUri, this.currentArtifacts);
+          ArtifactPanel.show(this.extensionUri, this.currentArtifacts, this.runDesignTurn);
         } else {
           void vscode.window.showInformationMessage(
             'Parley: no preview yet — ask for a UI (HTML or SVG) and it will open in the design canvas.'
@@ -4135,7 +4152,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       const latestId = artifacts[artifacts.length - 1].id;
       if (this.autoOpenedArtifactId !== latestId) {
         this.autoOpenedArtifactId = latestId;
-        ArtifactPanel.show(this.extensionUri, artifacts);
+        ArtifactPanel.show(this.extensionUri, artifacts, this.runDesignTurn);
       }
     }
   }

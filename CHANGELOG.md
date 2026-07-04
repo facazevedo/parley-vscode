@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.42.0
+
+### New — the Parley Design canvas has its own chat
+
+- The **Parley Design** panel now hosts a **separate design chat**, independent from the main Parley chat. Type changes there ("make the header bigger", "use a dark theme") and it iterates the *current* artifact — each reply becomes a new version in place, without touching your main conversation.
+- It runs a focused, tool-less turn on your selected model (the current artifact code is given as context; the model returns the full updated artifact). Streams live, with a Stop button, and works for HTML/SVG/React alike.
+- The panel is now message-driven (set once, updated via messages), so new versions refresh the preview without wiping the design-chat log.
+
+
 ## 1.41.0
 
 ### New — design canvas opens automatically
