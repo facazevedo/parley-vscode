@@ -744,7 +744,12 @@ frontmatter‑less (or `alwaysApply: true`) rules always apply.
 | `Parley: Explain Current File`                  | Explain the active file                                                            |
 | `Parley: Refactor Selection`                    | Refactor the selection (diff‑reviewed)                                             |
 | `Parley: Generate Tests`                        | Generate tests for the current file                                                |
+| `Parley: Generate Tests for Uncovered Code`     | Run coverage, then write tests for the current file's uncovered lines (trusted ws) |
 | `Parley: Add Docs`                              | Add idiomatic doc comments to the selection/file (also in the `Ctrl+.` menu)       |
+| `Parley: Diagram This`                          | Render a Mermaid diagram (structure/class/sequence/deps) of the file inline        |
+| `Parley: Predict Next Edit`                     | Predict & diff-review your likely next edit from recent edits (`Ctrl+Alt+N`)       |
+| `Parley: Triage TODOs`                          | Scan for TODO/FIXME/HACK/XXX markers and tackle one                                |
+| `Parley: Audit Dependencies`                    | Run npm/pnpm/yarn audit and explain the findings + remediation                     |
 | `Parley: Fix Diagnostics`                       | Fix reported problems minimally (also "Fix with Parley" in the `Ctrl+.` lightbulb) |
 | `Parley: Fix Failing Tests`                     | Run the test suite; on failure, fix and re-run via `run_tests` until green          |
 | `Parley: Fix Last Terminal Command`             | Send the last failed terminal command + output to the chat for a fix               |

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.63.0
+
+### Docs
+
+- README command reference updated for the recently added commands: Diagram This, Predict Next Edit, Triage TODOs, Audit Dependencies, and Generate Tests for Uncovered Code.
+
+
 ## 1.62.0
 
 ### Predict Next Edit
