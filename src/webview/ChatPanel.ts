@@ -405,6 +405,16 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       getSubagentTypes: () => this.subagentTypes,
       applyUsage: (tokens, cost) => this.accrueUsage(tokens, cost),
       showImage: (dataUri, label) => this.showGeneratedImage(dataUri, label),
+      captureScreen: async () => {
+        const backend = resolveBackend(
+          (this.getSettings().computerUseBackend as BackendPref) || 'auto',
+          this.globalStorageUri.fsPath
+        );
+        if (!backend) {
+          return undefined;
+        }
+        return (await backend.captureScreen()).base64;
+      },
       post: (m) => this.post(m)
     });
     this.turns = new AgentTurnRunner({
@@ -1766,11 +1776,14 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         ? `This is a MULTI-ROOT workspace (folders: ${folders.map((f) => f.name).join(', ')}). Tool paths may target any root — prefix with the folder name (e.g. "${folders[1].name}/src/…") when the first root isn't meant. run_command executes in the FIRST root (${folders[0].name}); use "cd <folder> && …" for the others.`
         : undefined;
     // Always-on: how to produce figures. Applies in every mode (Chat included).
+    const agentTools = this.mode !== 'chat' && this.mode !== 'plan';
     const figuresNote =
       'Producing figures: when the user asks for a DIAGRAM (flowchart, sequence, class, ER, state, gantt, mind map, architecture), output a ```mermaid fenced code block — Parley renders it inline as a diagram. Use this for anything with precise text/structure.' +
-      (this.mode !== 'chat' && this.mode !== 'plan'
-        ? ' For illustrative pictures/logos/mockups instead, call the generate_image tool.'
-        : '');
+      (agentTools ? ' For illustrative pictures/logos/mockups, call the generate_image tool.' : '') +
+      // Screen capture: agents have a tool; chat mode points the user at the command/button.
+      (agentTools
+        ? ' If the user asks you to take/paste a screenshot of their screen or monitor, call the capture_screen tool — you CAN do this, do not refuse.'
+        : ' If the user asks to paste a screenshot of their screen, tell them to run the `/screenshot` command or click the 📷 button — do not just say you cannot.');
     return (
       [env, stylePrompt || undefined, modeNote, multiRootNote, rulesSection, memorySection, figuresNote]
         .filter(Boolean)

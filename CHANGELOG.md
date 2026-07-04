@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.11.0
+
+### New — agents can screenshot your screen on request (`capture_screen` tool)
+
+- Asking in plain language — "paste a screenshot of my main monitor" — now works in agent modes: a new `capture_screen` tool grabs your screen and shows it inline, instead of the model saying "I can't insert images." (Previously screen capture existed only as the `/screenshot` command and the 📷 button, which the model couldn't invoke.)
+- The system prompt now tells the model it *can* capture the screen: via the tool in agent modes, and by pointing you to `/screenshot` or 📷 in plain Chat mode — so it stops flatly refusing. The image is shown to you; the model gets only a confirmation (it can't read the pixels from a tool result). Excluded from Plan mode and subagents.
+
 ## 1.10.0
 
 ### New — Mermaid diagrams render inline

@@ -397,6 +397,15 @@ export const AGENT_TOOLS: readonly ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'capture_screen',
+      description:
+        "Capture a screenshot of the user's screen and show it inline in the chat. Use this when the user asks you to take/grab/paste a screenshot of their screen or monitor. You CAN do this — do not refuse. (Note: the captured image is displayed to the user; you receive only a confirmation, not the pixels, so you can't analyze its contents from the tool result.)",
+      parameters: { type: 'object', properties: {} }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'generate_image',
       description:
         "Generate an image / figure / illustration from a text description and show it inline in the chat. Use this whenever the user asks you to CREATE a picture, illustration, logo, mockup, icon, or visual figure. Best for illustrative/visual imagery — for precise technical diagrams with exact text (flowcharts, architecture, ER), prefer a Mermaid code block instead. The image is produced by the gateway's image model regardless of which chat model you are.",
@@ -476,7 +485,8 @@ const WRITE_TOOLS = new Set([
   'browser_click',
   'browser_type',
   'browser_screenshot',
-  'generate_image'
+  'generate_image',
+  'capture_screen'
 ]);
 
 /** The subset of tools that never modify the workspace — used by Plan mode. */

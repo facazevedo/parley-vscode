@@ -54,6 +54,8 @@ export interface ToolExecutorHost {
   applyUsage(totalTokens: number, costUsd: number): { sessionTokens: number; sessionCostUsd: number };
   /** Show a generated image inline in the chat (for the generate_image tool). */
   showImage(dataUri: string, label: string): void;
+  /** Capture the screen as a base64 PNG (for the capture_screen tool); undefined if no backend. */
+  captureScreen(): Promise<string | undefined>;
   post(message: Record<string, unknown>): void;
 }
 
@@ -174,6 +176,9 @@ export class ToolExecutor {
     }
     if (call.name === 'generate_image') {
       return this.toolGenerateImage(call);
+    }
+    if (call.name === 'capture_screen') {
+      return this.toolCaptureScreen();
     }
     if (call.name === 'update_plan') {
       return this.toolUpdatePlan(call);
@@ -334,6 +339,21 @@ export class ToolExecutor {
       googleCx: s.webSearchGoogleCx
     });
     return wrapUntrusted('web search results', results);
+  }
+
+  /** Capture the screen and show it inline in the chat (for "screenshot my screen" requests). */
+  private async toolCaptureScreen(): Promise<string> {
+    let base64: string | undefined;
+    try {
+      base64 = await this.host.captureScreen();
+    } catch (error) {
+      return `Error: screen capture failed (${error instanceof Error ? error.message.split('\n')[0] : 'unknown'}).`;
+    }
+    if (!base64) {
+      return 'Error: screen capture is unavailable here (needs the built-in Windows backend or nut.js). Tell the user they can also run the /screenshot command or click the 📷 button.';
+    }
+    this.host.showImage(`data:image/png;base64,${base64}`, 'screenshot');
+    return 'Captured the screen and displayed it in the chat. The user can see it; you cannot read its pixels from this result.';
   }
 
   /** Generate an image from a prompt and show it inline in the chat. */
