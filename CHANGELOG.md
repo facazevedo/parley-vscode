@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.51.0
+
+### Inline completion polish
+
+- Per-language opt-out via parley.inlineCompletion.disabledLanguages (e.g. turn it off in markdown/plaintext).
+- Configurable context window: parley.inlineCompletion.maxPrefixChars and maxSuffixChars.
+- Small LRU cache of recent completions, so a cursor bounce or backspace-and-retype to a spot already completed is served instantly instead of round-tripping again.
+- Suffix-overlap trimming: drops a trailing closing brace/paren/semicolon that the text right after the cursor already has, so completions no longer double a closer.
+
+
 ## 1.50.0
 
 ### Multi-file review opens one native diff editor

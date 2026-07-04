@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "1.50.0",
+  "version": "1.51.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -876,6 +876,28 @@
           "default": 350,
           "minimum": 0,
           "markdownDescription": "Idle delay before requesting an inline completion, in milliseconds."
+        },
+        "parley.inlineCompletion.disabledLanguages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "Language IDs where inline completion is turned off (e.g. `[\"markdown\", \"plaintext\"]`). A file's language ID is shown in the status bar."
+        },
+        "parley.inlineCompletion.maxPrefixChars": {
+          "type": "number",
+          "default": 2000,
+          "minimum": 200,
+          "maximum": 8000,
+          "markdownDescription": "How many characters of code *before* the cursor are sent as context. Larger = more context, slightly slower/costlier."
+        },
+        "parley.inlineCompletion.maxSuffixChars": {
+          "type": "number",
+          "default": 1000,
+          "minimum": 100,
+          "maximum": 4000,
+          "markdownDescription": "How many characters of code *after* the cursor are sent as context."
         },
         "parley.video.maxFrames": {
           "type": "number",
