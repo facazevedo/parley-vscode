@@ -226,8 +226,12 @@ Open the **`Mode ▾`** popover (or set `parley.defaultMode`):
 | **Auto**               | Agent decides and applies edits automatically.                                                                                                                                    |
 | **Full access** ⚠      | **CAUTION** — auto‑applies edits **and runs shell commands without asking**.                                                                                                      |
 
-Shell commands require confirmation in **every mode except Full access**. Edits are
-always checkpointed (`Parley: Revert Last Edit` / `Revert All Edits`).
+Shell commands require confirmation in **every mode except Full access** (and in an
+**untrusted workspace**, even Full access asks). Edits are always checkpointed
+(`Parley: Revert Last Edit` / `Revert All Edits`). Note that the **read/search,
+`fetch_url`, `web_search`, `browser`, and `capture_screen` tools run automatically in
+every agent mode** — "Ask before edits" gates *edits*, not those. Restrict network egress
+with `parley.allowedFetchHosts` if you want an allowlist for `fetch_url`/`browser`.
 
 Edits **preserve each file's on-disk format** — a CRLF file stays CRLF (not flipped
 to LF), and a UTF-16/BOM file keeps its encoding instead of being corrupted to UTF-8 —
@@ -790,6 +794,7 @@ frontmatter‑less (or `alwaysApply: true`) rules always apply.
 | `parley.webSearch.provider`               | `duckduckgo`                    | `off`/`duckduckgo`/`google`/`tavily`                                     |
 | `parley.webSearch.apiKey`                 | `""`                            | Key for Google/Tavily                                                    |
 | `parley.webSearch.googleCx`               | `""`                            | Google Programmable Search engine id                                     |
+| `parley.allowedFetchHosts`                | `[]`                            | Egress allowlist for `fetch_url`/`browser_navigate` (empty = any public host) |
 | `parley.codebaseSearch.enabled`           | `true`                          | Enable `@codebase`                                                       |
 | `parley.codebaseSearch.provider`          | `lexical`                       | `lexical` or `local` (on‑device semantic)                                |
 | `parley.codebaseSearch.maxFiles`          | `4`                             | Files `@codebase` includes                                               |

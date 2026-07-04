@@ -24,7 +24,13 @@ import { isMcpTool } from '../mcp/naming';
 import type { ParleyProvider } from '../parley/ParleyProvider';
 import { estimateCostUsd } from '../parley/pricing';
 import { resolveThinking, type ThinkingLevel } from '../parley/thinking';
-import { SUBAGENT_TOOLS, assertInsideWorkspace, resolveAcrossRoots, runAgentTool } from '../parley/tools';
+import {
+  SUBAGENT_TOOLS,
+  assertInsideWorkspace,
+  isFetchHostAllowed,
+  resolveAcrossRoots,
+  runAgentTool
+} from '../parley/tools';
 import type { ToolCall } from '../parley/types';
 import { rememberFact } from '../context/projectMemory';
 import { wrapUntrusted } from '../parley/untrusted';
@@ -329,8 +335,19 @@ export class ToolExecutor {
     }
     const b = this.host.browser;
     switch (call.name) {
-      case 'browser_navigate':
-        return b.navigate(String(a.url ?? ''));
+      case 'browser_navigate': {
+        const navUrl = String(a.url ?? '');
+        let navHost = '';
+        try {
+          navHost = new URL(navUrl).hostname;
+        } catch {
+          return 'Error: invalid URL.';
+        }
+        if (!isFetchHostAllowed(navHost)) {
+          return `Error: ${navHost} is not in the parley.allowedFetchHosts allowlist.`;
+        }
+        return b.navigate(navUrl);
+      }
       case 'browser_read':
         // Rendered page text is untrusted — frame it as data, not instructions.
         return wrapUntrusted('rendered web page', await b.read(a.selector ? String(a.selector) : undefined));

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.57.0
+
+### Opt-in network egress allowlist + clearer mode wording
+
+- New setting **parley.allowedFetchHosts**: an optional allowlist for the agent's fetch_url and browser_navigate tools. Empty (default) keeps current behavior — any public host is reachable (private/loopback addresses are always SSRF-blocked). List hosts (e.g. ["docs.python.org","github.com"]) and the agent can only reach those hosts and their subdomains — a guardrail against a prompt-injected agent exfiltrating data to an arbitrary domain. It is a restricted (trusted-workspace-only) setting, so a malicious repo cannot weaken or redirect it.
+- The **"Ask before edits"** mode description now makes clear it gates *file edits* — read/search, fetch_url, web_search, browser, and capture_screen still run automatically in every agent mode. README updated to match.
+
+
 ## 1.56.0
 
 ### Security hardening (audit fixes)

@@ -140,3 +140,23 @@ test('assertInsideWorkspace: real paths under the root pass, paths outside fail,
   assert.equal(await assertInsideWorkspace(uri(path.join(outside, 'f.txt')), rootUri), false);
   assert.equal(await assertInsideWorkspace({ scheme: 'untitled', fsPath: '/x' } as never, rootUri), true);
 });
+
+test('hostMatchesAllowlist: empty list allows any host', () => {
+  assert.equal(tools.hostMatchesAllowlist('example.com', []), true);
+  assert.equal(tools.hostMatchesAllowlist('evil.attacker.io', []), true);
+});
+
+test('hostMatchesAllowlist: exact and subdomain match, boundary-safe', () => {
+  const allow = ['docs.python.org', 'github.com'];
+  assert.equal(tools.hostMatchesAllowlist('github.com', allow), true, 'exact');
+  assert.equal(tools.hostMatchesAllowlist('api.github.com', allow), true, 'subdomain');
+  assert.equal(tools.hostMatchesAllowlist('GitHub.com', allow), true, 'case-insensitive');
+  assert.equal(tools.hostMatchesAllowlist('notgithub.com', allow), false, 'not a subdomain boundary');
+  assert.equal(tools.hostMatchesAllowlist('github.com.evil.io', allow), false, 'suffix trick blocked');
+  assert.equal(tools.hostMatchesAllowlist('example.com', allow), false, 'unlisted host');
+});
+
+test('hostMatchesAllowlist: entries are trimmed and leading dots stripped', () => {
+  assert.equal(tools.hostMatchesAllowlist('api.example.com', ['  .example.com  ']), true);
+  assert.equal(tools.hostMatchesAllowlist('example.com', ['', '   ']), true, 'all-blank list = allow all');
+});

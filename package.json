@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "1.56.0",
+  "version": "1.57.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -49,6 +49,7 @@
         "parley.webSearch.provider",
         "parley.webSearch.apiKey",
         "parley.webSearch.googleCx",
+        "parley.allowedFetchHosts",
         "parley.computerUse.enabled"
       ]
     }
@@ -813,6 +814,14 @@
           "type": "string",
           "default": "",
           "markdownDescription": "Google Programmable Search Engine ID (`cx`), required when `parley.webSearch.provider` is `google`."
+        },
+        "parley.allowedFetchHosts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "Optional egress allowlist for the agent's `fetch_url` and `browser_navigate` tools. **Empty (default) = any public host is reachable** (SSRF-blocked private/loopback addresses are always refused). When you list hosts (e.g. `[\"docs.python.org\", \"github.com\"]`), the agent can only reach those hosts and their subdomains — a guardrail against a prompt-injected agent exfiltrating data to an arbitrary domain. `web_search` still uses its configured provider."
         },
         "parley.codebaseSearch.enabled": {
           "type": "boolean",

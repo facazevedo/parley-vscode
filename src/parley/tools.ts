@@ -1180,6 +1180,31 @@ function httpsGet(target: string, signal: AbortSignal): Promise<HttpResult> {
   });
 }
 
+/**
+ * Opt-in egress allowlist for fetch_url / browser_navigate. Empty (default) = any public
+ * host is allowed. When configured, a host is allowed only if it equals a listed host or
+ * is a subdomain of one. Reads the setting live; it's a restricted config, so an untrusted
+ * workspace can't weaken or redirect it.
+ */
+/** Pure host↔allowlist match (exported for tests): a host is allowed when the list is
+ *  empty, equals an entry, or is a subdomain of one. Subdomain match is boundary-safe
+ *  ("notexample.com" does NOT match "example.com"). */
+export function hostMatchesAllowlist(hostname: string, rawAllow: readonly string[]): boolean {
+  const allow = rawAllow.map((h) => String(h).trim().toLowerCase().replace(/^\.+/, '')).filter((h) => h.length > 0);
+  if (allow.length === 0) {
+    return true; // no allowlist configured → any public host (SSRF guard still applies)
+  }
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  return allow.some((h) => host === h || host.endsWith(`.${h}`));
+}
+
+export function isFetchHostAllowed(hostname: string): boolean {
+  return hostMatchesAllowlist(
+    hostname,
+    vscode.workspace.getConfiguration('parley').get<string[]>('allowedFetchHosts', []) ?? []
+  );
+}
+
 async function fetchUrl(url: string): Promise<string> {
   if (!/^https:\/\//i.test(url)) {
     return 'Error: only https:// URLs are allowed.';
@@ -1193,6 +1218,9 @@ async function fetchUrl(url: string): Promise<string> {
     for (let hop = 0; hop <= MAX_FETCH_REDIRECTS; hop += 1) {
       if (!(await isAllowedFetchDestination(current))) {
         return 'Error: refusing to fetch a private, loopback, or link-local address.';
+      }
+      if (!isFetchHostAllowed(new URL(current).hostname)) {
+        return `Error: ${new URL(current).hostname} is not in the parley.allowedFetchHosts allowlist.`;
       }
       const response = await httpsGet(current, controller.signal);
       if (response.status >= 300 && response.status < 400 && response.location) {
