@@ -48,7 +48,7 @@ export function buildChatHtml(webview: vscode.Webview, extensionUri: vscode.Uri)
       <button id="refresh" title="Refresh model list" aria-label="Refresh model list">↻</button>
     </div>
     <div id="convTitleBar" class="convtitlebar">
-      <span id="convTitleText" class="convtitle-text" title="Current conversation — click to rename"></span>
+      <span id="convTitleText" class="convtitle-text" title="Click to see past conversations (✎ to rename)"></span>
       <input id="convTitleInput" class="convtitle-input" type="text" maxlength="120" style="display:none" aria-label="Conversation title" />
     </div>
     <div id="banner" class="banner"></div>
@@ -63,7 +63,7 @@ export function buildChatHtml(webview: vscode.Webview, extensionUri: vscode.Uri)
           <button type="button" id="historyArchived" class="hp-archbtn" title="Show archived conversations" aria-pressed="false">Archived</button>
           <button type="button" id="historyClose" class="hp-close" title="Close" aria-label="Close history">✕</button>
         </div>
-        <input type="text" id="historyFilter" class="hp-filter" placeholder="Filter conversations…" aria-label="Filter conversations">
+        <input type="text" id="historyFilter" class="hp-filter" placeholder="Search past conversations…" aria-label="Search past conversations">
         <div id="historyList" class="hp-list"></div>
       </div>
       <div id="menuPanel" class="historypanel menupanel" style="display:none" tabindex="-1" role="menu"></div>

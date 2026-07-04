@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.24.0
+
+### New — Codex-style conversation switcher
+
+- **Click the conversation name** (the title line under the toolbar, now with a ⌄ caret) to open your **past conversations** — a searchable list with each conversation's **relative "last chat" time** (9m, 2h, 1d, 2w…) right-aligned, just like Codex. Hover a row for rename/archive/delete.
+- The history search box is now labeled **"Search past conversations…"**.
+- Renaming stays on the **✎** button; clicking the name browses instead of edits.
+
 ## 1.23.2
 
 ### Fixed — multi-monitor screenshot picker did nothing

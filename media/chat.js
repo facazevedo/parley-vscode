@@ -1717,7 +1717,9 @@ import hljs from 'highlight.js/lib/common';
     editTitleBtn.addEventListener('click', () => (editingTitle() ? endTitleEdit(true) : startTitleEdit()));
   }
   if (convTitleText) {
-    convTitleText.addEventListener('click', () => startTitleEdit());
+    // Codex-style: clicking the conversation name opens the past-conversations list
+    // (search + relative dates). Renaming is on the ✎ button.
+    convTitleText.addEventListener('click', () => toggleHistory());
   }
   if (convTitleInput) {
     convTitleInput.addEventListener('keydown', (e) => {
@@ -2216,6 +2218,20 @@ import hljs from 'highlight.js/lib/common';
       openHistory();
     }
   }
+  // Codex-style compact "time since last chat": 9m, 52m, 2h, 13h, 1d, 2w, 3mo.
+  function fmtRelative(iso) {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) {
+      return '';
+    }
+    const s = Math.max(0, (Date.now() - d.getTime()) / 1000);
+    if (s < 60) return Math.floor(s) + 's';
+    if (s < 3600) return Math.floor(s / 60) + 'm';
+    if (s < 86400) return Math.floor(s / 3600) + 'h';
+    if (s < 604800) return Math.floor(s / 86400) + 'd';
+    if (s < 2592000) return Math.floor(s / 604800) + 'w';
+    return Math.floor(s / 2592000) + 'mo';
+  }
   function fmtWhen(iso) {
     const d = new Date(iso);
     return isNaN(d.getTime()) ? '' : d.toLocaleString();
@@ -2316,9 +2332,7 @@ import hljs from 'highlight.js/lib/common';
           meta.append(badge);
         }
         meta.append(
-          document.createTextNode(
-            `${it.archived ? '🗄 ' : ''}${fmtWhen(it.savedAt)} · ${it.events} events${it.model ? ' · ' + it.model : ''}`
-          )
+          document.createTextNode(`${it.archived ? '🗄 ' : ''}${it.events} events${it.model ? ' · ' + it.model : ''}`)
         );
         main.append(title, meta);
         if (it.snippet) {
@@ -2331,6 +2345,13 @@ import hljs from 'highlight.js/lib/common';
           e.preventDefault();
           selectHistory(it);
         });
+
+        // Codex-style relative "last chat" time, right-aligned (hidden on hover so the
+        // rename/archive/delete actions can take its place).
+        const when = document.createElement('span');
+        when.className = 'hp-when';
+        when.textContent = fmtRelative(it.savedAt);
+        when.title = fmtWhen(it.savedAt);
 
         const actions = document.createElement('div');
         actions.className = 'hp-actions';
@@ -2362,7 +2383,7 @@ import hljs from 'highlight.js/lib/common';
           row.classList.add('active'); // keep the actions visible while the confirm is armed
         }
 
-        row.append(main, actions);
+        row.append(main, when, actions);
         return row;
       })
     );
