@@ -23,6 +23,7 @@ import { resolveBackend, type BackendPref, type ControlBackend } from '../comput
 import { installNutJs, isNutInstalled } from '../computer/nutControl';
 import { looksLikeScreenshotRequest, wantsPixelCoordinates } from '../computer/screenshotIntent';
 import { annotateWithGrid } from '../computer/gridOverlay';
+import { listMonitors, captureMonitor, pickMonitor, type Monitor } from '../computer/winControl';
 import { isSensitiveFile } from '../context/sensitiveFileFilter';
 import { loadIgnoreMatcher, type IgnoreMatcher } from '../context/ignoreRules';
 import type { CheckpointStore } from '../diff/checkpoints';
@@ -107,6 +108,8 @@ interface ChatPanelMessage {
     | 'attachFiles'
     | 'openSettings'
     | 'pasteFile'
+    | 'screenshotAttach'
+    | 'cancelScreenshotPick'
     | 'removeAttachment'
     | 'export'
     | 'compact'
@@ -341,6 +344,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private unreadTurns = 0;
   private embeddingIndex?: EmbeddingIndex; // lazy local semantic index for @codebase
   private attachments: PendingAttachment[] = [];
+  // In-flight multi-monitor picker (Windows); aborted by the Stop button / Esc-in-chat.
+  private screenshotPick?: AbortController;
   // Workspace file/folder candidates for the @-mention autocomplete (short TTL so
   // per-keystroke queries don't re-walk the workspace).
   private mentionCache?: { at: number; files: string[]; dirs: string[] };
@@ -825,6 +830,12 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         return;
       case 'pasteFile':
         await this.addPastedFile(message.dataUri, message.name);
+        return;
+      case 'screenshotAttach':
+        await this.captureScreenAttach();
+        return;
+      case 'cancelScreenshotPick':
+        this.screenshotPick?.abort();
         return;
       case 'export':
         await this.exportConversation(asExportFormat(message.fmt));
@@ -2383,32 +2394,69 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   }
 
   /**
-   * `/screenshot` — capture the whole screen (no OS picker) and attach it to the
-   * composer as an image, ready to ask about. Read-only: unlike `/computer` this
-   * only grabs pixels, so it needs no mouse/keyboard consent — just a capture
-   * backend (nut.js if installed, else the built-in Windows one). For a specific
-   * window/region, the 📷 button (OS picker) is the better tool.
+   * `/screenshot` — same monitor-aware capture as the 📷 button (auto on one monitor,
+   * click-a-screen on many), attached to the composer ready to ask about. Read-only:
+   * unlike `/computer` it only grabs pixels, so it needs no mouse/keyboard consent.
    */
   public async startScreenshot(): Promise<void> {
+    await this.captureScreenAttach();
+  }
+
+  /**
+   * Monitor-aware screenshot for the 📷 button and /screenshot. On Windows: one monitor →
+   * capture it instantly; many → show a click target on each screen with a 5 s countdown
+   * (Esc / timeout / Stop cancels). Elsewhere (or if enumeration fails) → fall back to the
+   * webview OS picker (getDisplayMedia). Either way the image is attached, not sent.
+   */
+  public async captureScreenAttach(): Promise<void> {
     const note = async (text: string): Promise<void> => {
       this.history.push({ role: 'assistant', content: text, createdAt: new Date().toISOString() });
       this.appendTranscript({ kind: 'note', text, at: new Date().toISOString() });
       await this.postState();
     };
-    const backend = resolveBackend(
-      (this.getSettings().computerUseBackend as BackendPref) || 'auto',
-      this.globalStorageUri.fsPath
-    );
-    if (!backend) {
-      await note(
-        '📸 Screen capture needs the built-in Windows backend or nut.js installed. On macOS/Linux, use the 📷 button (which uses the OS picker), or enable computer use once to install nut.js.'
-      );
+    const attach = async (m: Monitor): Promise<void> => {
+      const shot = await captureMonitor(m);
+      await this.addPastedFile(`data:image/png;base64,${shot.base64}`, 'screen.png');
+      await note('📸 Captured your screen and attached it — type your question and send.');
+    };
+    // The custom monitor picker needs the built-in Windows PowerShell backend; elsewhere the
+    // webview's OS picker (getDisplayMedia) can still pick a screen or window.
+    if (process.platform !== 'win32') {
+      this.post({ type: 'screenshotFallback' });
+      return;
+    }
+    let monitors: Monitor[] = [];
+    try {
+      monitors = await listMonitors();
+    } catch {
+      monitors = [];
+    }
+    if (monitors.length === 0) {
+      this.post({ type: 'screenshotFallback' }); // enumeration failed — let the OS picker handle it
       return;
     }
     try {
-      const shot = await backend.captureScreen();
-      await this.addPastedFile(`data:image/png;base64,${shot.base64}`, 'screen.png');
-      await note('📸 Captured your screen and attached it — type your question and send.');
+      if (monitors.length === 1) {
+        await attach(monitors[0]);
+        return;
+      }
+      // Multiple monitors: overlay a click target on each; a 5 s countdown ticks in the chat.
+      this.screenshotPick?.abort();
+      this.screenshotPick = new AbortController();
+      const seconds = 5;
+      this.post({ type: 'screenshotCountdown', seconds, text: 'Pick a monitor to capture' });
+      let idx = -1;
+      try {
+        idx = await pickMonitor(seconds, this.screenshotPick.signal);
+      } finally {
+        this.post({ type: 'screenshotCountdownEnd' });
+        this.screenshotPick = undefined;
+      }
+      const chosen = monitors.find((m) => m.index === idx);
+      if (chosen) {
+        await attach(chosen);
+      }
+      // idx < 0 (Esc / timeout / Stop) → no attachment, no note.
     } catch (error) {
       await note(`📸 Screen capture failed: ${error instanceof Error ? error.message.split('\n')[0] : 'unknown'}.`);
     }

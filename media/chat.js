@@ -1845,6 +1845,30 @@ import hljs from 'highlight.js/lib/common';
       stream.getTracks().forEach((t) => t.stop());
     }
   }
+  // Small in-chat countdown shown while the host displays a click target on each monitor.
+  let shotCountTimer = null;
+  let shotCountLeft = 0;
+  function startShotCountdown(seconds, text) {
+    stopShotCountdown();
+    shotCountLeft = Math.max(1, Math.round(seconds));
+    setStatus('🖥 ' + text + ' — ' + shotCountLeft + 's');
+    shotCountTimer = setInterval(() => {
+      shotCountLeft -= 1;
+      if (shotCountLeft <= 0) {
+        setStatus('🖥 ' + text);
+      } else {
+        setStatus('🖥 ' + text + ' — ' + shotCountLeft + 's');
+      }
+    }, 1000);
+  }
+  function stopShotCountdown() {
+    if (shotCountTimer) {
+      clearInterval(shotCountTimer);
+      shotCountTimer = null;
+    }
+    shotCountLeft = 0;
+    setStatus('');
+  }
   async function startScreenRecording() {
     try {
       recStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
@@ -1950,7 +1974,15 @@ import hljs from 'highlight.js/lib/common';
     recMicChunks = [];
   }
   if (shotBtn) {
-    shotBtn.addEventListener('click', () => void takeScreenshot());
+    // Plain click → host-side monitor flow (auto on one screen, click-a-screen on many).
+    // Shift+click → OS picker (getDisplayMedia) for capturing a single application window.
+    shotBtn.addEventListener('click', (e) => {
+      if (e.shiftKey) {
+        void takeScreenshot();
+      } else {
+        vscode.postMessage({ type: 'screenshotAttach' });
+      }
+    });
   }
   // Computer control: if the composer already has a task, run it now; otherwise
   // prefill "/computer " and focus so the user types the task and presses Enter.
@@ -2466,6 +2498,11 @@ import hljs from 'highlight.js/lib/common';
     if (e.key === 'Escape' && lightboxEl) {
       closeLightbox();
     }
+    if (e.key === 'Escape' && shotCountTimer) {
+      // Overlay Esc is the primary cancel; this also handles the case where the chat kept focus.
+      vscode.postMessage({ type: 'cancelScreenshotPick' });
+      stopShotCountdown();
+    }
   });
 
   // ---------- selection-context pill ----------
@@ -2672,6 +2709,19 @@ import hljs from 'highlight.js/lib/common';
     if (msg.type === 'retry' || msg.type === 'status') {
       // Transient notices from the extension (retry countdowns, waiting-for-review).
       setStatus(msg.text || '');
+      return;
+    }
+    if (msg.type === 'screenshotFallback') {
+      // No native monitor picker here (non-Windows, or enumeration failed) — use the OS picker.
+      void takeScreenshot();
+      return;
+    }
+    if (msg.type === 'screenshotCountdown') {
+      startShotCountdown(msg.seconds || 5, msg.text || 'Pick a monitor to capture');
+      return;
+    }
+    if (msg.type === 'screenshotCountdownEnd') {
+      stopShotCountdown();
       return;
     }
     if (msg.type === 'queued') {

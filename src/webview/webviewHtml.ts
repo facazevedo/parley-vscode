@@ -113,7 +113,7 @@ export function buildChatHtml(webview: vscode.Webview, extensionUri: vscode.Uri)
           <button type="button" id="attach" title="Attach files or images" aria-label="Attach files or images">📎</button>
           <button type="button" id="mic" title="Voice input (click to record, click again to transcribe)" aria-label="Voice input">🎤</button>
           <button type="button" id="voiceMode" title="Voice mode: hands-free conversation (🎤 auto-sends, replies read aloud)" aria-label="Toggle voice mode">🗣</button>
-          <button type="button" id="shot" title="Attach a screenshot (pick any window or screen)" aria-label="Attach a screenshot">📷</button>
+          <button type="button" id="shot" title="Attach a screenshot — auto on one monitor, pick a screen on many (Shift+click for a single window)" aria-label="Attach a screenshot">📷</button>
           <button type="button" id="rec" title="Record your screen (frames + mic narration; click again to stop, max 60s)" aria-label="Record screen">🎥</button>
           <button type="button" id="computer" title="Computer control — let Parley drive your mouse &amp; keyboard for a task (enable parley.computerUse.enabled)" aria-label="Computer control">🖱️</button>
           <button type="button" id="settings" title="Parley settings" aria-label="Parley settings">⚙️</button>

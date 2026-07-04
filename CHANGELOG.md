@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.20.0
+
+### New — monitor-aware screenshot: auto on one screen, click-a-screen on many
+
+- Clicking **📷 Attach a screenshot** now (on Windows) skips the OS dialog: with a **single monitor** it captures that screen instantly and attaches it (not sent — ask about it, then send). With **multiple monitors** it drops a big dimmed **click target on every physical screen** — click the one you want (or press **Esc**). A small **countdown** ticks in the chat, and the pick auto-cancels after **5 seconds**.
+- **Shift+click 📷** keeps the classic OS picker for grabbing a single application window.
+- **`/screenshot`** is unified onto the same flow.
+- On macOS/Linux (or if monitor enumeration fails) it transparently falls back to the OS picker, so nothing breaks. Built on the dependency-free PowerShell/.NET backend — no nut.js needed. Monitor-JSON parsing is unit-tested (344 tests).
+
 ## 1.19.1
 
 ### Changed — context checkboxes styled with a black background
