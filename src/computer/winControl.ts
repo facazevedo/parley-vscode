@@ -1,4 +1,7 @@
 import { spawn } from 'child_process';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import type { CuAction } from './actions';
 import type { ControlBackend, CoordMap, Screenshot } from './backend';
 
@@ -57,6 +60,76 @@ function runPowerShell(
     });
     child.stdin.write(script);
     child.stdin.end();
+  });
+}
+
+/**
+ * Run a script that shows GUI windows (the monitor picker). Unlike runPowerShell, the
+ * script is written to a temp .ps1 and run with `-File`: a script piped via stdin
+ * (`-Command -`) can't pump a WinForms message loop, so `.Show()` silently no-ops and
+ * nothing appears. `-File` runs it normally, so the overlays render (windowsHide keeps
+ * PowerShell's own console hidden). The BOM makes Windows PowerShell read it as UTF-8.
+ */
+function runPowerShellFile(
+  script: string,
+  env: Record<string, string>,
+  timeoutMs: number,
+  signal?: AbortSignal
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let file: string;
+    try {
+      file = path.join(os.tmpdir(), `parley-pick-${process.pid}-${Date.now()}.ps1`);
+      fs.writeFileSync(file, '﻿' + script, 'utf8'); // BOM → PS 5.1 reads it as UTF-8
+    } catch (error) {
+      reject(error instanceof Error ? error : new Error(String(error)));
+      return;
+    }
+    const cleanup = (): void => {
+      try {
+        fs.unlinkSync(file);
+      } catch {
+        /* best-effort */
+      }
+    };
+    const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', file], {
+      env: { ...process.env, ...env },
+      windowsHide: true,
+      timeout: timeoutMs
+    });
+    let out = '';
+    let err = '';
+    let aborted = false;
+    const onAbort = (): void => {
+      aborted = true;
+      child.kill();
+    };
+    if (signal) {
+      if (signal.aborted) {
+        onAbort();
+      } else {
+        signal.addEventListener('abort', onAbort, { once: true });
+      }
+    }
+    child.stdout.on('data', (d) => (out += d.toString()));
+    child.stderr.on('data', (d) => (err += d.toString()));
+    child.on('error', (error) => {
+      cleanup();
+      reject(error);
+    });
+    child.on('close', (code) => {
+      if (signal) {
+        signal.removeEventListener('abort', onAbort);
+      }
+      cleanup();
+      if (aborted) {
+        resolve(''); // Stop / Esc-in-chat → treat as cancel
+      } else if (code === 0) {
+        resolve(out);
+      } else {
+        reject(new Error(err.trim() || `PowerShell exited with code ${code}`));
+      }
+    });
   });
 }
 
@@ -199,7 +272,7 @@ Add-Type -AssemblyName System.Windows.Forms,System.Drawing
 $secs = [int]$env:PARLEY_PICK_SECONDS
 if ($secs -le 0) { $secs = 5 }
 $screens = [System.Windows.Forms.Screen]::AllScreens
-$script:chosen = $null
+$global:parleyPick = $null
 $forms = New-Object System.Collections.ArrayList
 $labels = New-Object System.Collections.ArrayList
 $bigFont = New-Object System.Drawing.Font('Segoe UI', 34, [System.Drawing.FontStyle]::Bold)
@@ -226,17 +299,17 @@ for ($i = 0; $i -lt $screens.Count; $i++) {
   $lbl.Tag = $i
   $f.Controls.Add($lbl)
   # Bake the (validated) integer index into each handler so it doesn't rely on \$this/\$_ binding.
-  $onClick = [scriptblock]::Create("\`$script:chosen = $i")
+  $onClick = [scriptblock]::Create("\`$global:parleyPick = $i")
   $f.Add_Click($onClick)
   $lbl.Add_Click($onClick)
-  $f.Add_KeyDown({ if ($args[1].KeyCode -eq [System.Windows.Forms.Keys]::Escape) { $script:chosen = -1 } })
+  $f.Add_KeyDown({ if ($args[1].KeyCode -eq [System.Windows.Forms.Keys]::Escape) { $global:parleyPick = -1 } })
   [void]$forms.Add($f)
   [void]$labels.Add($lbl)
 }
 foreach ($f in $forms) { $f.Show() }
 if ($forms.Count -gt 0) { $forms[0].Activate() }
 $deadline = (Get-Date).AddSeconds($secs)
-while ($null -eq $script:chosen -and (Get-Date) -lt $deadline) {
+while ($null -eq $global:parleyPick -and (Get-Date) -lt $deadline) {
   [System.Windows.Forms.Application]::DoEvents()
   Start-Sleep -Milliseconds 40
   $remaining = [int][Math]::Ceiling(($deadline - (Get-Date)).TotalSeconds)
@@ -246,8 +319,8 @@ while ($null -eq $script:chosen -and (Get-Date) -lt $deadline) {
   }
 }
 foreach ($f in $forms) { $f.Close(); $f.Dispose() }
-if ($null -eq $script:chosen) { $script:chosen = -1 }
-Write-Output $script:chosen
+if ($null -eq $global:parleyPick) { $global:parleyPick = -1 }
+Write-Output $global:parleyPick
 `;
 
 /**
@@ -255,7 +328,9 @@ Write-Output $script:chosen
  * monitor index, or -1 on Esc / timeout / abort. Windows only.
  */
 export async function pickMonitor(seconds: number, signal?: AbortSignal): Promise<number> {
-  const out = await runPowerShell(
+  // Must run via -File (runPowerShellFile), not stdin `-Command -`: a stdin-piped
+  // script can't pump a WinForms message loop, so the overlays never appear.
+  const out = await runPowerShellFile(
     PICKER_SCRIPT,
     { PARLEY_PICK_SECONDS: String(Math.max(1, Math.round(seconds))) },
     Math.max(20000, (seconds + 5) * 1000),

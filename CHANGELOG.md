@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.23.2
+
+### Fixed — multi-monitor screenshot picker did nothing
+
+- Clicking 📷 on a multi-monitor PC showed no picker and attached nothing. The overlay windows are drawn by a spawned PowerShell process, but it was launched with the script piped over stdin (`-Command -`), which can't pump a WinForms message loop — so `.Show()` silently no-opped. The picker now runs from a temp `-File` script (with a UTF-8 BOM, console hidden), so the click targets actually appear. Click detection also hardened to a `$global:` variable.
+
 ## 1.23.1
 
 ### Changed — mode button text color
