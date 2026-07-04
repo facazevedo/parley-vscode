@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.9.0
+
+### New — agents can create images/figures (`generate_image` tool)
+
+- Any agent (any chat model, in an agent mode) can now **produce a figure when you ask for one**: a new `generate_image` tool takes a description, generates the image via the gateway's image model (`gpt-image-1`), and shows it **inline in the chat**. "Create a logo for this project", "illustrate this concept" — the image appears in the conversation. Image synthesis is delegated to the image model, so it works no matter which model you're chatting with.
+- Excluded from Plan mode and subagents (it produces output / costs), and it fails gracefully with a clear message if your account has no image model. For precise technical diagrams (flowcharts, ER, architecture) the tool description steers models to a Mermaid code block instead. The palette command **`Parley: Generate Image`** (saves to disk too) is unchanged.
+
 ## 1.8.0
 
 ### New — `/screenshot`: capture your screen straight into the chat

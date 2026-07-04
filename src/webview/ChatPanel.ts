@@ -404,6 +404,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       }),
       getSubagentTypes: () => this.subagentTypes,
       applyUsage: (tokens, cost) => this.accrueUsage(tokens, cost),
+      showImage: (dataUri, label) => this.showGeneratedImage(dataUri, label),
       post: (m) => this.post(m)
     });
     this.turns = new AgentTurnRunner({

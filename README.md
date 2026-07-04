@@ -257,6 +257,7 @@ In any tool mode the model runs an OpenAI tool‑calling loop. Built‑in tools:
 | `fetch_url`                                          | Fetch a public `https://` page as text (raw HTML, no JS)                                                         |
 | `browser_*`                                          | Drive a local Chromium: `navigate`/`read`/`console`/`click`/`type`/`screenshot` (runs JS; installs on first use) |
 | `web_search`                                         | Search the web (see [Web search](#web-search))                                                                   |
+| `generate_image`                                     | Generate an image/figure/illustration from a description and show it inline (via the gateway's image model)      |
 | `run_subagent`                                       | Delegate a scoped read-only investigation to a subagent (fresh context; returns only its report)                 |
 | `run_subagents`                                      | Run several **independent** read-only investigations **concurrently** (up to 5); reports come back aggregated    |
 | `remember`                                           | Save a durable project fact to `.parley/memory.md` (injected into future conversations)                          |

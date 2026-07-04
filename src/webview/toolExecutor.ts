@@ -52,6 +52,8 @@ export interface ToolExecutorHost {
   getSubagentTypes(): readonly { id: string; description: string; prompt: string; model?: string }[];
   /** Add nested-loop usage to the session counters (same sink as the turn runner's). */
   applyUsage(totalTokens: number, costUsd: number): { sessionTokens: number; sessionCostUsd: number };
+  /** Show a generated image inline in the chat (for the generate_image tool). */
+  showImage(dataUri: string, label: string): void;
   post(message: Record<string, unknown>): void;
 }
 
@@ -169,6 +171,9 @@ export class ToolExecutor {
     }
     if (call.name === 'remember') {
       return this.toolRemember(call);
+    }
+    if (call.name === 'generate_image') {
+      return this.toolGenerateImage(call);
     }
     if (call.name === 'update_plan') {
       return this.toolUpdatePlan(call);
@@ -329,6 +334,40 @@ export class ToolExecutor {
       googleCx: s.webSearchGoogleCx
     });
     return wrapUntrusted('web search results', results);
+  }
+
+  /** Generate an image from a prompt and show it inline in the chat. */
+  private async toolGenerateImage(call: ToolCall): Promise<string> {
+    let prompt = '';
+    let size = '1024x1024';
+    try {
+      const a = JSON.parse(call.arguments || '{}') as { prompt?: unknown; size?: unknown };
+      prompt = String(a.prompt ?? '').trim();
+      if (typeof a.size === 'string' && ['1024x1024', '1536x1024', '1024x1536', 'auto'].includes(a.size)) {
+        size = a.size;
+      }
+    } catch {
+      return 'Error: arguments were not valid JSON.';
+    }
+    if (!prompt) {
+      return 'Error: prompt is required — describe the image to generate.';
+    }
+    try {
+      const result = await this.host
+        .getSubagentParams()
+        .provider.generateImage(
+          { prompt, size, quality: 'auto', model: 'openai/gpt-image-1' },
+          this.host.getAbortSignal()
+        );
+      this.host.showImage(`data:${result.mimeType};base64,${result.base64}`, prompt.slice(0, 80));
+      return `Generated the image and displayed it in the chat (${size}). Do NOT try to describe or embed it further — the user can see it.`;
+    } catch (error) {
+      if (this.host.getAbortSignal()?.aborted) {
+        return 'Image generation was stopped.';
+      }
+      const msg = error instanceof Error ? error.message.split('\n')[0].slice(0, 200) : 'unknown error';
+      return `Error: could not generate the image (${msg}). The gateway may not offer an image model on your account.`;
+    }
   }
 
   /** Persist a durable project fact to `.parley/memory.md` (injected into future turns). */

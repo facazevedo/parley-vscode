@@ -397,6 +397,29 @@ export const AGENT_TOOLS: readonly ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'generate_image',
+      description:
+        "Generate an image / figure / illustration from a text description and show it inline in the chat. Use this whenever the user asks you to CREATE a picture, illustration, logo, mockup, icon, or visual figure. Best for illustrative/visual imagery — for precise technical diagrams with exact text (flowcharts, architecture, ER), prefer a Mermaid code block instead. The image is produced by the gateway's image model regardless of which chat model you are.",
+      parameters: {
+        type: 'object',
+        properties: {
+          prompt: {
+            type: 'string',
+            description: 'A detailed description of the image to generate.'
+          },
+          size: {
+            type: 'string',
+            enum: ['1024x1024', '1536x1024', '1024x1536', 'auto'],
+            description: 'Output size (default 1024x1024). Use a wide/tall size for landscape/portrait figures.'
+          }
+        },
+        required: ['prompt']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'remember',
       description:
         "Save one durable, non-obvious fact about this project to persistent memory (`.parley/memory.md`), so future conversations start knowing it. Use it when you learn something that took effort to discover and will matter again: build/test quirks ('integration tests need Docker running'), key file locations, project conventions, environment requirements, or explicit user preferences about how to work in this repo. Do NOT store things that are obvious from the code, one-off details for the current task, or anything secret (keys, tokens, passwords). One concise sentence per call.",
@@ -452,7 +475,8 @@ const WRITE_TOOLS = new Set([
   'browser_console',
   'browser_click',
   'browser_type',
-  'browser_screenshot'
+  'browser_screenshot',
+  'generate_image'
 ]);
 
 /** The subset of tools that never modify the workspace — used by Plan mode. */
