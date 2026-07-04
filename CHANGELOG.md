@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.34.3
+
+### Fixed — green/red tool-step dots weren't showing
+
+- A CSS specificity bug (since the rail was generalized in 1.30.0) let the neutral white base color override the tool-step colors, so every dot rendered white. Dot color is now driven by a custom property set on the node, so a completed tool step shows **green**, an errored one **red**, and a running one **pulses** — as intended. (Plain text answers stay white; green only appears on tool steps.)
+
 ## 1.34.2
 
 ### Fixed — rail now runs down the whole answer
