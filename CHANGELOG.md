@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.22.0
+
+### Improved — monitor screenshots carry real-pixel coordinates
+
+- When you attach a monitor screenshot (📷 or `/screenshot`), Parley now tells the model that monitor's **real-pixel space** — its resolution, its top-left position on the virtual desktop, and the scale factor of the shown image. So you can ask "what pixel is the X button at?" and get an answer in that monitor's real pixels, without cluttering the screenshot with a grid.
+- The image stays clean; the coordinate context rides along in the next message's system prompt only.
+
 ## 1.21.0
 
 ### New — current-conversation title + quick actions in the header

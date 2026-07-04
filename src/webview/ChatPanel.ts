@@ -2419,6 +2419,15 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     };
     const attach = async (m: Monitor): Promise<void> => {
       const shot = await captureMonitor(m);
+      // Tell the model this monitor's real-pixel space so it can answer positional
+      // questions ("what pixel is X at?") without defacing the image with a grid.
+      const scale = shot.shownW > 0 ? shot.realW / shot.shownW : 1;
+      this.captureCoordinateHint =
+        `The attached screenshot is monitor ${m.index + 1}${m.primary ? ' (primary)' : ''} at ${shot.realW}×${shot.realH} real pixels; ` +
+        `its top-left corner is virtual-desktop pixel (${shot.left}, ${shot.top}). The image is scaled to ${shot.shownW}×${shot.shownH}, ` +
+        `so multiply any position you read off the image by ${scale.toFixed(3)} to convert to real monitor pixels. ` +
+        `When asked about a location, report it as (x, y) in this monitor's real pixels (0,0 = its top-left); ` +
+        `add the top-left offset above for absolute virtual-desktop coordinates. Be honest that estimates from a scaled image are approximate.`;
       await this.addPastedFile(`data:image/png;base64,${shot.base64}`, 'screen.png');
       await note('📸 Captured your screen and attached it — type your question and send.');
     };
