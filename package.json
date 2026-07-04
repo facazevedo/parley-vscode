@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "1.68.0",
+  "version": "1.69.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -193,6 +193,21 @@
       {
         "command": "parley.releaseNotes",
         "title": "Parley: Generate Release Notes",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.explainStackTrace",
+        "title": "Parley: Explain Stack Trace",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.portCode",
+        "title": "Parley: Port / Translate Code",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.splitCommits",
+        "title": "Parley: Split Into Logical Commits",
         "category": "Parley"
       },
       {

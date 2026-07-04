@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.69.0
+
+### Stack-trace explainer, code porting, commit splitting
+
+- **Parley: Explain Stack Trace** — take a trace from the selection, clipboard, or an input box; Parley parses the frames (JS/TS, Python, generic), opens the top one that lives in your workspace, and explains the failure + a fix.
+- **Parley: Port / Translate Code** — translate the selection (or file) to another language (TypeScript / Python / Go / Rust / Java / C# / …) idiomatically, opened in a new document.
+- **Parley: Split Into Logical Commits** — analyze the uncommitted diff and propose grouping it into clean, self-contained commits with messages (advisory — you do the staging).
+
+
 ## 1.68.0
 
 ### Create PR & Release notes
