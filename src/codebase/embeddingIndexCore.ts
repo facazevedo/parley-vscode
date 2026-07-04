@@ -85,21 +85,39 @@ export function planBuild(
 
 /** Rank files by their best chunk's cosine similarity to the query; return the top-N paths. */
 export function rankByQuery(queryVec: readonly number[], files: Map<string, FileEntry>, topN: number): string[] {
-  const scored: Array<{ path: string; score: number }> = [];
+  return rankByQueryDetailed(queryVec, files, topN).map((r) => r.path);
+}
+
+export interface RankedChunk {
+  readonly path: string;
+  /** 1-based first line of the best-matching chunk in that file. */
+  readonly startLine: number;
+  readonly score: number;
+}
+
+/**
+ * Like {@link rankByQuery} but also reports which chunk matched (its start line),
+ * so callers can attach the relevant region instead of the file head.
+ */
+export function rankByQueryDetailed(
+  queryVec: readonly number[],
+  files: Map<string, FileEntry>,
+  topN: number
+): RankedChunk[] {
+  const scored: RankedChunk[] = [];
   for (const [p, entry] of files) {
     let best = -Infinity;
+    let bestStart = 1;
     for (const chunk of entry.chunks) {
       const score = dot(queryVec, chunk.vec);
       if (score > best) {
         best = score;
+        bestStart = chunk.s;
       }
     }
     if (best > -Infinity) {
-      scored.push({ path: p, score: best });
+      scored.push({ path: p, startLine: bestStart, score: best });
     }
   }
-  return scored
-    .sort((a, b) => b.score - a.score)
-    .slice(0, topN)
-    .map((s) => s.path);
+  return scored.sort((a, b) => b.score - a.score).slice(0, topN);
 }

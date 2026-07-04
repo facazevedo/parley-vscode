@@ -10,11 +10,12 @@ import { runNpmInstall } from '../util/runtimeInstall';
 import {
   parseIndex,
   planBuild,
-  rankByQuery,
+  rankByQueryDetailed,
   serializeIndex,
   type ChunkEntry,
   type FileEntry,
-  type IndexFileFormat
+  type IndexFileFormat,
+  type RankedChunk
 } from './embeddingIndexCore';
 
 /**
@@ -244,6 +245,16 @@ export class EmbeddingIndex {
 
   /** Semantic search → top-N file paths (best chunk per file), or `undefined` on failure. */
   public async search(root: string, query: string, topN: number): Promise<string[] | undefined> {
+    const detailed = await this.searchDetailed(root, query, topN);
+    return detailed?.map((r) => r.path);
+  }
+
+  /**
+   * Semantic search → top-N results with the matched chunk's start line, so the
+   * caller can attach the relevant region rather than the file head. `undefined`
+   * on failure (caller falls back to lexical).
+   */
+  public async searchDetailed(root: string, query: string, topN: number): Promise<RankedChunk[] | undefined> {
     try {
       await this.ensureLoaded(root);
       if (this.files.size === 0) {
@@ -251,7 +262,7 @@ export class EmbeddingIndex {
       }
       const embed = await this.getEmbedder(false);
       const [q] = await embed([query]);
-      return rankByQuery(q, this.files, topN);
+      return rankByQueryDetailed(q, this.files, topN);
     } catch (error) {
       this.logger.warn(`Semantic codebase search failed: ${error instanceof Error ? error.message : 'error'}`);
       return undefined;

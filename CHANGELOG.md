@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.49.0
+
+### @codebase attaches the matched region, not the file head
+
+- When @codebase uses the local semantic index, it now attaches the region around the best-matching chunk (a little context + one window, labeled @codebase path:from-to) instead of the top of the file. Semantic search already located the relevant lines; now that location is actually used, so large files contribute the code that matched the question.
+- Lexical retrieval and small files are unchanged (still attach the head).
+
+
 ## 1.48.0
 
 ### MCP server status view

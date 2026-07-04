@@ -64,6 +64,7 @@ import { getBrowserManager } from '../browser/browserManager';
 import type { McpManager } from '../mcp/McpManager';
 import { lexicalRank, type RankDoc } from '../codebase/lexicalSearch';
 import { EmbeddingIndex } from '../codebase/embeddingIndex';
+import { buildCodebaseRegion } from '../codebase/region';
 import {
   indexOfUserMessage,
   transcriptToMarkdown,
@@ -3776,31 +3777,36 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     const textById = new Map(docs.map((d) => [d.path, d.text]));
 
     // Prefer the opt-in local semantic index; fall back to lexical if it's not built or fails.
-    let order: string[] | undefined;
+    // The semantic path also reports the matched chunk's start line, so we attach that
+    // region instead of just the file head.
+    let ranked: Array<{ id: string; startLine?: number }> | undefined;
     if (settings.codebaseSearchProvider === 'local') {
       this.embeddingIndex ??= new EmbeddingIndex(this.globalStorageUri, this.logger);
-      order = await this.embeddingIndex.search(root.fsPath, query, settings.codebaseMaxFiles);
+      const detailed = await this.embeddingIndex.searchDetailed(root.fsPath, query, settings.codebaseMaxFiles);
+      if (detailed) {
+        ranked = detailed.map((r) => ({ id: r.path, startLine: r.startLine }));
+      }
     }
-    if (!order) {
-      order = lexicalRank(query, docs)
+    if (!ranked) {
+      ranked = lexicalRank(query, docs)
         .slice(0, settings.codebaseMaxFiles)
-        .map((r) => r.id);
+        .map((r) => ({ id: r.id }));
     }
 
-    const perFileCap = Math.max(2000, Math.floor(settings.contextMaxCharacters / Math.max(1, order.length)));
-    return order
-      .filter((id) => textById.has(id))
-      .map((id) => {
-        const raw = textById.get(id) ?? '';
-        const content = raw.length > perFileCap ? raw.slice(0, perFileCap) : raw;
+    const perFileCap = Math.max(2000, Math.floor(settings.contextMaxCharacters / Math.max(1, ranked.length)));
+    return ranked
+      .filter((r) => textById.has(r.id))
+      .map((r) => {
+        const raw = textById.get(r.id) ?? '';
+        const region = buildCodebaseRegion(raw, r.startLine, perFileCap);
         return {
-          id: `codebase-${id}`,
+          id: `codebase-${r.id}`,
           kind: 'user-file' as const,
-          label: `@codebase ${id}`,
-          filePath: vscode.Uri.joinPath(root, id).fsPath,
-          content,
-          characterCount: content.length,
-          truncated: raw.length > content.length
+          label: region.range ? `@codebase ${r.id}:${region.range}` : `@codebase ${r.id}`,
+          filePath: vscode.Uri.joinPath(root, r.id).fsPath,
+          content: region.content,
+          characterCount: region.content.length,
+          truncated: region.truncated
         };
       });
   }
