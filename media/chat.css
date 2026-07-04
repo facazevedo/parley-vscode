@@ -1927,16 +1927,15 @@ button:disabled {
 }
 /* Slash-command button rendered as a keycap (framed), not a bare "/". */
 .actions #slashBtn {
-  border: 1px solid var(--vscode-input-border, rgba(127, 127, 127, 0.55));
+  border: 1.5px solid var(--vscode-descriptionForeground, rgba(160, 160, 160, 0.9));
   border-radius: 5px;
   padding: 1px 7px;
   font-family: var(--vscode-editor-font-family, ui-monospace, monospace);
   font-size: 0.9em;
   line-height: 1.3;
-  opacity: 0.85;
+  opacity: 1;
 }
 .actions #slashBtn:hover {
-  opacity: 1;
   border-color: var(--vscode-foreground);
   background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.2));
 }

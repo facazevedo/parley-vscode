@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.36.3
+
+### Changed — stronger slash keycap border
+
+- The **/** slash-command keycap now has a more prominent (thicker, higher-contrast) frame.
+
+
 ## 1.36.2
 
 ### Changed — styled tooltips + framed slash key
