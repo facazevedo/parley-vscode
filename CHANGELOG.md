@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.38.0
+
+### Changed — monochrome line icons everywhere + yellow warning dot
+
+- Extended the professional line-icon set to the **rest of the UI**: the top row (New, History, Usage, Preview, Refresh, Settings), the title row (back, Compact, Export, Archive, Delete, New, Rename), the jump-to-latest and history-close buttons, and the history-list row actions (rename/archive/delete). No more mixed emoji.
+- **Warning / heads-up notes** now show a **yellow** dot on the rail (alongside green = tool done, red = error, white = message).
+
+
 ## 1.37.0
 
 ### Changed — professional monochrome icons in the composer

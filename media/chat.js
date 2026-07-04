@@ -2519,11 +2519,31 @@ import hljs from 'highlight.js/lib/common';
     const d = new Date(iso);
     return isNaN(d.getTime()) ? '' : d.toLocaleString();
   }
+  // Monochrome line icons (Lucide-style) for the history-list row actions.
+  function svgIcon(inner) {
+    return (
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+      inner +
+      '</svg>'
+    );
+  }
+  const ICONS = {
+    pencil: svgIcon('<path d="M17 3a2.85 2.83 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>'),
+    archive: svgIcon(
+      '<rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><line x1="10" y1="12" x2="14" y2="12"/>'
+    ),
+    unarchive: svgIcon(
+      '<rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h4"/><path d="M15 8v13"/><path d="m19 15-4-4-4 4"/>'
+    ),
+    trash: svgIcon(
+      '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>'
+    )
+  };
   function actionButton(label, title, onClick) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'hp-act';
-    b.textContent = label;
+    b.innerHTML = label; // label may be an SVG icon or plain text ("Delete?")
     b.title = title;
     // mousedown + preventDefault so the row's own select handler doesn't also fire,
     // and focus stays put; stopPropagation keeps the click-away closer from firing.
@@ -2644,7 +2664,7 @@ import hljs from 'highlight.js/lib/common';
                 confirmDeleteId = null;
                 historyAction('deleteConversation', it, { confirmed: true });
               })
-            : actionButton('🗑', 'Delete', () => {
+            : actionButton(ICONS.trash, 'Delete', () => {
                 confirmDeleteId = it.id;
                 renderHistory();
               });
@@ -2652,12 +2672,12 @@ import hljs from 'highlight.js/lib/common';
           del.classList.add('arm');
         }
         actions.append(
-          actionButton('✎', 'Rename', () => {
+          actionButton(ICONS.pencil, 'Rename', () => {
             renamingId = it.id;
             confirmDeleteId = null;
             renderHistory();
           }),
-          actionButton(it.archived ? '⇪' : '🗄', it.archived ? 'Unarchive' : 'Archive', () =>
+          actionButton(it.archived ? ICONS.unarchive : ICONS.archive, it.archived ? 'Unarchive' : 'Archive', () =>
             historyAction('archiveConversation', it, { value: !it.archived })
           ),
           del
@@ -3476,7 +3496,7 @@ import hljs from 'highlight.js/lib/common';
       }
     }
     if (archiveCurrentBtn) {
-      archiveCurrentBtn.textContent = convArchived ? '⇪' : '🗄';
+      // Icon is a constant SVG now; only the tooltip reflects the archived state.
       archiveCurrentBtn.title = convArchived ? 'Unarchive this conversation' : 'Archive this conversation';
     }
     if (artifactBtn) {

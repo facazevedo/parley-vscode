@@ -65,12 +65,15 @@ body {
   background: var(--vscode-sideBar-background);
 }
 .toolbar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   color: var(--vscode-foreground);
-  opacity: 0.8;
+  opacity: 0.75;
   border: 0;
   border-radius: 5px;
-  padding: 3px 7px;
+  padding: 4px 7px;
   cursor: pointer;
   font-size: 1em;
 }
@@ -111,12 +114,15 @@ body {
 }
 .ct-icon {
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   color: var(--vscode-foreground);
   opacity: 0.7;
   border: 0;
   border-radius: 5px;
-  padding: 2px 6px;
+  padding: 3px 6px;
   cursor: pointer;
   font-size: 0.95rem;
   line-height: 1.1;
@@ -274,6 +280,10 @@ button:disabled {
 }
 .history > .toolstep.err {
   --dot: var(--vscode-charts-red, #f85149);
+}
+/* Heads-up / warning notes get a yellow rail dot. */
+.history > .message.note {
+  --dot: var(--vscode-charts-yellow, #cca700);
 }
 .history > .toolstep.run::after {
   animation: pulse 1.1s ease-in-out infinite;
@@ -1917,6 +1927,25 @@ button:disabled {
 .actions button svg {
   width: 17px;
   height: 17px;
+  display: block;
+}
+/* Same line-icon set across the header rows, jump, and history close. */
+.toolbar button svg,
+.convtitlebar .ct-icon svg,
+#jump svg,
+.hp-close svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+.hp-act {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.hp-act svg {
+  width: 14px;
+  height: 14px;
   display: block;
 }
 .actions #attach:hover,
