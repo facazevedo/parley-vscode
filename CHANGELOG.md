@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.18.0
+
+### New — choose: queue your next message, or steer the current answer
+
+- When you type while Parley is working, a **⏳ Queue / ⏩ Steer toggle** appears by the Stop button:
+  - **⏳ Queue** (new default) — your message waits and is answered as its **own turn after** the current one finishes. Queue several; they run in order. This matches what most people expect ("wait for it to finish, then answer this").
+  - **⏩ Steer** — your message is **injected into the current answer** at its next step, redirecting the agent mid-task without stopping it (the previous behavior).
+- Queued and steered messages show as distinct chips (⏳ / ⏩) with the right tooltip, each removable with ×; **Stop** clears the whole queue. The composer placeholder reflects the current choice.
+
 ## 1.17.0
 
 ### Changed — model & mode are now changeable while the agent is running

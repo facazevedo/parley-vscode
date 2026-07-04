@@ -118,6 +118,7 @@ export function buildChatHtml(webview: vscode.Webview, extensionUri: vscode.Uri)
           <button type="button" id="computer" title="Computer control — let Parley drive your mouse &amp; keyboard for a task (enable parley.computerUse.enabled)" aria-label="Computer control">🖱️</button>
           <button type="button" id="settings" title="Parley settings" aria-label="Parley settings">⚙️</button>
           <span class="grow"></span>
+          <button type="button" id="queueMode" class="queuemode" style="display:none" title="How a message sent while Parley is working is handled">⏳ Queue</button>
           <button type="button" id="stop" style="display:none">Stop</button>
           <button type="submit" id="sendBtn" class="primary">Send</button>
         </div>

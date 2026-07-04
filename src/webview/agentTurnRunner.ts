@@ -116,21 +116,38 @@ export class AgentTurnRunner {
     }
   }
 
-  // ---------- steering queue (messages typed while the agent works) ----------
+  // ---------- queues for messages typed while the agent works ----------
+  // Two kinds: STEERING (injected into the current turn at its next round) and
+  // FOLLOW-UPS (run as their own turn after the current one fully finishes).
+  private queuedFollowUps: string[] = [];
+
+  private postQueued(): void {
+    this.host.post({ type: 'queued', steering: [...this.queuedSteering], followUps: [...this.queuedFollowUps] });
+  }
 
   public queueSteering(text: string): void {
     this.queuedSteering.push(text);
-    this.host.post({ type: 'queued', items: [...this.queuedSteering] });
+    this.postQueued();
   }
 
-  public removeQueued(index: number): void {
-    this.queuedSteering = this.queuedSteering.filter((_, i) => i !== index);
-    this.host.post({ type: 'queued', items: [...this.queuedSteering] });
+  public queueFollowUp(text: string): void {
+    this.queuedFollowUps.push(text);
+    this.postQueued();
+  }
+
+  public removeQueued(kind: 'steer' | 'followUp', index: number): void {
+    if (kind === 'followUp') {
+      this.queuedFollowUps = this.queuedFollowUps.filter((_, i) => i !== index);
+    } else {
+      this.queuedSteering = this.queuedSteering.filter((_, i) => i !== index);
+    }
+    this.postQueued();
   }
 
   public clearSteering(): void {
     this.queuedSteering = [];
-    this.host.post({ type: 'queued', items: [] });
+    this.queuedFollowUps = [];
+    this.postQueued();
   }
 
   /** Execute a prepared turn. The caller has already pushed the user message. */
@@ -271,7 +288,7 @@ export class AgentTurnRunner {
                 this.host.recorder.append({ kind: 'user', text, at: new Date().toISOString() });
                 this.host.post({ type: 'steerInjected', text });
               }
-              this.host.post({ type: 'queued', items: [] });
+              this.postQueued();
               return items;
             },
             onUsage: (usage) => {
@@ -384,11 +401,12 @@ export class AgentTurnRunner {
       await this.host.recorder.autosave();
       // Stop hooks: fire-and-forget notifications that a turn finished (never blocking).
       void runHookEvent(settings.hooks, 'Stop', {}, { log: (m) => this.host.logger.debug(`hooks: ${m}`) });
-      // Steering queued after the last round boundary (or during a plain chat turn)
-      // runs as an immediate follow-up turn instead of being forgotten.
-      const followUp = this.queuedSteering.shift();
+      // Run the next pending message as its own turn: leftover steering first (it was
+      // meant for THIS answer but arrived after the last round), then queued follow-ups.
+      // runFollowUp starts a fresh turn whose own end drains the next — chaining the queue.
+      const followUp = this.queuedSteering.shift() ?? this.queuedFollowUps.shift();
       if (followUp) {
-        this.host.post({ type: 'queued', items: [...this.queuedSteering] });
+        this.postQueued();
         this.host.runFollowUp(followUp);
       }
     } catch (error) {

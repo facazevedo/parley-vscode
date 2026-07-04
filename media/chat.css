@@ -1538,6 +1538,20 @@ button:disabled {
   color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
   background: var(--vscode-button-secondaryBackground, var(--vscode-button-background));
 }
+.actions #queueMode {
+  border: 1px solid var(--vscode-dropdown-border, rgba(127, 127, 127, 0.4));
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 0.85em;
+  cursor: pointer;
+  background: transparent;
+  color: var(--vscode-foreground);
+  opacity: 0.85;
+}
+.actions #queueMode:hover {
+  opacity: 1;
+  background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.2));
+}
 .actions #sendBtn {
   color: var(--vscode-button-foreground);
   background: var(--vscode-button-background);

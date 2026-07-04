@@ -371,21 +371,26 @@ import hljs from 'highlight.js/lib/common';
   const editingEl = $('editing');
   let busy = false;
   let editingOrdinal = null;
-  function renderQueued(items) {
+  function renderQueued(steering, followUps) {
     queuedEl.replaceChildren();
-    (items || []).forEach((text, i) => {
+    const addChip = (text, i, kind) => {
+      const isSteer = kind === 'steer';
       const chip = document.createElement('span');
       chip.className = 'chip queuedchip';
-      chip.title = 'Queued — the agent sees this at its next step';
-      chip.textContent = '⏩ ' + (text.length > 60 ? text.slice(0, 60) + '…' : text);
+      chip.title = isSteer
+        ? 'Steering — injected into the current answer at its next step'
+        : 'Queued — runs as its own turn after the current answer finishes';
+      chip.textContent = (isSteer ? '⏩ ' : '⏳ ') + (text.length > 60 ? text.slice(0, 60) + '…' : text);
       const x = document.createElement('button');
       x.type = 'button';
       x.className = 'chipx';
       x.textContent = '×';
-      x.addEventListener('click', () => vscode.postMessage({ type: 'unqueue', index: i }));
+      x.addEventListener('click', () => vscode.postMessage({ type: 'unqueue', queueKind: kind, index: i }));
       chip.append(x);
       queuedEl.append(chip);
-    });
+    };
+    (steering || []).forEach((t, i) => addChip(t, i, 'steer'));
+    (followUps || []).forEach((t, i) => addChip(t, i, 'followUp'));
   }
   function setEditing(ordinal) {
     editingOrdinal = ordinal;
@@ -1238,6 +1243,10 @@ import hljs from 'highlight.js/lib/common';
     const msg = { type: 'send', prompt: value };
     if (editingOrdinal !== null && !busy) {
       msg.editOrdinal = editingOrdinal;
+    }
+    if (busy) {
+      // While the agent works: steer into the current answer, or queue for after.
+      msg.steer = steerWhileBusy;
     }
     vscode.postMessage(msg);
     setEditing(null);
@@ -2384,6 +2393,32 @@ import hljs from 'highlight.js/lib/common';
   modePanel.querySelectorAll('.mp-speed button').forEach((b) => {
     b.addEventListener('click', () => vscode.postMessage({ type: 'speedChanged', speed: b.dataset.speed }));
   });
+
+  // Steer-vs-queue toggle: how a message sent WHILE the agent is working is handled.
+  // Queue (default) = runs as its own turn after; Steer = injected into the current answer.
+  const queueModeBtn = $('queueMode');
+  let steerWhileBusy = false;
+  function renderQueueMode() {
+    if (!queueModeBtn) {
+      return;
+    }
+    queueModeBtn.textContent = steerWhileBusy ? '⏩ Steer' : '⏳ Queue';
+    queueModeBtn.title = steerWhileBusy
+      ? 'Messages you send now are STEERED into the current answer at its next step. Click to queue them instead.'
+      : 'Messages you send now are QUEUED and answered after the current turn finishes. Click to steer them into the current answer instead.';
+    if (busy) {
+      prompt.placeholder = steerWhileBusy
+        ? 'Type to steer the agent — injected at its next step…'
+        : 'Type your next message — it will be answered after this turn…';
+    }
+  }
+  if (queueModeBtn) {
+    renderQueueMode();
+    queueModeBtn.addEventListener('click', () => {
+      steerWhileBusy = !steerWhileBusy;
+      renderQueueMode();
+    });
+  }
   Object.values(boxes).forEach((box) =>
     box.addEventListener('change', () => {
       vscode.postMessage({
@@ -2640,7 +2675,7 @@ import hljs from 'highlight.js/lib/common';
       return;
     }
     if (msg.type === 'queued') {
-      renderQueued(msg.items || []);
+      renderQueued(msg.steering || [], msg.followUps || []);
       return;
     }
     if (msg.type === 'steerInjected') {
@@ -2774,6 +2809,9 @@ import hljs from 'highlight.js/lib/common';
     renderAttachments(msg.attachments);
 
     stopBtn.style.display = msg.busy ? '' : 'none';
+    if (queueModeBtn) {
+      queueModeBtn.style.display = msg.busy ? '' : 'none';
+    }
     // Send stays enabled while busy — messages typed now are queued as steering.
     // Model and mode stay changeable mid-run too (the change applies from your NEXT
     // message; a mid-stream state update can't clobber the live reply — see the
@@ -2788,7 +2826,9 @@ import hljs from 'highlight.js/lib/common';
       refreshBtn.disabled = busy; // a mid-turn refresh would re-fetch models and re-render over the live reply
     }
     prompt.placeholder = busy
-      ? 'Type to steer the agent — sent at its next step…'
+      ? steerWhileBusy
+        ? 'Type to steer the agent — injected at its next step…'
+        : 'Type your next message — it will be answered after this turn…'
       : 'Ask Parley…  (@file to attach · paste or drop files · Enter to send · Shift+Enter for newline)';
     if (!msg.busy) {
       stopTicker();

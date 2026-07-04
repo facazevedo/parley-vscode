@@ -163,6 +163,10 @@ interface ChatPanelMessage {
   readonly names?: string[];
   /** Steering-queue index for 'unqueue'. */
   readonly index?: number;
+  /** For 'send' while busy: true = steer into the current turn; false/absent = queue after it. */
+  readonly steer?: boolean;
+  /** For 'unqueue': which queue the index refers to ('steer' | 'followUp'). */
+  readonly queueKind?: string;
   /** For 'send': 0-based ordinal of the user message being edited & resent. */
   readonly editOrdinal?: number;
   /** For 'rewind': 0-based ordinal of the user message to rewind to. */
@@ -737,7 +741,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         await this.startNewConversation();
         return;
       case 'unqueue':
-        this.turns.removeQueued(message.index ?? -1);
+        this.turns.removeQueued(message.queueKind === 'followUp' ? 'followUp' : 'steer', message.index ?? -1);
         return;
       case 'rewind':
         await this.rewindAtIndex(message.tindex ?? -1, asRewindChoice(message.what));
@@ -921,8 +925,13 @@ export class ChatPanel implements vscode.WebviewViewProvider {
           const text = message.prompt.trim();
           this.recordPromptHistory(text);
           if (this.busy) {
-            // Steering: don't refuse — queue it for the next round boundary.
-            this.turns.queueSteering(text);
+            // Two choices for a message typed mid-run: STEER (inject into the current
+            // answer at its next step) or QUEUE (run as its own turn after this one).
+            if (message.steer) {
+              this.turns.queueSteering(text);
+            } else {
+              this.turns.queueFollowUp(text);
+            }
             return;
           }
           if (message.editOrdinal !== undefined && message.editOrdinal >= 0) {
@@ -1619,6 +1628,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     if (!this.recorder.customTitle) {
       void this.maybeGenerateTitle();
     }
+    // Follow-up messages queued while this turn ran are drained by the turn runner's
+    // end-of-turn hook (execute → runFollowUp), which chains them one at a time.
   }
 
   /** AI-generate a short conversation title from the first exchange (best-effort, silent on failure). */
