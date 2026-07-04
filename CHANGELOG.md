@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.41.0
+
+### New — design canvas opens automatically
+
+- When a reply produces a UI, the **Parley Design** canvas now opens on its own — in the editor area, right where code opens — so you no longer press 🎨 a second time. It opens once per new design (kept separate from the chat), updates in place as you iterate, and does not pop open old designs when you switch conversations.
+- Renamed the preview panel to **Parley Design**.
+
+
 ## 1.40.5
 
 ### Changed — design button prefills a request when empty

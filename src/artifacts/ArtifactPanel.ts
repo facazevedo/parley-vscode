@@ -30,7 +30,7 @@ export class ArtifactPanel {
   private constructor(private readonly extensionUri: vscode.Uri) {
     this.panel = vscode.window.createWebviewPanel(
       'parleyArtifact',
-      'Parley Preview',
+      'Parley Design',
       { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
       { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [extensionUri] }
     );
@@ -87,7 +87,7 @@ export class ArtifactPanel {
     if (!a) {
       return;
     }
-    this.panel.title = `Preview · ${a.title}`;
+    this.panel.title = `Parley Design · ${a.title}`;
     this.panel.webview.html = this.shell(buildArtifactDocument(a, this.runtimeFor(a)));
   }
 

@@ -353,8 +353,10 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   // Archived state of the live conversation (drives the header Archive/Unarchive toggle).
   private currentArchived = false;
   // Previewable artifacts (HTML/SVG/React) from the latest assistant turn — opened in the
-  // "Parley Preview" design canvas via the 🎨 button.
+  // "Parley Design" canvas via the 🎨 button.
   private currentArtifacts: Artifact[] = [];
+  // Last artifact id auto-opened in the design canvas (so it opens once per new design).
+  private autoOpenedArtifactId?: string;
   // Workspace file/folder candidates for the @-mention autocomplete (short TTL so
   // per-keystroke queries don't re-walk the workspace).
   private mentionCache?: { at: number; files: string[]; dirs: string[] };
@@ -642,6 +644,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     this.conversationStartedAt = new Date().toISOString();
     this.recorder.customTitle = undefined;
     this.currentArchived = false;
+    this.autoOpenedArtifactId = undefined;
     await this.checkpoints.bind(this.parleyBase(), this.conversationId);
     await this.postState();
   }
@@ -3313,6 +3316,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     this.history.push(...transcriptToHistory(transcript));
     this.conversationId = id;
     this.currentArchived = Boolean(savedEntry?.archived);
+    // Treat any design already in the loaded chat as "seen" so it doesn't auto-pop on open.
+    const loadedArts = this.detectLatestArtifacts();
+    this.autoOpenedArtifactId = loadedArts.length ? loadedArts[loadedArts.length - 1].id : undefined;
     this.recorder.customTitle = savedTitle && savedTitle !== 'Conversation' ? savedTitle : undefined;
     this.conversationStartedAt = transcript[0]?.at ?? new Date().toISOString();
     this.attachments = [];
@@ -3386,6 +3392,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     this.history.push(...transcriptToHistory(transcript));
     this.conversationId = id;
     this.currentArchived = false;
+    const loadedArts = this.detectLatestArtifacts();
+    this.autoOpenedArtifactId = loadedArts.length ? loadedArts[loadedArts.length - 1].id : undefined;
     this.recorder.customTitle = pick.label && pick.label !== 'Conversation' ? pick.label : undefined;
     this.conversationStartedAt = transcript[0]?.at ?? new Date().toISOString();
     this.attachments = [];
@@ -4091,6 +4099,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     const model = this.selectedAgentId || this.getSettings().defaultAgent;
     const window = contextWindowFor(model);
     const contextPct = window ? Math.min(100, Math.round((this.estimateHistoryTokens() / window) * 100)) : undefined;
+    const artifacts = this.detectLatestArtifacts();
     this.post({
       type: 'state',
       history: this.history,
@@ -4116,8 +4125,19 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       convId: this.conversationId,
       convBase: this.parleyBase(),
       convArchived: this.currentArchived,
-      artifacts: this.detectLatestArtifacts().map((a) => ({ id: a.id, title: a.title, kind: a.kind }))
+      artifacts: artifacts.map((a) => ({ id: a.id, title: a.title, kind: a.kind }))
     });
+    // Auto-open the design canvas (in the editor area, where code opens) when a NEW artifact
+    // lands and the turn is done — so the user doesn't have to click 🎨 a second time. The
+    // per-id guard means it opens once per new design and not on every state refresh; loading
+    // a conversation seeds the id (below) so old designs don't pop open.
+    if (!this.busy && artifacts.length > 0) {
+      const latestId = artifacts[artifacts.length - 1].id;
+      if (this.autoOpenedArtifactId !== latestId) {
+        this.autoOpenedArtifactId = latestId;
+        ArtifactPanel.show(this.extensionUri, artifacts);
+      }
+    }
   }
 }
 
