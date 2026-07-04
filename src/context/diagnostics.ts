@@ -87,8 +87,9 @@ export function diagnosticsSnapshot(options: DiagnosticsOptions = {}): string {
   }
 
   const header =
-    `${errorCount} error${errorCount === 1 ? '' : 's'}, ` +
-    `${warnCount} warning${warnCount === 1 ? '' : 's'}` +
+    `${errorCount} error${errorCount === 1 ? '' : 's'}` +
+    // Only mention warnings when they're actually included in the snapshot.
+    (includeWarnings ? `, ${warnCount} warning${warnCount === 1 ? '' : 's'}` : '') +
     (rows.length > shown.length ? ` (showing first ${shown.length})` : '') +
     ':';
   return `${header}\n${lines.join('\n').trim()}`;

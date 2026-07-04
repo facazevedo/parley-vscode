@@ -304,7 +304,7 @@ for ($i = 0; $i -lt $screens.Count; $i++) {
   $lbl.Text = "Screen $($i + 1)  —  $($s.Bounds.Width) x $($s.Bounds.Height)\`n\`nClick to capture   ·   Esc to cancel\`n\`n$secs"
   $lbl.Tag = $i
   $f.Controls.Add($lbl)
-  # Bake the (validated) integer index into each handler so it doesn't rely on \$this/\$_ binding.
+  # Bake the (validated) integer index into each handler so it doesn't rely on $this/$_ binding.
   $onClick = [scriptblock]::Create("\`$global:parleyPick = $i")
   $f.Add_Click($onClick)
   $lbl.Add_Click($onClick)

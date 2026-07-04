@@ -3,27 +3,70 @@
  * unit-testable in isolation from the editor/API surface.
  */
 
-/** Trim a suggestion at the first blank line, so it stays one coherent block. */
+/** Trim a suggestion at the first blank line, so it stays one coherent block.
+ *  Handles both LF and CRLF line endings. */
 export function stopAtBlankLine(text: string): string {
-  const at = text.search(/\n[ \t]*\n/);
+  const at = text.search(/\r?\n[ \t]*\r?\n/);
   return at === -1 ? text : text.slice(0, at);
+}
+
+const OPENERS: Record<string, string> = { ')': '(', ']': '[', '}': '{' };
+
+/**
+ * For each character in `s`, mark whether a closing bracket there is matched by an
+ * opener *within `s` itself*. A closer that is NOT matched within `s` is one that
+ * closes something opened before it (e.g. in the prefix) — a genuine duplicate of
+ * what's already after the cursor, and therefore safe to trim.
+ */
+function closersMatchedWithin(s: string): boolean[] {
+  const matched = new Array<boolean>(s.length).fill(false);
+  const stack: string[] = [];
+  for (let i = 0; i < s.length; i += 1) {
+    const c = s[i];
+    if (c === '(' || c === '[' || c === '{') {
+      stack.push(c);
+    } else if (c === ')' || c === ']' || c === '}') {
+      if (stack.length > 0 && stack[stack.length - 1] === OPENERS[c]) {
+        stack.pop();
+        matched[i] = true; // this closer balances an opener inside the completion → needed
+      }
+    }
+  }
+  return matched;
 }
 
 /**
  * Drop a trailing run of the completion that merely repeats what's already just
- * after the cursor — e.g. a closing brace/paren/semicolon (and surrounding
- * whitespace) the `suffix` already contains, which would otherwise be doubled.
- * Only whitespace and closing punctuation are considered, so real code is never cut.
+ * after the cursor — trailing whitespace, `;`/`,`, and closing brackets the `suffix`
+ * already contains. A closing bracket is trimmed ONLY when it is not balancing an
+ * opener within the completion itself (otherwise removing it would unbalance the
+ * insertion — e.g. never turn `fn(x)` into `fn(x`).
  */
 export function trimSuffixOverlap(completion: string, suffix: string): string {
   if (!completion || !suffix) {
     return completion;
   }
   const run = (completion.match(/[\s)}\];,]*$/)?.[0] ?? '').length;
+  if (run === 0) {
+    return completion;
+  }
+  const matched = closersMatchedWithin(completion);
   for (let k = run; k >= 1; k -= 1) {
-    const tail = completion.slice(completion.length - k);
-    if (suffix.startsWith(tail)) {
-      return completion.slice(0, completion.length - k);
+    const start = completion.length - k;
+    if (!suffix.startsWith(completion.slice(start))) {
+      continue;
+    }
+    // Safe only if no bracket-closer being removed is matched within the completion.
+    let safe = true;
+    for (let i = start; i < completion.length; i += 1) {
+      const c = completion[i];
+      if ((c === ')' || c === ']' || c === '}') && matched[i]) {
+        safe = false;
+        break;
+      }
+    }
+    if (safe) {
+      return completion.slice(0, start);
     }
   }
   return completion;

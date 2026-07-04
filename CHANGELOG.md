@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.53.0
+
+### Deep code recheck: bug fixes from a full review
+
+- **Inline completion could insert unbalanced code (fixed).** The suffix-overlap trimmer removed any trailing closer the text after the cursor also had — including a bracket the completion opened itself (e.g. it turned `fn(item)` into `fn(item`). It now trims a closer only when that closer is not balancing an opener inside the completion.
+- **Fixed corrupt source bytes.** The inline-completion cache key held literal NUL/SOH control bytes (committed since 1.51.0, so the file read as binary). Replaced with a printable, collision-free key that includes the prefix length (different cursor splits of the same text no longer collide).
+- **@codebase stale-index guard.** buildCodebaseRegion no longer emits empty content with a backwards line range when the index points past a shrunken file; it falls back to the file head.
+- **run_tests / Fix Failing Tests** now surface a spawn failure message (bad cwd, missing shell) instead of reporting FAILED with (no output); guard when no workspace is open.
+- **/verify** now resolves its test command with the same precedence as run_tests (testCommand, then verifyCommand fallback).
+- Semantic ranking skips vectors whose dimension does not match the query (stale embedding model); diagnostics header omits warnings when they are excluded; blank-line trimming handles CRLF; removed useless escapes and a formatting drift flagged by lint.
+
+
 ## 1.52.0
 
 ### Unify the test-runner with /verify + README refresh

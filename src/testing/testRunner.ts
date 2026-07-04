@@ -76,7 +76,12 @@ export function runTestCommand(
         const err = error as (Error & { name?: string; killed?: boolean; signal?: string; code?: number }) | null;
         const aborted = !!err && err.name === 'AbortError';
         const timedOut = !!err && err.killed === true && !!err.signal;
-        const out = `${stdout ?? ''}${stderr ? `\n${stderr}` : ''}`.trim();
+        let out = `${stdout ?? ''}${stderr ? `\n${stderr}` : ''}`.trim();
+        // A spawn failure (bad cwd, shell missing, etc.) yields an error with no
+        // stdout/stderr — surface its message so the agent isn't handed "(no output)".
+        if (!out && err && !aborted) {
+          out = `Command failed: ${err.message}`;
+        }
         let exitCode: number | null;
         if (aborted || (timedOut && typeof err?.code !== 'number')) {
           exitCode = null;

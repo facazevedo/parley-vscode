@@ -109,6 +109,12 @@ export function rankByQueryDetailed(
     let best = -Infinity;
     let bestStart = 1;
     for (const chunk of entry.chunks) {
+      // Skip chunks whose vector dimension doesn't match the query (e.g. a stale
+      // index built with a different embedding model) — comparing them would yield
+      // garbage scores; ignoring them lets retrieval fall back to lexical.
+      if (chunk.vec.length !== queryVec.length) {
+        continue;
+      }
       const score = dot(queryVec, chunk.vec);
       if (score > best) {
         best = score;

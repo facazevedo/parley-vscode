@@ -37,9 +37,18 @@ test('extendFromCache declines when the cache no longer applies', () => {
   assert.equal(extendFromCache(cached, 'file://x', 'const total = items.length;'), undefined, 'fully typed');
 });
 
-test('trimSuffixOverlap drops a closing brace the suffix already has', () => {
-  assert.equal(trimSuffixOverlap('  return x;\n}', '\n}'), '  return x;', 'trims the duplicated \n}');
-  assert.equal(trimSuffixOverlap('foo()', ');'), 'foo(', 'trims a duplicated close paren');
+test('trimSuffixOverlap drops a closer the suffix already has, but never one it opened itself', () => {
+  // The `}` closes a block opened in the prefix (not in the completion) → redundant with the suffix.
+  assert.equal(trimSuffixOverlap('  return x;\n}', '\n}'), '  return x;', 'trims the duplicated \\n}');
+  // CRITICAL: the `)` closes `fn(` opened WITHIN the completion → needed, must NOT be trimmed.
+  assert.equal(
+    trimSuffixOverlap('item => fn(item)', ')'),
+    'item => fn(item)',
+    'keeps a closer that balances an opener inside the completion'
+  );
+  // Balanced call: the `)` is matched within, so it stays even though the suffix has `);`.
+  assert.equal(trimSuffixOverlap('foo()', ');'), 'foo()', 'balanced () is not unbalanced by trimming');
+  assert.equal(trimSuffixOverlap('1, 2,', ', 3'), '1, 2', 'trims a duplicated trailing comma (not a bracket)');
   assert.equal(trimSuffixOverlap('const a = 1;', '\nconst b = 2;'), 'const a = 1;', 'no overlap → unchanged');
   assert.equal(trimSuffixOverlap('doThing()', ''), 'doThing()', 'empty suffix → unchanged');
   assert.equal(trimSuffixOverlap('x + y', 'z'), 'x + y', 'non-closer chars are never trimmed');

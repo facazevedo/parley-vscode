@@ -40,6 +40,14 @@ test('buildCodebaseRegion falls back to the head for small files or no location'
   assert.ok(head.content.startsWith('line 1'));
 });
 
+test('buildCodebaseRegion falls back to the head when startLine is past EOF (stale index)', () => {
+  const raw = Array.from({ length: 100 }, (_, i) => `line ${i + 1}`).join('\n');
+  const region = buildCodebaseRegion(raw, 500, 100000); // file shrank since indexing
+  assert.equal(region.range, undefined, 'no backwards/empty range');
+  assert.ok(region.content.startsWith('line 1'), 'falls back to the head slice');
+  assert.equal(region.truncated, false, 'whole small-ish file fits under the cap');
+});
+
 test('buildCodebaseRegion respects the character cap', () => {
   const raw = Array.from({ length: 200 }, (_, i) => `line ${i + 1}`).join('\n');
   const region = buildCodebaseRegion(raw, 100, 20);

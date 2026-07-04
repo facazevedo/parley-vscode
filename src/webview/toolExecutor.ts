@@ -1098,9 +1098,12 @@ export class ToolExecutor {
     }
     const folder = vscode.workspace.workspaceFolders?.[0];
     const root = folder?.uri.fsPath;
+    if (!root) {
+      return 'Error: no workspace folder is open, so tests cannot be located or run.';
+    }
     const explicit = String(args.command ?? '').trim();
     const settings = this.host.getSettings();
-    const command = explicit || detectTestCommand(root ?? '', settings.testCommand || settings.verifyCommand);
+    const command = explicit || detectTestCommand(root, settings.testCommand || settings.verifyCommand);
     if (!command) {
       return 'Error: no test command detected. Set the "parley.testCommand" setting, or pass an explicit command argument (e.g. "npm test", "pytest").';
     }

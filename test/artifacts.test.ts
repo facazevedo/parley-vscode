@@ -80,9 +80,12 @@ test('buildArtifactDocument inlines the React/Babel runtime for react artifacts'
 });
 
 test('inlined runtime with a literal </script> is escaped so it cannot close the tag early', () => {
-  const doc = buildArtifactDocument({ id: 'x', title: 't', kind: 'react', code: 'x', lang: 'jsx' }, {
-    react: 'a</script>b'
-  });
+  const doc = buildArtifactDocument(
+    { id: 'x', title: 't', kind: 'react', code: 'x', lang: 'jsx' },
+    {
+      react: 'a</script>b'
+    }
+  );
   assert.ok(!doc.includes('a</script>b'), 'the raw </script> must not survive');
   assert.match(doc, /a<\\\/script>b/);
 });

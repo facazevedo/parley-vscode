@@ -20,7 +20,9 @@ export interface CodebaseRegion {
  */
 export function buildCodebaseRegion(raw: string, startLine: number | undefined, cap: number): CodebaseRegion {
   const lines = raw.split('\n');
-  if (startLine && startLine > 1 && lines.length > WINDOW_LINES) {
+  // Guard against a stale index pointing past EOF (file shrank since indexing):
+  // fall through to the head slice rather than producing an empty/backwards range.
+  if (startLine && startLine > 1 && startLine <= lines.length && lines.length > WINDOW_LINES) {
     const from = Math.max(1, startLine - CONTEXT_BEFORE);
     const to = Math.min(lines.length, startLine + WINDOW_LINES);
     let content = lines.slice(from - 1, to).join('\n');

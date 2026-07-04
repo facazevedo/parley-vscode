@@ -2832,9 +2832,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     const args = input.replace(/^\/\S+\s*/, '').trim();
     const settings = this.getSettings();
     const root = vscode.workspace.workspaceFolders?.[0]?.uri;
-    // Shared resolution with run_tests / Fix Failing Tests: explicit arg → either
-    // test-command setting → auto-detect (npm / pytest / cargo / go / maven / gradle).
-    let cmd = args || settings.verifyCommand || settings.testCommand;
+    // Shared resolution with run_tests / Fix Failing Tests: explicit arg → testCommand
+    // (verifyCommand as a back-compat fallback) → auto-detect (npm / pytest / cargo / go / maven / gradle).
+    let cmd = args || settings.testCommand || settings.verifyCommand;
     if (!cmd && root) {
       cmd = detectTestCommand(root.fsPath) ?? '';
     }
