@@ -10,7 +10,7 @@ and every change diff-reviewed before it touches your files — all inside VS Co
   <a href="CHANGELOG.md"><img alt="Version" src="https://img.shields.io/badge/version-1.51.0-A31F34"></a>
   <img alt="VS Code" src="https://img.shields.io/badge/VS%20Code-%E2%89%A5%201.92-1F6FEB">
   <a href="https://opensource.org/licenses/MIT"><img alt="License" src="https://img.shields.io/badge/license-MIT-3FB950"></a>
-  <img alt="Tests" src="https://img.shields.io/badge/tests-385%20passing-2EA043">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-388%20passing-2EA043">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-3178C6">
 </p>
 
@@ -30,7 +30,7 @@ and every change diff-reviewed before it touches your files — all inside VS Co
 - **Local browser & parallel subagents** — drive a real headless Chromium, or fan out several scoped read-only investigations at once.
 - **MCP** — connect stdio, streamable-HTTP, and legacy-SSE Model Context Protocol servers, with a **status view** for connected servers, their tools, and any failures.
 - **Safety & privacy first** — sensitive-file filtering, **outbound secret redaction**, **prompt-injection defenses** on untrusted content, a per-segment command allowlist, and honest documentation of gateway limits.
-- **Transparent by design** — full on-disk JSONL transcripts, live cost/context gauges + status-bar ticker, a `/context` breakdown, and 385 automated tests. CI packages a GitHub Release on every version tag.
+- **Transparent by design** — full on-disk JSONL transcripts, live cost/context gauges + status-bar ticker, a `/context` breakdown, and 388 automated tests. CI packages a GitHub Release on every version tag.
 
 Built around a `ParleyProvider` abstraction, so the UI, context collection, diff review, and safety controls stay independent of the transport.
 
@@ -753,7 +753,10 @@ frontmatter‑less (or `alwaysApply: true`) rules always apply.
 | `Parley: Regenerate Last Response`              | Re‑run the last user message                                                       |
 | `Parley: Ask About Selection`                   | Ask about the current selection                                                    |
 | `Parley: Explain Current File`                  | Explain the active file                                                            |
+| `Parley: Explain Symbol`                        | Explain the symbol under the cursor (also the hover "Explain with Parley" link)    |
 | `Parley: Refactor Selection`                    | Refactor the selection (diff‑reviewed)                                             |
+| `Parley: Port / Translate Code`                 | Translate the selection/file to another language into a new document               |
+| `Parley: Explain Stack Trace`                   | Parse a trace (selection/clipboard/input), open the top frame, explain + fix       |
 | `Parley: Generate Tests`                        | Generate tests for the current file                                                |
 | `Parley: Generate Tests for Uncovered Code`     | Run coverage, then write tests for the current file's uncovered lines (trusted ws) |
 | `Parley: Add Docs`                              | Add idiomatic doc comments to the selection/file (also in the `Ctrl+.` menu)       |
@@ -768,6 +771,9 @@ frontmatter‑less (or `alwaysApply: true`) rules always apply.
 | `Parley: Suggest Terminal Command`              | Suggest a shell command (manual confirm)                                           |
 | `Parley: Review Current Branch`                 | Review the branch vs its merge-base + draft a PR description                       |
 | `Parley: Generate PR Description`               | Paste-ready PR title/summary/changes/test-plan from the branch diff (also SCM ⋯)   |
+| `Parley: Create Pull Request`                   | Generate the description, confirm, push, and open the PR via `gh` (also SCM ⋯)     |
+| `Parley: Generate Release Notes`                | Draft grouped release notes from commits since the last tag                        |
+| `Parley: Split Into Logical Commits`            | Propose grouping the uncommitted diff into clean, self-contained commits           |
 | `Parley: Review Staged Changes`                 | Review the staged diff before committing (also in the SCM ⋯ menu)                  |
 | `Parley: File Edit History`                     | Every Parley edit to the current file, each openable as a before/after diff        |
 | `Parley: Open Project Memory`                   | Open `.parley/memory.md` to review/prune what the agent has remembered             |

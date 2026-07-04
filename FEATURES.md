@@ -170,6 +170,13 @@ Right-click **Parley** submenu and the **`Ctrl+.`** lightbulb (on a selection):
   **Generate Tests**, **Add Docs**, **Diagram This**, **Fix Diagnostics**.
 - **Fix with Parley** — any diagnostic squiggle offers a Quick Fix that sends the specific
   problem + code to chat.
+- **Hover to explain** — hovering a symbol shows an **"Explain with Parley"** link (no model
+  call until clicked); **Explain Symbol** explains the symbol under the cursor.
+- **CodeLens** (opt-in, `parley.codeLens.enabled`) — **Explain · Test · Doc** actions above
+  each function/method/class.
+- **Port / Translate Code** — translate the selection/file to another language into a new doc.
+- **Explain Stack Trace** — paste a trace (selection/clipboard/input); Parley opens the top
+  workspace frame and explains the failure + fix.
 
 ## Testing & quality
 
@@ -189,6 +196,12 @@ Right-click **Parley** submenu and the **`Ctrl+.`** lightbulb (on a selection):
   into the Source Control box.
 - **Generate PR Description** — paste-ready PR title/summary/changes/test-plan from the
   branch diff (opens in a doc + copied to clipboard).
+- **Create Pull Request** — generate the description, confirm, push the branch, and open the
+  PR via the GitHub CLI (`gh`), returning the URL.
+- **Generate Release Notes** — grouped release notes / CHANGELOG entries (+ a suggested
+  version bump) from the commits since the last tag.
+- **Split Into Logical Commits** — propose grouping the uncommitted diff into clean,
+  self-contained commits with messages (advisory).
 - **Review Current Branch** bundles a review + PR description.
 - Context mentions **`@git`**, **`@blame`**, **`@issue`**, **`@pr`**.
 

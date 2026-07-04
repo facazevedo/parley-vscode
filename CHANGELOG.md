@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.70.0
+
+### Docs
+
+- README + FEATURES.md updated for the latest commands: Explain Symbol / hover-to-explain, CodeLens actions, Create Pull Request, Generate Release Notes, Explain Stack Trace, Port / Translate Code, and Split Into Logical Commits. Test-count badge refreshed to 388.
+
+
 ## 1.69.0
 
 ### Stack-trace explainer, code porting, commit splitting
