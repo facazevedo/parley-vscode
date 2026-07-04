@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.27.0
+
+### Changed — continuous step rail + animated Parley feather
+
+- The agent **timeline rail** is now continuous: every step node — assistant message, tool step, and every card (diffs, plan, changes, compare) — rides one vertical line with a **white** dot (message/output), **green** (tool done), **red** (tool error), or **pulsing** (running). Right-aligned user bubbles and dividers stay off the rail.
+- The working-indicator spinner is now an **animated Parley feather** (a gently swaying quill) instead of the MIT bars.
+
 ## 1.26.0
 
 ### New — text-protocol models work as real agents

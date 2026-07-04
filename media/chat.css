@@ -193,55 +193,50 @@ button:disabled {
   max-width: 100%;
   margin-top: var(--chat-action-reserved-space);
 }
-/* Claude Code-style timeline: a state-colored dot per step on a vertical rail
-   (gray = narration, green = tool done, red = tool error, pulsing = running). */
-.history > .message {
+/* Claude Code / Codex-style timeline: a state-colored dot per step on a continuous
+   vertical rail — white = message/output, green = tool done, red = tool error, pulsing =
+   running. Every step node (assistant message, tool step, diff/plan/changes/compare card)
+   rides the rail; right-aligned user bubbles and dividers sit off it. */
+.history > *:not(.user):not(.divider):not(.empty) {
   position: relative;
-  padding-left: 18px;
+  margin-left: 18px;
 }
-.history > .message::after {
-  /* the dot */
+.history > *:not(.user):not(.divider):not(.empty)::after {
+  /* the dot, in the left rail gutter */
   content: '';
   position: absolute;
-  left: 2px;
-  top: 7px;
-  width: 7px;
-  height: 7px;
+  left: -16px;
+  top: 9px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: var(--vscode-descriptionForeground);
-  opacity: 0.55;
+  background: var(--vscode-foreground);
+  opacity: 0.7;
 }
-/* Rail segment from this dot toward the next step. Shown only between two
-   consecutive non-user steps; overshoots into the next node (a faint 1px line
-   behind an opaque dot is invisible), so a too-long segment never shows. */
-.history > .message:not(.user):has(+ .message:not(.user))::before {
+/* Rail segment down to the next node (overshoots behind the next opaque dot, so a
+   slightly-too-long segment is invisible and the rail reads as continuous). */
+.history > *:not(.user):not(.divider):not(.empty):has(+ *:not(.user):not(.divider):not(.empty))::before {
   content: '';
   position: absolute;
-  left: 5px;
-  top: 10px;
-  bottom: -18px;
+  left: -12px;
+  top: 13px;
+  bottom: -22px;
   width: 1px;
-  background: var(--vscode-sideBar-border, rgba(127, 127, 127, 0.4));
+  background: var(--vscode-sideBar-border, rgba(127, 127, 127, 0.5));
 }
-/* Compact tool-step rows so the step timeline reads as a dense rail. */
+/* Compact tool-step rows so a run of tool calls reads as a dense rail. */
 .history > .message.toolstep {
-  margin-top: 2px;
+  margin-top: 3px;
 }
-.history > .message.user {
-  padding-left: 0;
-}
-.history > .message.user::after {
-  content: none;
-}
-.history > .message.toolstep::after {
+.history > .toolstep::after {
   background: var(--vscode-charts-green, #3fb950);
   opacity: 0.95;
 }
-.history > .message.toolstep.err::after {
+.history > .toolstep.err::after {
   background: var(--vscode-charts-red, #f85149);
   opacity: 0.95;
 }
-.history > .message.toolstep.run::after {
+.history > .toolstep.run::after {
   animation: pulse 1.1s ease-in-out infinite;
 }
 /* Centered divider ("Switched to <model>") with wavy rules on both sides. */
@@ -991,58 +986,48 @@ button:disabled {
   color: var(--vscode-descriptionForeground);
   border-top: 1px solid var(--vscode-sideBar-border);
 }
-/* Animated MIT-bars logo shown while Parley works (the status line's spinner).
-   Five bottom-aligned maroon bars + a T crossbar, each pulsing in a left-to-right wave. */
-.mitlogo {
-  position: relative;
+/* Animated Parley feather shown while Parley works (the status line's spinner):
+   a quill that gently sways/writes and glimmers. */
+.feather {
   display: inline-flex;
-  align-items: flex-end;
-  gap: 2px;
-  height: 13px;
-  width: 30px;
+  width: 16px;
+  height: 16px;
   flex: none;
+  color: var(--vscode-progressBar-background, var(--vscode-focusBorder));
+  transform-origin: 12% 88%; /* pivot at the quill tip (bottom-left) */
+  animation: feather-write 1.8s ease-in-out infinite;
 }
-.mitlogo i,
-.mitlogo b {
+.feather svg {
+  width: 100%;
+  height: 100%;
   display: block;
-  width: 3px;
-  background: #a31f34;
-  animation: mitwave 1.2s ease-in-out infinite;
 }
-.mitlogo i:nth-child(1) {
-  height: 13px;
-}
-.mitlogo i:nth-child(2) {
-  height: 7px;
-  animation-delay: 0.1s;
-}
-.mitlogo i:nth-child(3) {
-  height: 13px;
-  animation-delay: 0.2s;
-}
-.mitlogo i:nth-child(4) {
-  height: 13px; /* the "I" */
-  animation-delay: 0.3s;
-}
-.mitlogo i:nth-child(5) {
-  height: 7px; /* the "T" stem (crossbar sits above via <b>) */
-  animation-delay: 0.4s;
-}
-.mitlogo b {
-  position: absolute;
-  right: 0;
-  top: 0;
-  width: 8px; /* the T crossbar, overhanging to the right */
-  height: 3px;
-  animation-delay: 0.4s;
-}
-@keyframes mitwave {
-  0%,
-  100% {
-    opacity: 0.3;
+@keyframes feather-write {
+  0% {
+    transform: rotate(-10deg) translateY(0);
+    opacity: 0.55;
   }
   50% {
+    transform: rotate(10deg) translateY(-1px);
     opacity: 1;
+  }
+  100% {
+    transform: rotate(-10deg) translateY(0);
+    opacity: 0.55;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .feather {
+    animation: feather-glow 1.8s ease-in-out infinite;
+  }
+  @keyframes feather-glow {
+    0%,
+    100% {
+      opacity: 0.5;
+    }
+    50% {
+      opacity: 1;
+    }
   }
 }
 @keyframes pulse {
