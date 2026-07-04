@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.23.1
+
+### Changed — mode button text color
+
+- The mode button ("Chat"/"Ask"/"Auto"/…) now uses the same text color as the model selector (`--vscode-dropdown-foreground`) instead of pure white, so the two controls match.
+
 ## 1.23.0
 
 ### New — Claude Code-style agent timeline + animated MIT spinner

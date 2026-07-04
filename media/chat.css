@@ -1530,7 +1530,8 @@ button:disabled {
 .modebtn {
   white-space: nowrap;
   background: #000;
-  color: #fff;
+  /* Match the model selector's text color instead of pure white. */
+  color: var(--vscode-dropdown-foreground);
   border: 1px solid var(--vscode-dropdown-border, rgba(127, 127, 127, 0.4));
   border-radius: 6px;
   padding: 3px 8px;
