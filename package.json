@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "1.46.0",
+  "version": "1.47.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -94,6 +94,11 @@
       {
         "command": "parley.addDocs",
         "title": "Parley: Add Docs",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.fixFailingTests",
+        "title": "Parley: Fix Failing Tests",
         "category": "Parley"
       },
       {
@@ -828,6 +833,11 @@
           "minimum": 5,
           "maximum": 3600,
           "markdownDescription": "How long a single agent shell command (`run_command`) may run before it's terminated. Default **300s** (5 min) so real `npm install` / build / test commands can finish. Raise it for slower builds."
+        },
+        "parley.testCommand": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Command used by the `run_tests` tool and **Parley: Fix Failing Tests**. Leave empty to auto-detect (package.json `test` script → `npm test`, else pytest / cargo test / go test / mvn / gradle). Set explicitly to override, e.g. `npm test --silent` or `pytest -q`."
         },
         "parley.autoSaveConversations": {
           "type": "boolean",

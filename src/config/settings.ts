@@ -62,6 +62,8 @@ export interface ParleySettings {
   readonly autoSaveConversations: boolean;
   readonly conversationsDir: string;
   readonly commandTimeoutSeconds: number;
+  /** Explicit test command for run_tests / Fix Failing Tests. Empty = auto-detect. */
+  readonly testCommand: string;
   readonly mcpServers: Record<string, McpServerConfig>;
   readonly hooks: HooksConfig;
   readonly webSearchProvider: WebSearchProvider;
@@ -120,6 +122,7 @@ export function getSettings(): ParleySettings {
     autoSaveConversations: config.get<boolean>('autoSaveConversations', true),
     conversationsDir: config.get<string>('conversationsDir', '').trim(),
     commandTimeoutSeconds: clampInt(config.get<number>('commandTimeoutSeconds', 300), 5, 3600),
+    testCommand: config.get<string>('testCommand', '').trim(),
     mcpServers: config.get<Record<string, McpServerConfig>>('mcpServers', {}) ?? {},
     hooks: config.get<HooksConfig>('hooks', {}) ?? {},
     webSearchProvider: normalizeWebSearchProvider(config.get<string>('webSearch.provider', 'duckduckgo')),

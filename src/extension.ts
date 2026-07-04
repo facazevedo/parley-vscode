@@ -14,6 +14,7 @@ import { registerFixLastCommandCommand } from './commands/fixLastCommand';
 import { registerUsageHistoryCommand } from './commands/usageHistory';
 import { registerGenerateImageCommand } from './commands/generateImage';
 import { registerGenerateTestsCommand } from './commands/generateTests';
+import { registerFixFailingTestsCommand } from './commands/fixFailingTests';
 import { registerInitProjectRulesCommand } from './commands/initProjectRules';
 import { registerInlineEditCommand } from './commands/inlineEdit';
 import { registerRunDiagnosticsCommand } from './commands/runDiagnostics';
@@ -275,6 +276,7 @@ export function activate(context: vscode.ExtensionContext): void {
   registerExplainFileCommand(context, commandDeps);
   registerRefactorSelectionCommand(context, commandDeps);
   registerGenerateTestsCommand(context, commandDeps);
+  registerFixFailingTestsCommand(context, commandDeps);
   registerAddDocsCommand(context, commandDeps);
   registerParleyCodeActions(context);
   registerFixDiagnosticsCommand(context, commandDeps);

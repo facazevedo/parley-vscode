@@ -142,6 +142,24 @@ export const AGENT_TOOLS: readonly ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'run_tests',
+      description:
+        "Run the project's test suite and report whether it PASSED or FAILED plus the failing-test output. The command is auto-detected (package.json test script, pyproject/pytest, Cargo, go.mod, Maven, Gradle) unless overridden by the parley.testCommand setting or the optional command argument. Approved once like run_command. Use this to verify a fix and iterate until tests pass.",
+      parameters: {
+        type: 'object',
+        properties: {
+          command: {
+            type: 'string',
+            description:
+              'Optional explicit test command (e.g. "npm test -- some.test.ts", "pytest tests/x.py"). Omit to auto-detect the project default.'
+          }
+        }
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'search_text',
       description:
         'Search file CONTENTS across the workspace for a substring (case-insensitive). Returns matching "path:line: text" results. Use this to find where something is defined or used.',
@@ -494,6 +512,7 @@ const WRITE_TOOLS = new Set([
   'edit_file',
   'multi_edit',
   'run_command',
+  'run_tests',
   'browser_navigate',
   'browser_read',
   'browser_console',

@@ -12,6 +12,7 @@ import { formatUnifiedDiff } from '../diff/lineDiff';
 import { reviewProposedEdit } from '../diff/reviewEdit';
 import { showProposedDiff } from '../diff/showDiff';
 import { dbg } from '../debug/debug';
+import { detectTestCommand, runTestCommand } from '../testing/testRunner';
 import type { BrowserManager } from '../browser/browserManager';
 import { runHookEvent } from '../hooks/hooks';
 import type { McpManager } from '../mcp/McpManager';
@@ -183,6 +184,9 @@ export class ToolExecutor {
     }
     if (call.name === 'run_command') {
       return this.toolRunCommand(call);
+    }
+    if (call.name === 'run_tests') {
+      return this.toolRunTests(call);
     }
     if (call.name === 'remember') {
       return this.toolRemember(call);
@@ -1028,33 +1032,8 @@ export class ToolExecutor {
       return 'Error: command is required.';
     }
     const folder = vscode.workspace.workspaceFolders?.[0];
-    const mode = this.host.getMode();
-    // Full-access mode runs commands without prompting; every other mode confirms —
-    // unless the command matches a workspace allowlist rule the user approved earlier.
-    if (mode !== 'full' && isCommandAllowed(command, this.allowedCommands())) {
-      dbg('tool', 'run_command auto-approved by allowlist', command.slice(0, 120));
-    } else if (mode !== 'full') {
-      const ALWAYS = 'Always Allow';
-      // Only simple, substitution-free commands can be remembered — a compound
-      // command's prefix would silently approve an unrelated tail next time.
-      const canRemember = isSimpleCommand(command);
-      const detail = canRemember
-        ? `"${ALWAYS}" also approves future commands that start with this text (this workspace only; ` +
-          'review with "Parley: Manage Allowed Commands").'
-        : 'This command chains steps or uses command substitution, so it can only be run once — it will not be added to the allowlist.';
-      const answer = await vscode.window.showWarningMessage(
-        `Parley agent wants to run a command in ${folder?.name ?? 'the workspace'}:\n\n${command}\n\n${detail}`,
-        { modal: true },
-        ...(canRemember ? ['Run', ALWAYS, 'Skip'] : ['Run', 'Skip'])
-      );
-      if (answer === ALWAYS) {
-        const rules = this.allowedCommands();
-        if (!rules.includes(command)) {
-          await this.host.state.update('parley.allowedCommands', [...rules, command]);
-        }
-      } else if (answer !== 'Run') {
-        return 'User declined to run the command.';
-      }
+    if (!(await this.confirmRunCommand(command))) {
+      return 'User declined to run the command.';
     }
     const output = await runShellCommand(
       command,
@@ -1070,6 +1049,83 @@ export class ToolExecutor {
     channel.appendLine('');
     channel.show(true);
     return output;
+  }
+
+  /**
+   * Gate a shell command through the mode/allowlist policy shared by run_command
+   * and run_tests. Returns true when it may run (full mode, allowlisted, or the
+   * user approved), false when the user declined.
+   */
+  private async confirmRunCommand(command: string): Promise<boolean> {
+    const mode = this.host.getMode();
+    if (mode === 'full') {
+      return true;
+    }
+    if (isCommandAllowed(command, this.allowedCommands())) {
+      dbg('tool', 'command auto-approved by allowlist', command.slice(0, 120));
+      return true;
+    }
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    const ALWAYS = 'Always Allow';
+    // Only simple, substitution-free commands can be remembered — a compound
+    // command's prefix would silently approve an unrelated tail next time.
+    const canRemember = isSimpleCommand(command);
+    const detail = canRemember
+      ? `"${ALWAYS}" also approves future commands that start with this text (this workspace only; ` +
+        'review with "Parley: Manage Allowed Commands").'
+      : 'This command chains steps or uses command substitution, so it can only be run once — it will not be added to the allowlist.';
+    const answer = await vscode.window.showWarningMessage(
+      `Parley agent wants to run a command in ${folder?.name ?? 'the workspace'}:\n\n${command}\n\n${detail}`,
+      { modal: true },
+      ...(canRemember ? ['Run', ALWAYS, 'Skip'] : ['Run', 'Skip'])
+    );
+    if (answer === ALWAYS) {
+      const rules = this.allowedCommands();
+      if (!rules.includes(command)) {
+        await this.host.state.update('parley.allowedCommands', [...rules, command]);
+      }
+      return true;
+    }
+    return answer === 'Run';
+  }
+
+  private async toolRunTests(call: ToolCall): Promise<string> {
+    let args: { command?: string };
+    try {
+      args = JSON.parse(call.arguments || '{}');
+    } catch {
+      return 'Error: arguments were not valid JSON.';
+    }
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    const root = folder?.uri.fsPath;
+    const explicit = String(args.command ?? '').trim();
+    const command = explicit || detectTestCommand(root ?? '', this.host.getSettings().testCommand);
+    if (!command) {
+      return 'Error: no test command detected. Set the "parley.testCommand" setting, or pass an explicit command argument (e.g. "npm test", "pytest").';
+    }
+    if (!(await this.confirmRunCommand(command))) {
+      return 'User declined to run the tests.';
+    }
+    const run = await runTestCommand(
+      command,
+      root,
+      this.host.getSettings().commandTimeoutSeconds * 1000,
+      this.host.getAbortSignal()
+    );
+    const channel = this.agentChannel();
+    channel.appendLine(`$ ${command}`);
+    channel.appendLine(run.output || '(no output)');
+    channel.appendLine('');
+    channel.show(true);
+    if (run.aborted) {
+      return 'Tests were stopped by the user.';
+    }
+    if (run.timedOut) {
+      return `Tests exceeded the timeout and were terminated. Partial output:\n${run.output.slice(-8000)}`;
+    }
+    const status = run.exitCode === 0 ? 'PASSED ✅' : `FAILED ❌ (exit code ${run.exitCode})`;
+    const tail = run.output.length > 12000 ? `…(truncated)…\n${run.output.slice(-12000)}` : run.output;
+    return `Test command: ${command}\nResult: ${status}\n\nOutput:\n${tail || '(no output)'}`;
   }
 
   private agentChannel(): vscode.OutputChannel {

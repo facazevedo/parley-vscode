@@ -1,11 +1,9 @@
 import * as vscode from 'vscode';
 
-const SEVERITY_LABEL: Record<number, string> = {
-  [vscode.DiagnosticSeverity.Error]: 'Error',
-  [vscode.DiagnosticSeverity.Warning]: 'Warning',
-  [vscode.DiagnosticSeverity.Information]: 'Info',
-  [vscode.DiagnosticSeverity.Hint]: 'Hint'
-};
+// Indexed by vscode.DiagnosticSeverity's numeric value (Error=0, Warning=1,
+// Information=2, Hint=3). A plain array avoids referencing the enum at module-load
+// time (which breaks when vscode is mocked).
+const SEVERITY_LABEL = ['Error', 'Warning', 'Info', 'Hint'];
 
 export interface DiagnosticsOptions {
   /** Only include diagnostics for this file (e.g. the active editor). */

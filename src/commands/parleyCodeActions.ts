@@ -8,8 +8,6 @@ import * as vscode from 'vscode';
  * which reads the active selection itself.
  */
 class ParleyRefactorProvider implements vscode.CodeActionProvider {
-  public static readonly kinds = [vscode.CodeActionKind.RefactorRewrite];
-
   public provideCodeActions(
     _document: vscode.TextDocument,
     range: vscode.Range | vscode.Selection
@@ -35,7 +33,7 @@ class ParleyRefactorProvider implements vscode.CodeActionProvider {
 export function registerParleyCodeActions(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.languages.registerCodeActionsProvider('*', new ParleyRefactorProvider(), {
-      providedCodeActionKinds: ParleyRefactorProvider.kinds
+      providedCodeActionKinds: [vscode.CodeActionKind.RefactorRewrite]
     })
   );
 }

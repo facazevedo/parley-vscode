@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.47.0
+
+### Test-runner loop
+
+- New run_tests agent tool: runs the project test suite (auto-detected from package.json test script / pytest / cargo / go / maven / gradle, or the new parley.testCommand setting) and reports PASS/FAIL plus failing-test output. Approved once like run_command.
+- New command "Parley: Fix Failing Tests": runs the tests once; if they fail, hands the output to the agent to fix the root cause and re-run via run_tests until green (a closed loop in Agent/Full mode).
+- New parley.testCommand setting to override the auto-detected command.
+
+### Fixed
+
+- Fixed two module-load-time references to mocked vscode enums that broke the bundle test (no user-facing effect in the real editor).
+
+
 ## 1.46.0
 
 ### Code actions: Add Docs, selection-aware Explain, Ctrl+. menu
