@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.17.0
+
+### Changed — model & mode are now changeable while the agent is running
+
+- The model dropdown and the mode button (Chat/Ask/Edit/Auto/…) are no longer locked while a turn is in progress. Switch them mid-run and the change applies to your **next** message (the current turn keeps the model/mode it started with). A mid-run switch can't disrupt the live reply — the streaming guard already prevents that. Tooltips note the "applies to your next message" behavior. (The ↻ refresh-models button stays locked mid-run, since re-fetching would re-render over the live reply.)
+
 ## 1.16.0
 
 ### New — coordinate grid for "which pixel is X" screenshot questions

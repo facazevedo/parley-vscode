@@ -2775,14 +2775,17 @@ import hljs from 'highlight.js/lib/common';
 
     stopBtn.style.display = msg.busy ? '' : 'none';
     // Send stays enabled while busy — messages typed now are queued as steering.
-    // Model/mode switches would only apply from the NEXT turn, so lock them during a run.
+    // Model and mode stay changeable mid-run too (the change applies from your NEXT
+    // message; a mid-stream state update can't clobber the live reply — see the
+    // `busy && streamContent` guard above).
     busy = !!msg.busy;
-    agent.disabled = busy;
-    modeBtn.disabled = busy;
-    modeBtn.title = busy ? 'Locked while the agent is running (applies from the next turn)' : 'Mode & thinking';
+    agent.disabled = false;
+    agent.title = busy ? 'Model — a change applies to your next message' : '';
+    modeBtn.disabled = false;
+    modeBtn.title = busy ? 'Mode & thinking — a change applies to your next message' : 'Mode & thinking';
     const refreshBtn = $('refresh');
     if (refreshBtn) {
-      refreshBtn.disabled = busy; // a mid-turn refresh would re-render over the live reply
+      refreshBtn.disabled = busy; // a mid-turn refresh would re-fetch models and re-render over the live reply
     }
     prompt.placeholder = busy
       ? 'Type to steer the agent — sent at its next step…'
