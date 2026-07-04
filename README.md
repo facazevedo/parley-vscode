@@ -374,6 +374,9 @@ special mentions below:
 | `@codebase`        | Retrieve the most relevant files for your question (see below)                      |
 | `@problems`        | Attach the current errors & warnings from the Problems panel (errors first)         |
 | `@git`             | Attach the uncommitted diff (vs HEAD)                                               |
+| `@blame`           | Attach `git blame` for the active selection/file — "why does this code exist"        |
+| `@issue <n>`       | Attach a GitHub issue (title/body/comments) via the `gh` CLI                         |
+| `@pr [n]`          | Attach a GitHub PR (current branch, or a number) via the `gh` CLI                    |
 | `@terminal`        | Attach recent integrated-terminal commands + output (shell integration)             |
 | `@browser <url>`   | Open the URL in a local browser (runs JS) and attach rendered text + console errors |
 | `@https://…`       | Fetch the page and attach its text                                                  |

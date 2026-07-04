@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.58.0
+
+### New context mentions: @blame, @issue, @pr
+
+- **@blame** attaches git blame for the active selection (or whole file) — ask "why does this code exist / what was the intent."
+- **@issue <n>** pulls a GitHub issue (title, body, comments) into context via the gh CLI — "implement @issue 142".
+- **@pr [n]** pulls a GitHub pull request (the current branch by default, or a number) via gh.
+- All three appear in the @ autocomplete and are wrapped as untrusted content.
+
+
 ## 1.57.0
 
 ### Opt-in network egress allowlist + clearer mode wording

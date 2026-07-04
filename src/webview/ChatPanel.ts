@@ -96,6 +96,9 @@ const SPECIAL_MENTIONS: ReadonlyArray<{ path: string; hint: string }> = [
   { path: 'git', hint: 'uncommitted diff vs HEAD' },
   { path: 'terminal', hint: 'recent terminal commands + output' },
   { path: 'problems', hint: 'current errors & warnings (Problems panel)' },
+  { path: 'blame', hint: 'git blame for the current selection/file (why code exists)' },
+  { path: 'issue', hint: 'a GitHub issue by number (needs gh) — type the number after' },
+  { path: 'pr', hint: 'a GitHub PR (current branch, or a number) — needs gh' },
   { path: 'browser', hint: 'open a URL and attach the rendered page (add the URL after)' },
   { path: 'sym:', hint: 'a function/class/symbol by name (language server) — type the name after' }
 ];
@@ -3622,6 +3625,62 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       });
     }
 
+    // @blame — git blame for the active editor's selection (or whole file) → "why does this exist".
+    if (/(?:^|\s)@blame\b/i.test(prompt)) {
+      const editor = vscode.window.activeTextEditor;
+      if (editor && editor.document.uri.scheme === 'file') {
+        const rel = path.relative(root.fsPath, editor.document.uri.fsPath).replace(/\\/g, '/');
+        const sel = editor.selection;
+        const range = sel.isEmpty ? '' : `-L ${sel.start.line + 1},${sel.end.line + 1} `;
+        const raw = await runShellCommand(`git --no-pager blame ${range}-- "${rel}"`, root.fsPath, 15000);
+        const text = raw && raw !== '(no output)' ? raw : 'No blame available (uncommitted or untracked file?).';
+        const sliced = text.slice(0, cap);
+        const content = wrapUntrusted('git blame', sliced);
+        out.push({
+          id: 'mention-blame',
+          kind: 'user-file',
+          label: `@blame ${rel}${range ? ' (selection)' : ''}`,
+          content,
+          characterCount: content.length,
+          truncated: text.length > sliced.length
+        });
+      }
+    }
+
+    // @issue <n> — a GitHub issue (title, body, comments) via the gh CLI.
+    const issueMatch = /(?:^|\s)@issue\s+#?(\d+)/i.exec(prompt);
+    if (issueMatch) {
+      const n = issueMatch[1];
+      const raw = await runShellCommand(`gh issue view ${n} --comments`, root.fsPath, 20000);
+      const sliced = raw.slice(0, cap);
+      const content = wrapUntrusted(`GitHub issue #${n}`, sliced);
+      out.push({
+        id: `mention-issue-${n}`,
+        kind: 'user-file',
+        label: `@issue #${n}`,
+        content,
+        characterCount: content.length,
+        truncated: raw.length > sliced.length
+      });
+    }
+
+    // @pr [n] — a GitHub pull request (defaults to the current branch's PR) via the gh CLI.
+    const prMatch = /(?:^|\s)@pr(?:\s+#?(\d+))?\b/i.exec(prompt);
+    if (prMatch) {
+      const n = prMatch[1];
+      const raw = await runShellCommand(`gh pr view${n ? ` ${n}` : ''} --comments`, root.fsPath, 20000);
+      const sliced = raw.slice(0, cap);
+      const content = wrapUntrusted(`GitHub pull request${n ? ` #${n}` : ' (current branch)'}`, sliced);
+      out.push({
+        id: `mention-pr-${n ?? 'current'}`,
+        kind: 'user-file',
+        label: `@pr${n ? ` #${n}` : ' (current branch)'}`,
+        content,
+        characterCount: content.length,
+        truncated: raw.length > sliced.length
+      });
+    }
+
     // @browser <url> — open the URL in the local browser and attach rendered text + any console errors.
     const browserMatch = /(?:^|\s)@browser\s+(\S+)/i.exec(prompt);
     if (browserMatch) {
@@ -3694,6 +3753,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         token === 'terminal' ||
         token === 'browser' ||
         token === 'problems' ||
+        token === 'blame' ||
+        token === 'issue' ||
+        token === 'pr' ||
         /^https?:/i.test(token)
       ) {
         continue;
