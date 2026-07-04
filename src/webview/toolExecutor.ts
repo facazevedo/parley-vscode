@@ -52,8 +52,8 @@ export interface ToolExecutorHost {
   getSubagentTypes(): readonly { id: string; description: string; prompt: string; model?: string }[];
   /** Add nested-loop usage to the session counters (same sink as the turn runner's). */
   applyUsage(totalTokens: number, costUsd: number): { sessionTokens: number; sessionCostUsd: number };
-  /** Show a generated image inline in the chat (for the generate_image tool). */
-  showImage(dataUri: string, label: string): void;
+  /** Show an image inline in the chat; `captured` labels it as a real screenshot vs a generated image. */
+  showImage(dataUri: string, label: string, captured?: boolean): void;
   /** Capture the screen as a base64 PNG (for the capture_screen tool); undefined if no backend. */
   captureScreen(): Promise<string | undefined>;
   post(message: Record<string, unknown>): void;
@@ -364,7 +364,7 @@ export class ToolExecutor {
       return 'Error: screen capture is unavailable here (needs the built-in Windows backend or nut.js). Tell the user they can also run the /screenshot command or click the 📷 button.';
     }
     const dataUri = `data:image/png;base64,${base64}`;
-    this.host.showImage(dataUri, 'screenshot');
+    this.host.showImage(dataUri, 'your screen', true);
     // Queue it so the turn runner feeds it to the model as an image on the next
     // round — the model can then actually SEE and analyze the screen.
     this.pendingImages.push(dataUri);

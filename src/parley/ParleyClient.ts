@@ -596,8 +596,9 @@ export class ParleyClient implements ParleyProvider {
         // so the model knows output was cut instead of reasoning over a silent gap.
         convo.push({ role: 'tool', tool_call_id: tc.id, content: clampToolResult(tc.name, toolResult) });
       }
-      // Tool-produced images (e.g. capture_screen) can't ride in a text tool result,
-      // so inject them as a user image message the next round actually sees.
+      // Tool-produced images (e.g. capture_screen) can't ride in a text tool result.
+      // They're injected as a user image message so the model sees them — appended
+      // here (this round) AND carried into later auto-continue steps by the turn runner.
       const toolImages = options.drainToolImages?.() ?? [];
       if (toolImages.length > 0) {
         convo.push({

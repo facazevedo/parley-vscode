@@ -163,6 +163,10 @@ export class AgentTurnRunner {
       let auto = 0;
       let nudged = false; // one free "your reply was empty" retry before declaring a stall
       let continuation: string | null = null; // null = first send (real prompt + context)
+      // Screenshots captured by capture_screen this turn — carried into every
+      // subsequent auto-continue step so the model keeps seeing them (otherwise it
+      // loses the image after one step and wrongly "corrects" itself as hallucinating).
+      const turnImages: Array<{ label: string; dataUri: string }> = [];
       for (;;) {
         const stepActions: string[] = []; // tool activity for this step (persisted if the model doesn't narrate)
         streamedText = '';
@@ -182,7 +186,13 @@ export class AgentTurnRunner {
             messages,
             context: isCont ? [] : req.context,
             agentId,
-            images: isCont || req.images.length === 0 ? undefined : req.images,
+            images: isCont
+              ? turnImages.length > 0
+                ? turnImages
+                : undefined
+              : [...req.images, ...turnImages].length === 0
+                ? undefined
+                : [...req.images, ...turnImages],
             documents: isCont || req.documents.length === 0 ? undefined : req.documents,
             audios: isCont || req.audios.length === 0 ? undefined : req.audios,
             thinking: resolveThinking(req.thinking),
@@ -206,9 +216,18 @@ export class AgentTurnRunner {
               : undefined,
             tools: req.turnTools,
             runTool: toolsEnabled ? (call) => this.host.executor.run(call) : undefined,
-            // Images a tool produced this round (capture_screen) → injected as an
-            // image message so the model sees the screenshot on its next round.
-            drainToolImages: toolsEnabled ? () => this.host.executor.drainImages() : undefined,
+            // Images a tool produced this round (capture_screen): injected into THIS
+            // round's messages (immediate vision) and recorded in turnImages so every
+            // later auto-continue step re-supplies them (persistent vision).
+            drainToolImages: toolsEnabled
+              ? () => {
+                  const imgs = this.host.executor.drainImages();
+                  for (const dataUri of imgs) {
+                    turnImages.push({ label: 'screenshot', dataUri });
+                  }
+                  return imgs;
+                }
+              : undefined,
             onToolEvent: toolsEnabled
               ? (event) => {
                   const action = describeToolEvent(event.name, event.args);

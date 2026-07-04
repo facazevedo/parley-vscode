@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.14.0
+
+### Fixed — captured screenshots no longer get "corrected" as hallucinations
+
+- `capture_screen` was mislabeled in the transcript as **"🎨 Generated image"**, which led the model to conclude on a later turn that it had *synthesized a fake image* and retract an accurate description. Captures are now labeled **"📸 Screenshot captured"** — a real screen image, not a generated one.
+- The captured screenshot now **persists across auto-continue steps**: it's carried in the turn's image set so every follow-up step still sees it. Previously the image existed only in the step that captured it, so the next step lost it and the model "reasoned" it must have made the description up.
+- The system prompt now tells the agent that a successful `capture_screen` really adds the screen image to the conversation, to trust it, and to never later claim it was fabricated.
+
 ## 1.13.0
 
 ### New — click an inline image to enlarge it

@@ -404,7 +404,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       }),
       getSubagentTypes: () => this.subagentTypes,
       applyUsage: (tokens, cost) => this.accrueUsage(tokens, cost),
-      showImage: (dataUri, label) => this.showGeneratedImage(dataUri, label),
+      showImage: (dataUri, label, captured) => this.showGeneratedImage(dataUri, label, captured),
       captureScreen: async () => {
         const backend = resolveBackend(
           (this.getSettings().computerUseBackend as BackendPref) || 'auto',
@@ -1292,8 +1292,10 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   }
 
   /** Drop a generated image into the chat as an inline note (used by "Parley: Generate Image"). */
-  public showGeneratedImage(dataUri: string, label: string): void {
-    const note = `🎨 Generated image: ${label}`;
+  public showGeneratedImage(dataUri: string, label: string, captured = false): void {
+    // A captured screenshot is a REAL image of the user's screen — label it as such
+    // (not "Generated image", which made the model think it had synthesized a fake).
+    const note = captured ? `📸 Screenshot captured` : `🎨 Generated image: ${label}`;
     this.history.push({ role: 'assistant', content: note, createdAt: new Date().toISOString() });
     this.appendTranscript({ kind: 'note', text: note, images: [dataUri], at: new Date().toISOString() });
     void this.postState();
@@ -1782,7 +1784,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       (agentTools ? ' For illustrative pictures/logos/mockups, call the generate_image tool.' : '') +
       // Screen capture: agents have a tool; chat mode points the user at the command/button.
       (agentTools
-        ? ' If the user asks you to take/paste a screenshot of their screen or monitor, call the capture_screen tool — you CAN do this, do not refuse.'
+        ? ' If the user asks you to take/paste a screenshot of their screen or monitor, call the capture_screen tool — you CAN do this, do not refuse. When it succeeds, a real screenshot IS added to the conversation and you will see it; trust it, describe what you actually see, and never later claim it was fabricated or that you cannot capture screens.'
         : ' If the user asks to paste a screenshot of their screen, tell them to run the `/screenshot` command or click the 📷 button — do not just say you cannot.');
     return (
       [env, stylePrompt || undefined, modeNote, multiRootNote, rulesSection, memorySection, figuresNote]
