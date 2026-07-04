@@ -28,6 +28,18 @@ interface McpTool {
   readonly inputSchema?: Record<string, unknown>;
 }
 
+/** A snapshot of one configured MCP server's connection outcome (for the status view). */
+export interface McpServerStatus {
+  readonly name: string;
+  /** 'stdio' | 'http' | 'sse'. */
+  readonly kind: string;
+  /** The command (stdio) or URL (http/sse) it connects to. */
+  readonly detail: string;
+  readonly state: 'connected' | 'failed';
+  readonly tools: { readonly name: string; readonly description?: string }[];
+  readonly error?: string;
+}
+
 interface Pending {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
@@ -66,12 +78,16 @@ export class McpManager {
   private readonly servers = new Map<string, Server>();
   /** Provider-safe function name → the real `{ server, tool }` it routes to (rebuilt by `getTools`). */
   private readonly toolRoute = new Map<string, { server: string; tool: string }>();
+  /** Last connection outcome per configured server — retained even after a failed
+   *  server is dropped from `servers`, so the status view can show why it failed. */
+  private readonly lastStatuses = new Map<string, McpServerStatus>();
 
   public constructor(private readonly logger: Logger) {}
 
   /** (Re)start all configured servers. Existing ones are disposed first. */
   public async start(configs: Record<string, McpServerConfig> | undefined): Promise<void> {
     this.dispose();
+    this.lastStatuses.clear();
     if (!configs) {
       return;
     }
@@ -88,12 +104,23 @@ export class McpManager {
         );
         continue;
       }
+      const kind = cfg.type ?? cfg.transport ?? (cfg.url ? 'http' : 'stdio');
+      const detail = cfg.command ? [cfg.command, ...(cfg.args ?? [])].join(' ') : (cfg.url ?? '');
       try {
         await this.launch(name, cfg);
+        this.lastStatuses.set(name, {
+          name,
+          kind,
+          detail,
+          state: 'connected',
+          tools: (this.servers.get(name)?.tools ?? []).map((t) => ({ name: t.name, description: t.description }))
+        });
       } catch (error) {
-        this.logger.warn(`MCP server "${name}" failed to start: ${error instanceof Error ? error.message : 'error'}`);
+        const message = error instanceof Error ? error.message : 'error';
+        this.logger.warn(`MCP server "${name}" failed to start: ${message}`);
         this.servers.get(name)?.transport.dispose();
         this.servers.delete(name);
+        this.lastStatuses.set(name, { name, kind, detail, state: 'failed', tools: [], error: message });
       }
     }
   }
@@ -276,6 +303,12 @@ export class McpManager {
   /** Human-readable status, e.g. "filesystem: 6 tools". */
   public status(): string[] {
     return [...this.servers.entries()].map(([n, s]) => `${n}: ${s.tools.length} tool(s)`);
+  }
+
+  /** Per-server connection outcome from the last start() — connected servers with
+   *  their tools, and failed servers with the error. Used by the MCP status view. */
+  public serverStatuses(): McpServerStatus[] {
+    return [...this.lastStatuses.values()];
   }
 
   public dispose(): void {

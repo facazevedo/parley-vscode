@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.48.0
+
+### MCP server status view
+
+- New command "Parley: MCP Server Status" shows each configured MCP server (connected vs failed, transport, tool count) in a QuickPick; pick a server to list the tools it exposes to the agent, or see the exact error for one that failed to start. Previously this info was only in a transient toast and the output log.
+- McpManager now retains the last connection outcome per server (including failures) so the status view can report why a server did not connect.
+
+
 ## 1.47.0
 
 ### Test-runner loop
