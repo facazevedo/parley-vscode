@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.50.0
+
+### Multi-file review opens one native diff editor
+
+- Clicking "Review" on the end-of-turn changes summary now opens all changed files in VS Code native multi-file diff editor (a single scrollable before/after view) instead of spawning a separate diff tab per file. Falls back to per-file diffs if the editor is unavailable, and now handles up to 60 files (was 12).
+
+
 ## 1.49.0
 
 ### @codebase attaches the matched region, not the file head

@@ -1477,28 +1477,44 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     this.history.push({ role: 'assistant', content: note, createdAt: new Date().toISOString() });
   }
 
-  /** "Review" on the changes summary: open each changed file as a before/after diff. */
+  /**
+   * "Review" on the changes summary: show every changed file as a before/after diff.
+   * Prefers VS Code's native multi-file diff editor (a single scrollable view for all
+   * files); falls back to one diff tab per file if that command is unavailable.
+   */
   private async reviewChanges(paths: readonly string[]): Promise<void> {
     if (paths.length === 0) {
       return;
     }
-    for (const rel of paths.slice(0, 12)) {
+    const stamp = Date.now();
+    // [resource (label), before/left, after/right]. Left = checkpointed original,
+    // right = current file → a real before/after diff.
+    const resources: Array<[vscode.Uri, vscode.Uri, vscode.Uri]> = [];
+    for (const rel of paths.slice(0, 60)) {
       const uri = (await resolveAcrossRoots(rel)) ?? vscode.Uri.file(rel);
-      const original = this.checkpoints.originalOf(uri.fsPath);
+      const original = this.checkpoints.originalOf(uri.fsPath) ?? '';
+      const beforeUri = vscode.Uri.parse(`parley-diff:${encodeURIComponent(uri.fsPath)}?${stamp}`);
+      this.commandDeps.diffProvider.set(beforeUri, original);
+      resources.push([uri, beforeUri, uri]);
+    }
+    try {
+      await vscode.commands.executeCommand(
+        'vscode.changes',
+        `Parley changes (${resources.length} file${resources.length === 1 ? '' : 's'})`,
+        resources
+      );
+      return;
+    } catch {
+      // Native multi-diff editor not available — fall back to per-file diffs.
+    }
+    for (const [uri, beforeUri] of resources) {
       try {
-        if (original !== undefined) {
-          // Left = checkpointed original, right = current file → a real before/after diff.
-          const beforeUri = vscode.Uri.parse(`parley-diff:${encodeURIComponent(uri.fsPath)}?${Date.now()}`);
-          this.commandDeps.diffProvider.set(beforeUri, original);
-          await vscode.commands.executeCommand(
-            'vscode.diff',
-            beforeUri,
-            uri,
-            `Parley changes: ${path.basename(uri.fsPath)}`
-          );
-        } else {
-          await vscode.commands.executeCommand('vscode.open', uri);
-        }
+        await vscode.commands.executeCommand(
+          'vscode.diff',
+          beforeUri,
+          uri,
+          `Parley changes: ${path.basename(uri.fsPath)}`
+        );
       } catch {
         // Best-effort — a missing/renamed file just isn't opened.
       }
