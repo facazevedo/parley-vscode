@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.60.0
+
+### Maintenance commands: Triage TODOs & Audit Dependencies
+
+- **Parley: Triage TODOs** scans the workspace for TODO/FIXME/HACK/XXX markers (via git grep), lists them in a picker, opens the one you choose at its line, and hands it to the agent to implement or justify.
+- **Parley: Audit Dependencies** runs the auto-detected package-manager audit (npm / pnpm / yarn) and streams a plain-English explanation — what is affected, why it matters, and the exact remediation commands.
+
+
 ## 1.59.0
 
 ### Diagram This (Mermaid, inline)

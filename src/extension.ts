@@ -4,6 +4,8 @@ import type { CommandDependencies } from './commands/common';
 import { registerExplainFileCommand } from './commands/explainFile';
 import { registerAddDocsCommand } from './commands/addDocs';
 import { registerDiagramCommand } from './commands/diagram';
+import { registerTriageTodosCommand } from './commands/triageTodos';
+import { registerAuditDependenciesCommand } from './commands/auditDependencies';
 import { registerParleyCodeActions } from './commands/parleyCodeActions';
 import { registerMcpStatusCommand } from './commands/mcpStatus';
 import { registerFixDiagnosticsCommand } from './commands/fixDiagnostics';
@@ -281,6 +283,8 @@ export function activate(context: vscode.ExtensionContext): void {
   registerFixFailingTestsCommand(context, commandDeps);
   registerAddDocsCommand(context, commandDeps);
   registerDiagramCommand(context, commandDeps);
+  registerTriageTodosCommand(context, commandDeps);
+  registerAuditDependenciesCommand(context, commandDeps);
   registerParleyCodeActions(context);
   registerMcpStatusCommand(context, mcp);
   registerFixDiagnosticsCommand(context, commandDeps);
