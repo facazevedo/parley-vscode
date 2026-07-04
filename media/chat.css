@@ -194,14 +194,14 @@ button:disabled {
   margin-top: var(--chat-action-reserved-space);
 }
 /* Claude Code / Codex-style timeline: a state-colored dot per step on a continuous
-   vertical rail — white = message/output, green = tool done, red = tool error, pulsing =
-   running. Every step node (assistant message, tool step, diff/plan/changes/compare card)
-   rides the rail; right-aligned user bubbles and dividers sit off it. */
-.history > *:not(.user):not(.divider):not(.empty) {
+   vertical rail — accent = your prompt, white = message/output, green = tool done,
+   red = tool error, pulsing = running. Every node (user turn, assistant message, tool
+   step, diff/plan/changes/compare card) rides one unbroken rail; dividers sit off it. */
+.history > *:not(.divider):not(.empty) {
   position: relative;
   margin-left: 18px;
 }
-.history > *:not(.user):not(.divider):not(.empty)::after {
+.history > *:not(.divider):not(.empty)::after {
   /* the dot, in the left rail gutter */
   content: '';
   position: absolute;
@@ -215,7 +215,7 @@ button:disabled {
 }
 /* Rail segment down to the next node (overshoots behind the next opaque dot, so a
    slightly-too-long segment is invisible and the rail reads as continuous). */
-.history > *:not(.user):not(.divider):not(.empty):has(+ *:not(.user):not(.divider):not(.empty))::before {
+.history > *:not(.divider):not(.empty):has(+ *:not(.divider):not(.empty))::before {
   content: '';
   position: absolute;
   left: -12px;
@@ -223,6 +223,16 @@ button:disabled {
   bottom: -22px;
   width: 1px;
   background: var(--vscode-sideBar-border, rgba(127, 127, 127, 0.5));
+}
+/* Your prompts sit on the rail too (left-aligned), with an accent dot. */
+.history > .message.user {
+  align-self: stretch;
+  max-width: 100%;
+  border-radius: 8px;
+}
+.history > .message.user::after {
+  background: var(--vscode-focusBorder, #4daafc);
+  opacity: 0.95;
 }
 /* Compact tool-step rows so a run of tool calls reads as a dense rail. */
 .history > .message.toolstep {

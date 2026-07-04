@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.30.0
+
+### Changed — fully continuous timeline (Codex-style)
+
+- Your prompts now ride the **same vertical rail** as everything else (left-aligned, with an accent-colored dot) instead of sitting off it as right-aligned bubbles. The timeline is now unbroken top-to-bottom — user turn → assistant → tool steps → cards — exactly like Codex / Claude Code.
+
 ## 1.29.0
 
 ### New — tool-step inspector
