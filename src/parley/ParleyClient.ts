@@ -2,6 +2,7 @@ import type { Logger } from '../logging/logger';
 import { renderPromptWithContext } from '../context/renderPromptWithContext';
 import { extractProposedChanges } from '../diff/extractChanges';
 import { clampToolResult } from './clampText';
+import { parseTextToolCalls } from './textToolCalls';
 import {
   MAX_ATTEMPTS,
   isRetryableError,
@@ -517,6 +518,9 @@ export class ParleyClient implements ParleyProvider {
     // carries the full cumulative context, so summing prompts too would double-count.
     let accCompletion = 0;
     let lastPrompt = 0;
+    // Set once a model emits a TEXT-format <tool_call> (no native tool_calls). From then
+    // on we stop generation at </tool_call> so it can't fabricate a <tool_response>.
+    let textToolMode = false;
     for (let round = 0; round < maxRounds; round += 1) {
       // Steering: user messages typed while the agent works join the conversation
       // at the next round boundary, so the model sees them without a restart.
@@ -533,6 +537,9 @@ export class ParleyClient implements ParleyProvider {
         stream: true,
         stream_options: { include_usage: true }
       };
+      if (textToolMode) {
+        roundPayload.stop = ['</tool_call>']; // halt right after a text tool call
+      }
       this.applyExtras(roundPayload, model, thinking, responseFormat, serviceTier);
 
       // Stream this round live: narration tokens go to onToken; tool calls are
@@ -562,6 +569,45 @@ export class ParleyClient implements ParleyProvider {
       }
 
       if (result.toolCalls.length === 0) {
+        // Native path produced no tool calls. If tools are enabled and the model emitted
+        // a TEXT-format <tool_call> instead (models without native tool-calling), run it
+        // through the same executor and feed the real result back — turning a text-protocol
+        // model into a working agent instead of returning its (often fabricated) narration.
+        const textTools =
+          options.runTool && options.tools && options.tools.length > 0
+            ? parseTextToolCalls(result.content)
+            : { calls: [], assistantContent: result.content };
+        if (textTools.calls.length > 0) {
+          textToolMode = true; // subsequent rounds stop at </tool_call>
+          convo.push({ role: 'assistant', content: textTools.assistantContent });
+          for (const call of textTools.calls) {
+            options.onToolEvent?.({ name: call.name, args: call.argsJson });
+            dbg('tool', `text-call ${call.name}`, call.argsJson?.slice(0, 300));
+            let toolResult: string;
+            try {
+              toolResult = await options.runTool!({ id: call.id, name: call.name, arguments: call.argsJson });
+            } catch (error) {
+              toolResult = `Error: ${error instanceof Error ? error.message : 'tool failed'}`;
+            }
+            options.onToolResult?.(call.name, toolResult);
+            // Feed the REAL result back in the same <tool_response> text protocol the model used.
+            convo.push({
+              role: 'user',
+              content: `<tool_response>\n${clampToolResult(call.name, toolResult)}\n</tool_response>`
+            });
+          }
+          const textToolImages = options.drainToolImages?.() ?? [];
+          if (textToolImages.length > 0) {
+            convo.push({
+              role: 'user',
+              content: [
+                { type: 'text', text: 'Here is the screenshot you just captured with capture_screen:' },
+                ...textToolImages.map((url) => ({ type: 'image_url', image_url: { url } }))
+              ]
+            });
+          }
+          continue;
+        }
         return {
           content: result.content,
           usage: lastUsage,

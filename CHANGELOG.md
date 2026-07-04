@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.26.0
+
+### New — text-protocol models work as real agents
+
+- Models with **native tool-calling** (Claude, GPT-5.x, Gemini…) already use it by default — nothing changes for them.
+- Models **without** native tool-calling (many local/open models like DeepSeek, Qwen) emit tool calls as text — `<tool_call>{…}</tool_call>`. Parley now **parses those, runs them through the real tool executor, and feeds the actual `<tool_response>` back**, looping until the model answers — so they become working agents instead of narrating (and often fabricating) tool use. These calls show on the same `⏺`/`⎿` step timeline as native ones.
+- To stop such models from hallucinating a tool result, generation halts at `</tool_call>` once text-tool mode is detected, and any fabricated response the model wrote is discarded in favor of the real one. Parser is unit-tested (352 tests).
+
 ## 1.25.0
 
 ### Improved — tidy rendering of text-format tool calls
