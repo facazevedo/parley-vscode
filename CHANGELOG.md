@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.61.0
+
+### Coverage-guided test generation
+
+- New command "Parley: Generate Tests for Uncovered Code": runs your test suite with coverage (auto-derived from the test command — npm/jest/vitest, pytest --cov, go -cover — or set parley.coverageCommand), then has the agent write focused tests for the currently-uncovered lines/branches of the current file. Requires a trusted workspace (it runs the project test command).
+
+
 ## 1.60.0
 
 ### Maintenance commands: Triage TODOs & Audit Dependencies

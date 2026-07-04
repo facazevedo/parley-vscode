@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "1.60.0",
+  "version": "1.61.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -45,6 +45,7 @@
         "parley.video.ffmpegPath",
         "parley.testCommand",
         "parley.verifyCommand",
+        "parley.coverageCommand",
         "parley.conversationsDir",
         "parley.webSearch.provider",
         "parley.webSearch.apiKey",
@@ -117,6 +118,11 @@
       {
         "command": "parley.auditDependencies",
         "title": "Parley: Audit Dependencies",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.coverageTests",
+        "title": "Parley: Generate Tests for Uncovered Code",
         "category": "Parley"
       },
       {
@@ -878,6 +884,11 @@
           "type": "string",
           "default": "",
           "markdownDescription": "Command used by the `run_tests` tool, **Parley: Fix Failing Tests**, and `/verify`. Leave empty to auto-detect (package.json `test` script → `npm test`, else pytest / cargo test / go test / mvn / gradle). Set explicitly to override, e.g. `npm test --silent` or `pytest -q`. `parley.verifyCommand` is accepted as a fallback for backward compatibility."
+        },
+        "parley.coverageCommand": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Command used by **Parley: Generate Tests for Uncovered Code**. Leave empty to derive from the test command (e.g. `npm test -- --coverage`, `pytest --cov --cov-report=term-missing`, `go test -cover ./...`). Set explicitly if the heuristic is wrong."
         },
         "parley.autoSaveConversations": {
           "type": "boolean",

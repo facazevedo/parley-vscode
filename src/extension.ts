@@ -6,6 +6,7 @@ import { registerAddDocsCommand } from './commands/addDocs';
 import { registerDiagramCommand } from './commands/diagram';
 import { registerTriageTodosCommand } from './commands/triageTodos';
 import { registerAuditDependenciesCommand } from './commands/auditDependencies';
+import { registerCoverageTestsCommand } from './commands/coverageTests';
 import { registerParleyCodeActions } from './commands/parleyCodeActions';
 import { registerMcpStatusCommand } from './commands/mcpStatus';
 import { registerFixDiagnosticsCommand } from './commands/fixDiagnostics';
@@ -285,6 +286,7 @@ export function activate(context: vscode.ExtensionContext): void {
   registerDiagramCommand(context, commandDeps);
   registerTriageTodosCommand(context, commandDeps);
   registerAuditDependenciesCommand(context, commandDeps);
+  registerCoverageTestsCommand(context, commandDeps);
   registerParleyCodeActions(context);
   registerMcpStatusCommand(context, mcp);
   registerFixDiagnosticsCommand(context, commandDeps);
