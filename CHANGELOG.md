@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.59.0
+
+### Diagram This (Mermaid, inline)
+
+- New command "Parley: Diagram This" (editor right-click submenu): pick a diagram kind — Structure (flowchart), Class diagram, Call/sequence flow, or Dependencies — and Parley renders a Mermaid diagram of the current file (or selection) inline in the chat. Turns a tangled module into a picture in one click.
+
+
 ## 1.58.0
 
 ### New context mentions: @blame, @issue, @pr

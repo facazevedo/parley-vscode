@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "1.58.0",
+  "version": "1.59.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -102,6 +102,11 @@
       {
         "command": "parley.addDocs",
         "title": "Parley: Add Docs",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.diagram",
+        "title": "Parley: Diagram This",
         "category": "Parley"
       },
       {
@@ -381,16 +386,20 @@
           "group": "2_file@3"
         },
         {
-          "command": "parley.fixDiagnostics",
+          "command": "parley.diagram",
           "group": "2_file@4"
         },
         {
-          "command": "parley.addFileToChat",
+          "command": "parley.fixDiagnostics",
           "group": "2_file@5"
         },
         {
-          "command": "parley.fileEditHistory",
+          "command": "parley.addFileToChat",
           "group": "2_file@6"
+        },
+        {
+          "command": "parley.fileEditHistory",
+          "group": "2_file@7"
         }
       ],
       "editor/title/context": [

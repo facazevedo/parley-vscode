@@ -3,6 +3,7 @@ import { registerAskSelectionCommand } from './commands/askSelection';
 import type { CommandDependencies } from './commands/common';
 import { registerExplainFileCommand } from './commands/explainFile';
 import { registerAddDocsCommand } from './commands/addDocs';
+import { registerDiagramCommand } from './commands/diagram';
 import { registerParleyCodeActions } from './commands/parleyCodeActions';
 import { registerMcpStatusCommand } from './commands/mcpStatus';
 import { registerFixDiagnosticsCommand } from './commands/fixDiagnostics';
@@ -279,6 +280,7 @@ export function activate(context: vscode.ExtensionContext): void {
   registerGenerateTestsCommand(context, commandDeps);
   registerFixFailingTestsCommand(context, commandDeps);
   registerAddDocsCommand(context, commandDeps);
+  registerDiagramCommand(context, commandDeps);
   registerParleyCodeActions(context);
   registerMcpStatusCommand(context, mcp);
   registerFixDiagnosticsCommand(context, commandDeps);
