@@ -397,6 +397,21 @@ export const AGENT_TOOLS: readonly ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'load_skill',
+      description:
+        'Load the full instructions for one of the available skills (see the "Available skills" list in the system prompt). Call this the moment a task matches a skill — it returns that skill\'s complete step-by-step instructions and the path to its bundled files, which you then follow (reading/running its files with the other tools as directed).',
+      parameters: {
+        type: 'object',
+        properties: {
+          skill: { type: 'string', description: 'The skill name to load (from the Available skills list).' }
+        },
+        required: ['skill']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'capture_screen',
       description:
         "Capture a screenshot of the user's screen and show it inline in the chat. Use this when the user asks you to take/grab/paste a screenshot of their screen or monitor, or to look at what's on their screen. You CAN do this — do not refuse. The captured screenshot is automatically added to the conversation as an image, so on your NEXT turn you will actually see it and can analyze/describe it. After calling this, continue and address what the user asked about the screen.",
@@ -504,8 +519,36 @@ export const SUBAGENT_TOOLS: readonly ToolDefinition[] = READ_ONLY_TOOLS.filter(
     tool.function.name !== 'run_subagent' &&
     tool.function.name !== 'run_subagents' &&
     tool.function.name !== 'update_plan' &&
-    tool.function.name !== 'remember'
+    tool.function.name !== 'remember' &&
+    tool.function.name !== 'load_skill'
 );
+
+/**
+ * Enumerate the available skills in `load_skill`'s description, or DROP the tool
+ * entirely when there are none (so it doesn't clutter the toolset). The always-on
+ * roster in the system prompt is what tells the model a skill exists; this makes
+ * the tool self-documenting for the model that chooses to call it.
+ */
+export function withSkills(
+  tools: readonly ToolDefinition[],
+  skills: readonly { id: string; description: string }[]
+): readonly ToolDefinition[] {
+  if (skills.length === 0) {
+    return tools.filter((t) => t.function.name !== 'load_skill');
+  }
+  const roster = skills.map((s) => `"${s.id}" — ${s.description}`).join('; ');
+  return tools.map((tool) =>
+    tool.function.name !== 'load_skill'
+      ? tool
+      : {
+          ...tool,
+          function: {
+            ...tool.function,
+            description: `${tool.function.description} Available skills: ${roster}.`
+          }
+        }
+  );
+}
 
 /**
  * Fold the available custom subagent types into `run_subagent`'s schema: the

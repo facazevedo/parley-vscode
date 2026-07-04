@@ -39,9 +39,11 @@ import {
   resolveAcrossRoots,
   runAgentTool,
   toolRelPath,
+  withSkills,
   withSubagentTypes
 } from '../parley/tools';
 import { loadSubagentTypes, SubagentType } from '../config/subagents';
+import { loadSkills, Skill } from '../config/skills';
 import { normalizeThinkingLevel, type ThinkingLevel } from '../parley/thinking';
 import { buildChatHtml } from './webviewHtml';
 import { TranscriptRecorder } from './transcriptRecorder';
@@ -327,6 +329,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private promptHistory: string[] = [];
   // Per-turn snapshot of `.parley/agents` custom subagent types (loaded in runTurn).
   private subagentTypes: readonly SubagentType[] = [];
+  // Per-turn snapshot of `.parley/skills` (loaded in runTurn) — roster + load_skill.
+  private skills: readonly Skill[] = [];
   // Set when a coordinate-grid screenshot was just attached — folded into the next
   // system prompt so the model reads real-pixel coordinates off the grid.
   private captureCoordinateHint?: string;
@@ -412,6 +416,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         speed: this.selectedSpeed
       }),
       getSubagentTypes: () => this.subagentTypes,
+      getSkills: () => this.skills,
       applyUsage: (tokens, cost) => this.accrueUsage(tokens, cost),
       showImage: (dataUri, label, captured) => this.showGeneratedImage(dataUri, label, captured),
       captureScreen: async () => {
@@ -1149,7 +1154,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         this.history.push({
           role: 'assistant',
           content:
-            '**Slash commands**\n- `/clear` (or `/new`) — start a new conversation\n- `/compact` — summarize to free up context (choose keep-recent or all)\n- `/context` — breakdown of what is filling the context window\n- `/cost` — show this conversation\'s token/cost usage\n- `/model` — switch the model\n- `/compare [prompt]` — run a prompt on a second model, side by side (reuses your last message if omitted)\n- `/verify [command]` — run the project tests and fix failures until green (agent modes only)\n- `/computer <task>` — control your mouse & keyboard to do a desktop task (Windows; enable `parley.computerUse.enabled`)\n- `/screenshot` — capture your whole screen and attach it (no picker)\n- `/init` — analyze the repo and write a tailored AGENTS.md rules file (template in Chat/Plan mode)\n- `/json` — make the next reply a JSON object\n- `/help` — this list\n\n**Custom commands:** add a `name.md` file under `.parley/commands/` or `.claude/commands/` (workspace), or `~/.parley/commands/` / `~/.claude/commands/` (global — workspace wins on a name clash) and it becomes `/name` — its text is the prompt, with `$ARGS` replaced by anything typed after the command and `$SELECTION` by the active editor selection. Optional `description:` frontmatter shows in the slash menu.\n\n**Custom subagents:** add a `name.md` under `.parley/agents/` (frontmatter `description:` and optional `model:`; body = its extra system prompt) and the agent can delegate read-only investigations to it via run_subagent.\n\nMost actions also have commands in the Command Palette (search "Parley").',
+            '**Slash commands**\n- `/clear` (or `/new`) — start a new conversation\n- `/compact` — summarize to free up context (choose keep-recent or all)\n- `/context` — breakdown of what is filling the context window\n- `/cost` — show this conversation\'s token/cost usage\n- `/model` — switch the model\n- `/compare [prompt]` — run a prompt on a second model, side by side (reuses your last message if omitted)\n- `/verify [command]` — run the project tests and fix failures until green (agent modes only)\n- `/computer <task>` — control your mouse & keyboard to do a desktop task (Windows; enable `parley.computerUse.enabled`)\n- `/screenshot` — capture your whole screen and attach it (no picker)\n- `/init` — analyze the repo and write a tailored AGENTS.md rules file (template in Chat/Plan mode)\n- `/json` — make the next reply a JSON object\n- `/help` — this list\n\n**Custom commands:** add a `name.md` file under `.parley/commands/` or `.claude/commands/` (workspace), or `~/.parley/commands/` / `~/.claude/commands/` (global — workspace wins on a name clash) and it becomes `/name` — its text is the prompt, with `$ARGS` replaced by anything typed after the command and `$SELECTION` by the active editor selection. Optional `description:` frontmatter shows in the slash menu.\n\n**Custom subagents:** add a `name.md` under `.parley/agents/` (frontmatter `description:` and optional `model:`; body = its extra system prompt) and the agent can delegate read-only investigations to it via run_subagent.\n\n**Skills:** add a `.parley/skills/<name>/SKILL.md` (frontmatter `description:`; body = full instructions; bundle any helper files in the folder). The agent sees the skill name + description always, and loads the full instructions on demand when a task matches (Claude-style) — see `Parley: Create Skill`.\n\nMost actions also have commands in the Command Palette (search "Parley").',
           createdAt: new Date().toISOString()
         });
         await this.postState();
@@ -1532,6 +1537,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     ];
     const audios = this.attachments.filter((a) => a.kind === 'audio').map((a) => a.audio!);
     const toolsEnabled = this.mode !== 'chat';
+    // Skills are re-scanned each turn; their roster goes in the system prompt (below)
+    // and load_skill's schema (in the toolset), so load before buildSystemExtra.
+    this.skills = await loadSkills();
     const systemExtra = await this.buildSystemExtra();
     const responseFormat = this.jsonNext ? { type: 'json_object' } : undefined;
     this.jsonNext = false;
@@ -1582,9 +1590,12 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     }
 
     // Built-in tools for the mode + any configured MCP tools (MCP excluded from read-only Plan mode).
-    // Custom subagent types are re-scanned each turn so the run_subagent schema stays current.
+    // Custom subagent types and skills are re-scanned each turn so the tool schemas stay current.
     this.subagentTypes = await loadSubagentTypes();
-    const baseTools = withSubagentTypes(this.mode === 'plan' ? READ_ONLY_TOOLS : AGENT_TOOLS, this.subagentTypes);
+    const baseTools = withSkills(
+      withSubagentTypes(this.mode === 'plan' ? READ_ONLY_TOOLS : AGENT_TOOLS, this.subagentTypes),
+      this.skills
+    );
     const turnTools = toolsEnabled
       ? this.mode === 'plan'
         ? baseTools
@@ -1810,8 +1821,25 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     // One-shot: guidance for a coordinate-grid screenshot attached to this turn.
     const coordinateHint = this.captureCoordinateHint;
     this.captureCoordinateHint = undefined;
+    // Skills roster (progressive disclosure): names + descriptions always in context;
+    // full instructions load on demand via load_skill. Only meaningful with the tool (agent modes).
+    const skillsSection =
+      agentTools && this.skills.length > 0
+        ? '# Available skills\nWhen a task matches one of these, call load_skill with its name to get the full instructions, then follow them:\n' +
+          this.skills.map((s) => `- ${s.id} — ${s.description}`).join('\n')
+        : undefined;
     return (
-      [env, stylePrompt || undefined, modeNote, multiRootNote, rulesSection, memorySection, figuresNote, coordinateHint]
+      [
+        env,
+        stylePrompt || undefined,
+        modeNote,
+        multiRootNote,
+        rulesSection,
+        memorySection,
+        figuresNote,
+        skillsSection,
+        coordinateHint
+      ]
         .filter(Boolean)
         .join('\n\n') || undefined
     );

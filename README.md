@@ -266,7 +266,9 @@ Replies can also include **rendered figures**: a ` ```mermaid ` code block rende
 | `update_plan`                                        | Maintain the live task checklist                                                                                 |
 | `mcp__<server>__<tool>`                              | Any tools from your configured [MCP servers](#mcp-servers)                                                       |
 
-Custom **subagent types** live in `.parley/agents/*.md` (frontmatter `description:` + optional `model:`; body = the subagent's system prompt); the agent can target one via `run_subagent`/`run_subagents`' `agent` parameter. Code blocks in **Chat**-mode replies also get an **Apply** button, and diagnostics offer **Fix with Parley** in the `Ctrl+.` lightbulb.
+Custom **subagent types** live in `.parley/agents/*.md` (frontmatter `description:` + optional `model:`; body = the subagent's system prompt); the agent can target one via `run_subagent`/`run_subagents`' `agent` parameter.
+
+**Skills** (Claude-style progressive disclosure): a `.parley/skills/<name>/SKILL.md` (frontmatter `description:`; body = full instructions; bundle any helper scripts/files in the folder) defines a skill. Only each skill's name + description sits in the prompt always; the agent calls the `load_skill` tool to pull the full instructions **on demand** when a task matches — so you can keep many skills at almost no context cost. Scaffold one with **`Parley: Create Skill`**. Code blocks in **Chat**-mode replies also get an **Apply** button, and diagnostics offer **Fix with Parley** in the `Ctrl+.` lightbulb.
 
 **Activity output (Claude‑Code style).** As the agent works you see an **`⏺ action`**
 line followed by a muted **`⎿ result`** line — e.g. `⏺ Reading App.tsx` → `⎿ Read

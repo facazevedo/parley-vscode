@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.19.0
+
+### New — Agent Skills (Claude-style, progressive disclosure)
+
+- Define a skill as **`.parley/skills/<name>/SKILL.md`** — frontmatter `description:` (when to use it), body = the full step-by-step instructions, and bundle any helper scripts/resources in the same folder. **`Parley: Create Skill`** scaffolds one.
+- **Progressive disclosure, exactly like Claude:** only each skill's *name + description* is always in the system prompt (a compact roster), so many skills cost almost nothing. When a task matches, the agent calls the new **`load_skill`** tool to pull that skill's full instructions on demand, then follows them — reading/running the skill's bundled files with the normal tools.
+- The `load_skill` tool auto-enumerates available skills and disappears entirely when you have none. Skills are re-scanned each turn (edit one, it's live next message), work in every agent mode, and are excluded from subagents/plan-only flows. Loader + tool wiring are unit-tested (338 tests).
+
 ## 1.18.0
 
 ### New — choose: queue your next message, or steer the current answer

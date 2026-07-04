@@ -302,6 +302,43 @@ export function activate(context: vscode.ExtensionContext): void {
   registerRunDiagnosticsCommand(context, commandDeps);
   registerInitProjectRulesCommand(context, () => currentChat().startInit());
   registerSignOutCommand(context, commandDeps);
+
+  // Scaffold a new Agent Skill: .parley/skills/<name>/SKILL.md with a template.
+  context.subscriptions.push(
+    vscode.commands.registerCommand('parley.createSkill', async () => {
+      const folder = vscode.workspace.workspaceFolders?.[0];
+      if (!folder) {
+        await vscode.window.showWarningMessage('Parley: open a folder first to create a skill.');
+        return;
+      }
+      const name = (
+        await vscode.window.showInputBox({
+          title: 'Parley: Create Skill',
+          prompt: 'Skill name (folder under .parley/skills/) — letters, numbers, hyphens',
+          placeHolder: 'pdf-form-filler',
+          validateInput: (v) => (/^[a-z0-9][a-z0-9-]*$/i.test(v.trim()) ? undefined : 'Use letters, numbers, hyphens.')
+        })
+      )?.trim();
+      if (!name) {
+        return;
+      }
+      const dir = vscode.Uri.joinPath(folder.uri, '.parley', 'skills', name);
+      const skillMd = vscode.Uri.joinPath(dir, 'SKILL.md');
+      try {
+        await vscode.workspace.fs.stat(skillMd);
+        await vscode.window.showInformationMessage(`Parley: skill "${name}" already exists.`);
+      } catch {
+        const template =
+          `---\ndescription: One line telling the agent WHEN to use this skill (shown always; keep it specific).\n---\n\n` +
+          `# ${name}\n\nStep-by-step instructions the agent follows once this skill is loaded.\n\n` +
+          `- Reference bundled files by relative path, e.g. \`.parley/skills/${name}/script.py\`, and read/run them with the normal tools.\n` +
+          `- Be concrete: exact commands, file names, and the expected result.\n`;
+        await vscode.workspace.fs.createDirectory(dir);
+        await vscode.workspace.fs.writeFile(skillMd, Buffer.from(template, 'utf8'));
+      }
+      await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(skillMd));
+    })
+  );
 }
 
 /** Workspace-wide keys every chat shares (the command allowlist must not fragment per tab). */

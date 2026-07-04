@@ -50,6 +50,8 @@ export interface ToolExecutorHost {
   };
   /** The current turn's snapshot of `.parley/agents` custom subagent types. */
   getSubagentTypes(): readonly { id: string; description: string; prompt: string; model?: string }[];
+  /** The current turn's snapshot of `.parley/skills` (for the load_skill tool). */
+  getSkills(): readonly { id: string; description: string; instructions: string; dir: string }[];
   /** Add nested-loop usage to the session counters (same sink as the turn runner's). */
   applyUsage(totalTokens: number, costUsd: number): { sessionTokens: number; sessionCostUsd: number };
   /** Show an image inline in the chat; `captured` labels it as a real screenshot vs a generated image. */
@@ -190,6 +192,9 @@ export class ToolExecutor {
     }
     if (call.name === 'capture_screen') {
       return this.toolCaptureScreen();
+    }
+    if (call.name === 'load_skill') {
+      return this.toolLoadSkill(call);
     }
     if (call.name === 'update_plan') {
       return this.toolUpdatePlan(call);
@@ -350,6 +355,26 @@ export class ToolExecutor {
       googleCx: s.webSearchGoogleCx
     });
     return wrapUntrusted('web search results', results);
+  }
+
+  /** Return a skill's full instructions on demand (progressive disclosure). */
+  private toolLoadSkill(call: ToolCall): string {
+    let name = '';
+    try {
+      name = String((JSON.parse(call.arguments || '{}') as { skill?: unknown }).skill ?? '').trim();
+    } catch {
+      return 'Error: arguments were not valid JSON.';
+    }
+    const skills = this.host.getSkills();
+    const skill = skills.find((s) => s.id.toLowerCase() === name.toLowerCase());
+    if (!skill) {
+      return `Error: no skill named "${name}". Available: ${skills.map((s) => s.id).join(', ') || 'none'}.`;
+    }
+    return (
+      `# Skill: ${skill.id}\n` +
+      `Its files are in \`${skill.dir}\` (read or run them with the other tools as the instructions direct).\n\n` +
+      `${skill.instructions}`
+    );
   }
 
   /** Capture the screen and show it inline in the chat (for "screenshot my screen" requests). */
