@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.40.1
+
+### Changed — uniform composer icon spacing
+
+- All composer icon buttons now share one fixed 28×26 footprint, so the spacing between them is even (the `/` keycap frames that same box instead of being narrower).
+
+
 ## 1.40.0
 
 ### New — design canvas part 2: React/JSX + Tailwind

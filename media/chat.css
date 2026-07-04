@@ -1916,12 +1916,16 @@ button:disabled {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
+  width: 28px;
+  height: 26px;
+  flex: none;
   background: transparent;
   color: var(--vscode-foreground);
   opacity: 0.75;
   border: 0;
   border-radius: 6px;
-  padding: 4px 6px;
+  padding: 0;
   cursor: pointer;
 }
 /* Monochrome line icons (Lucide-style) in the composer bar. */
@@ -1967,12 +1971,12 @@ button:disabled {
 }
 /* Slash-command button rendered as a keycap (framed), not a bare "/". */
 .actions #slashBtn {
+  /* Keeps the shared 28×26 footprint (uniform spacing); the border frames it as a keycap. */
   border: 1.5px solid var(--vscode-descriptionForeground, rgba(160, 160, 160, 0.9));
-  border-radius: 4px;
-  padding: 0 4px;
+  border-radius: 5px;
   font-family: var(--vscode-editor-font-family, ui-monospace, monospace);
-  font-size: 0.82em;
-  line-height: 1.25;
+  font-size: 0.85em;
+  line-height: 1;
   opacity: 1;
 }
 .actions #slashBtn:hover {
