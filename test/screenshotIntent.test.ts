@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { looksLikeScreenshotRequest } from '../src/computer/screenshotIntent';
+import { looksLikeScreenshotRequest, wantsPixelCoordinates } from '../src/computer/screenshotIntent';
 
 test('matches clear capture-my-screen requests', () => {
   for (const s of [
@@ -35,4 +35,19 @@ test('ignores how-to questions and coding tasks that mention screenshots', () =>
 test('ignores empty or very long messages', () => {
   assert.equal(looksLikeScreenshotRequest(''), false);
   assert.equal(looksLikeScreenshotRequest('take a screenshot of my screen ' + 'x'.repeat(200)), false);
+});
+
+test('wantsPixelCoordinates detects location/pixel questions', () => {
+  for (const s of [
+    'which pixel is the render button',
+    'what are the coordinates of the Save button',
+    'where is the mirror menu exactly',
+    'give me the x,y of the hex hub',
+    'the position of the outliner panel'
+  ]) {
+    assert.equal(wantsPixelCoordinates(s), true, s);
+  }
+  for (const s of ['what is on my screen', 'describe my screen', 'take a screenshot']) {
+    assert.equal(wantsPixelCoordinates(s), false, s);
+  }
 });

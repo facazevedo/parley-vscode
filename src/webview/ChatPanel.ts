@@ -21,7 +21,8 @@ import { UNTRUSTED_SYSTEM_NOTE, wrapUntrusted } from '../parley/untrusted';
 import { describeAction, extractJsonObject, parseAction } from '../computer/actions';
 import { resolveBackend, type BackendPref, type ControlBackend } from '../computer/control';
 import { installNutJs, isNutInstalled } from '../computer/nutControl';
-import { looksLikeScreenshotRequest } from '../computer/screenshotIntent';
+import { looksLikeScreenshotRequest, wantsPixelCoordinates } from '../computer/screenshotIntent';
+import { annotateWithGrid } from '../computer/gridOverlay';
 import { isSensitiveFile } from '../context/sensitiveFileFilter';
 import { loadIgnoreMatcher, type IgnoreMatcher } from '../context/ignoreRules';
 import type { CheckpointStore } from '../diff/checkpoints';
@@ -322,6 +323,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private promptHistory: string[] = [];
   // Per-turn snapshot of `.parley/agents` custom subagent types (loaded in runTurn).
   private subagentTypes: readonly SubagentType[] = [];
+  // Set when a coordinate-grid screenshot was just attached — folded into the next
+  // system prompt so the model reads real-pixel coordinates off the grid.
+  private captureCoordinateHint?: string;
   // Assigned by extension.ts for the SIDEBAR panel only — drives the status-bar ticker.
   public statusSink?: (s: { sessionTokens: number; sessionCostUsd: number; busy: boolean }) => void;
   // The sidebar view (typed, unlike `view`) — for the unread-replies badge.
@@ -1792,8 +1796,11 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       (agentTools
         ? ' If the user asks you to take/paste a screenshot of their screen or monitor, call the capture_screen tool — you CAN do this, do not refuse. When it succeeds, a real screenshot IS added to the conversation and you will see it; trust it, describe what you actually see, and never later claim it was fabricated or that you cannot capture screens.'
         : ' If the user asks to paste a screenshot of their screen, tell them to run the `/screenshot` command or click the 📷 button — do not just say you cannot.');
+    // One-shot: guidance for a coordinate-grid screenshot attached to this turn.
+    const coordinateHint = this.captureCoordinateHint;
+    this.captureCoordinateHint = undefined;
     return (
-      [env, stylePrompt || undefined, modeNote, multiRootNote, rulesSection, memorySection, figuresNote]
+      [env, stylePrompt || undefined, modeNote, multiRootNote, rulesSection, memorySection, figuresNote, coordinateHint]
         .filter(Boolean)
         .join('\n\n') || undefined
     );
@@ -2313,9 +2320,24 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     if (!backend) {
       return; // no capture backend (e.g. macOS/Linux without nut.js) — let the turn proceed
     }
+    this.captureCoordinateHint = undefined;
     try {
       const shot = await backend.captureScreen();
-      await this.addPastedFile(`data:image/png;base64,${shot.base64}`, 'screen.png');
+      let base64 = shot.base64;
+      // For "which pixel / where is X" questions, overlay a coordinate grid labeled
+      // in real screen pixels so the model can read locations off it, and tell it so.
+      if (wantsPixelCoordinates(text)) {
+        const gridded = await annotateWithGrid(shot.base64, shot.realW, shot.realH, this.globalStorageUri.fsPath);
+        if (gridded) {
+          base64 = gridded.base64;
+          this.captureCoordinateHint =
+            `The attached screenshot has an amber coordinate grid overlaid, labeled in the screen's REAL pixels ` +
+            `(full resolution ${shot.realW}×${shot.realH}). Read positions off the nearest gridlines and report coordinates as (x, y) in those real screen pixels; interpolate between lines for precision. Be honest that this is an estimate.`;
+        } else {
+          this.captureCoordinateHint = `The attached screenshot is the user's full screen at ${shot.realW}×${shot.realH} real pixels. Report any coordinates as (x, y) in that real-pixel space (the image may be scaled down — scale your estimate up accordingly). Be honest that pixel estimates are approximate.`;
+        }
+      }
+      await this.addPastedFile(`data:image/png;base64,${base64}`, 'screen.png');
     } catch {
       // Capture failed — proceed without it rather than blocking the message.
     }

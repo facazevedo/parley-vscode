@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.16.0
+
+### New — coordinate grid for "which pixel is X" screenshot questions
+
+- When you ask *where* something is on screen — "which pixel is the render button", "coordinates of the Save button", "where exactly is the menu" — Parley now overlays an **amber coordinate grid labeled in your screen's real pixels** on the captured screenshot, and tells the model to read locations off it and report `(x, y)` in real-pixel space. This is the standard technique for getting usable pixel estimates out of a vision model (which are otherwise poor at exact coordinates and unaware of scaling).
+- Grid is drawn with jimp (the nut.js dependency already on disk); if it can't be produced, Parley still tells the model the screen's real resolution so its estimate is at least in the right coordinate space. Plain "look at my screen" requests are unaffected — no grid. Honest caveat: even with the grid, coordinates are approximate.
+
 ## 1.15.0
 
 ### Fixed — "screenshot my screen" now just works, even when the model won't

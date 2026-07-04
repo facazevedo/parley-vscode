@@ -26,3 +26,19 @@ export function looksLikeScreenshotRequest(text: string): boolean {
   ).test(t);
   return (hasScreenshotWord && captureVerb) || captureMyScreen;
 }
+
+/**
+ * True when the message is asking WHERE something is / for pixel coordinates on
+ * screen ("which pixel is the X button", "coordinates of…", "where is…"). Used to
+ * decide whether to overlay a coordinate grid on the captured screenshot.
+ */
+export function wantsPixelCoordinates(text: string): boolean {
+  const t = text.toLowerCase();
+  return (
+    /\b(pixel|coordinate|coordinates|x[,\s/]*y)\b/.test(t) ||
+    /\bwhere\s+(is|are|'s|exactly)\b/.test(t) ||
+    /\b(location|position)\s+of\b/.test(t) ||
+    /\bwhich\s+pixel\b/.test(t) ||
+    /\bexact(ly)?\s+(where|position|location|spot)\b/.test(t)
+  );
+}
