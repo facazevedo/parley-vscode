@@ -346,6 +346,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private attachments: PendingAttachment[] = [];
   // In-flight multi-monitor picker (Windows); aborted by the Stop button / Esc-in-chat.
   private screenshotPick?: AbortController;
+  // Archived state of the live conversation (drives the header Archive/Unarchive toggle).
+  private currentArchived = false;
   // Workspace file/folder candidates for the @-mention autocomplete (short TTL so
   // per-keystroke queries don't re-walk the workspace).
   private mentionCache?: { at: number; files: string[]; dirs: string[] };
@@ -632,6 +634,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     this.conversationId = this.newConversationId();
     this.conversationStartedAt = new Date().toISOString();
     this.recorder.customTitle = undefined;
+    this.currentArchived = false;
     await this.checkpoints.bind(this.parleyBase(), this.conversationId);
     await this.postState();
   }
@@ -3193,6 +3196,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       if (this.hostPanel) {
         this.hostPanel.title = `Parley — ${title}`;
       }
+      await this.postState(); // refresh the header title line from the source of truth
     }
     await this.sendHistoryList(scope);
   }
@@ -3208,6 +3212,11 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       return;
     }
     await transcriptStore.setConversationArchived(base, id, archived);
+    // If it's the live conversation, keep the header Archive/Unarchive toggle in sync.
+    if (base === this.parleyBase() && id === this.conversationId) {
+      this.currentArchived = archived;
+      await this.postState();
+    }
     await this.sendHistoryList(scope);
   }
 
@@ -3259,13 +3268,15 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       return;
     }
     // Preserve any custom (renamed) title from the index so re-autosave doesn't revert it.
-    const savedTitle = (await transcriptStore.readIndex(base)).find((e) => e.id === id)?.title;
+    const savedEntry = (await transcriptStore.readIndex(base)).find((e) => e.id === id);
+    const savedTitle = savedEntry?.title;
     await this.autosaveConversation();
     this.archiveCurrent();
     this.transcript = transcript;
     this.history.length = 0;
     this.history.push(...transcriptToHistory(transcript));
     this.conversationId = id;
+    this.currentArchived = Boolean(savedEntry?.archived);
     this.recorder.customTitle = savedTitle && savedTitle !== 'Conversation' ? savedTitle : undefined;
     this.conversationStartedAt = transcript[0]?.at ?? new Date().toISOString();
     this.attachments = [];
@@ -3338,6 +3349,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     this.history.length = 0;
     this.history.push(...transcriptToHistory(transcript));
     this.conversationId = id;
+    this.currentArchived = false;
     this.recorder.customTitle = pick.label && pick.label !== 'Conversation' ? pick.label : undefined;
     this.conversationStartedAt = transcript[0]?.at ?? new Date().toISOString();
     this.attachments = [];
@@ -4044,7 +4056,11 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       voice: { autoRead: this.getSettings().voiceAutoRead, chime: this.getSettings().chimeOnDone },
       contextOptions: this.contextOptions,
       selectionInfo: this.currentSelectionInfo(),
-      attachments: this.attachments.map((a) => ({ id: a.id, label: a.label, kind: a.kind }))
+      attachments: this.attachments.map((a) => ({ id: a.id, label: a.label, kind: a.kind })),
+      convTitle: this.currentTitle(),
+      convId: this.conversationId,
+      convBase: this.parleyBase(),
+      convArchived: this.currentArchived
     });
   }
 }

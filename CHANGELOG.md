@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.21.0
+
+### New — current-conversation title + quick actions in the header
+
+- The **current conversation's title** now shows as a line just below the toolbar.
+- **✎ (right of ＋)** renames the current conversation inline — click it (or the title line), type, Enter to save, Esc to cancel.
+- **🗄 (after Export)** archives/unarchives the current conversation; the icon flips to **⇪** when it's archived.
+- **🗑 (before Refresh)** deletes the current conversation after a confirmation dialog, then drops you into a fresh chat.
+
 ## 1.20.0
 
 ### New — monitor-aware screenshot: auto on one screen, click-a-screen on many

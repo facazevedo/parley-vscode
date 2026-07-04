@@ -38,11 +38,18 @@ export function buildChatHtml(webview: vscode.Webview, extensionUri: vscode.Uri)
       <span id="ctx" class="ctx-meter" title="Context window used"><span class="ctxring"></span><span class="ctxnum">–</span></span>
       <span class="grow"></span>
       <button id="newChat" title="New conversation" aria-label="New conversation">＋</button>
+      <button id="editTitle" title="Rename this conversation" aria-label="Rename this conversation">✎</button>
       <button id="historyBtn" title="Past conversations" aria-label="Past conversations">🕘</button>
       <button id="usage" title="View usage (this month's billed spend)" aria-label="View usage">💰</button>
       <button id="compact" title="Compact conversation (summarize to free up context)" aria-label="Compact conversation">⊟</button>
       <button id="export" title="Export conversation" aria-label="Export conversation">⤓</button>
+      <button id="archiveCurrent" title="Archive this conversation" aria-label="Archive this conversation">🗄</button>
+      <button id="deleteCurrent" title="Delete this conversation" aria-label="Delete this conversation">🗑</button>
       <button id="refresh" title="Refresh model list" aria-label="Refresh model list">↻</button>
+    </div>
+    <div id="convTitleBar" class="convtitlebar">
+      <span id="convTitleText" class="convtitle-text" title="Current conversation — click to rename"></span>
+      <input id="convTitleInput" class="convtitle-input" type="text" maxlength="120" style="display:none" aria-label="Conversation title" />
     </div>
     <div id="banner" class="banner"></div>
     <div class="histwrap">

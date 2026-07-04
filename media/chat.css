@@ -79,6 +79,39 @@ body {
   background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.2));
 }
 
+/* Current-conversation title, shown as a line just below the toolbar. */
+.convtitlebar {
+  padding: 2px 12px 6px;
+  border-bottom: 1px solid var(--vscode-sideBar-border);
+}
+.convtitle-text {
+  display: block;
+  font-size: 0.82em;
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: text;
+}
+.convtitle-text:hover {
+  color: var(--vscode-foreground);
+}
+.convtitle-text:empty::before {
+  content: 'Untitled conversation';
+  opacity: 0.6;
+}
+.convtitle-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-focusBorder);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font: inherit;
+  font-size: 0.82em;
+}
+
 select,
 textarea,
 button {

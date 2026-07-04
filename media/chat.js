@@ -1627,6 +1627,84 @@ import hljs from 'highlight.js/lib/common';
   $('export').addEventListener('click', () => toggleMenu('export', openExportMenu));
   $('usage').addEventListener('click', () => toggleMenu('usage', openUsageMenu));
   $('compact').addEventListener('click', () => toggleMenu('compact', openCompactMenu));
+
+  // ---------- Current-conversation actions (title line + rename / archive / delete) ----------
+  let convId = '';
+  let convBase = '';
+  let convTitle = '';
+  let convArchived = false;
+  const convTitleText = $('convTitleText');
+  const convTitleInput = $('convTitleInput');
+  const editTitleBtn = $('editTitle');
+  const archiveCurrentBtn = $('archiveCurrent');
+  const deleteCurrentBtn = $('deleteCurrent');
+  function editingTitle() {
+    return convTitleInput && convTitleInput.style.display !== 'none';
+  }
+  function startTitleEdit() {
+    if (!convId || !convTitleInput) {
+      return;
+    }
+    convTitleInput.value = convTitle || '';
+    convTitleInput.style.display = 'block';
+    convTitleText.style.display = 'none';
+    convTitleInput.focus();
+    convTitleInput.select();
+  }
+  function endTitleEdit(save) {
+    if (!editingTitle()) {
+      return;
+    }
+    const val = convTitleInput.value.trim().slice(0, 120);
+    convTitleInput.style.display = 'none';
+    convTitleText.style.display = 'block';
+    if (save && val && val !== convTitle) {
+      convTitle = val;
+      convTitleText.textContent = val; // optimistic; host echoes it back via state
+      vscode.postMessage({ type: 'renameConversation', id: convId, base: convBase, title: val, scope: 'repo' });
+    }
+  }
+  if (editTitleBtn) {
+    editTitleBtn.addEventListener('click', () => (editingTitle() ? endTitleEdit(true) : startTitleEdit()));
+  }
+  if (convTitleText) {
+    convTitleText.addEventListener('click', () => startTitleEdit());
+  }
+  if (convTitleInput) {
+    convTitleInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        endTitleEdit(true);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        endTitleEdit(false);
+      }
+    });
+    convTitleInput.addEventListener('blur', () => endTitleEdit(true));
+  }
+  if (archiveCurrentBtn) {
+    archiveCurrentBtn.addEventListener('click', () => {
+      if (!convId) {
+        return;
+      }
+      vscode.postMessage({
+        type: 'archiveConversation',
+        id: convId,
+        base: convBase,
+        value: !convArchived,
+        scope: 'repo'
+      });
+    });
+  }
+  if (deleteCurrentBtn) {
+    // No inline confirm here — the host shows a modal warning before deleting.
+    deleteCurrentBtn.addEventListener('click', () => {
+      if (!convId) {
+        return;
+      }
+      vscode.postMessage({ type: 'deleteConversation', id: convId, base: convBase, scope: 'repo' });
+    });
+  }
   attachBtn.addEventListener('click', () => vscode.postMessage({ type: 'attachFiles' }));
   const settingsBtn = $('settings');
   if (settingsBtn) {
@@ -2857,6 +2935,25 @@ import hljs from 'highlight.js/lib/common';
       sentPrompts = msg.promptHistory; // don't yank entries mid-navigation
     }
     renderAttachments(msg.attachments);
+
+    // Current-conversation header: title line + archive toggle.
+    if (msg.convId !== undefined) {
+      convId = msg.convId || '';
+    }
+    if (msg.convBase !== undefined) {
+      convBase = msg.convBase || '';
+    }
+    convArchived = !!msg.convArchived;
+    if (!editingTitle()) {
+      convTitle = msg.convTitle || '';
+      if (convTitleText) {
+        convTitleText.textContent = convTitle;
+      }
+    }
+    if (archiveCurrentBtn) {
+      archiveCurrentBtn.textContent = convArchived ? '⇪' : '🗄';
+      archiveCurrentBtn.title = convArchived ? 'Unarchive this conversation' : 'Archive this conversation';
+    }
 
     stopBtn.style.display = msg.busy ? '' : 'none';
     if (queueModeBtn) {
