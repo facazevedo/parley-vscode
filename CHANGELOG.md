@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.65.0
+
+### Docs
+
+- Added **FEATURES.md** — a complete, organized catalog of every feature (chat, agent tools, context/@-mentions, editing & review, inline completion + next-edit, testing & quality, git/GitHub, diagrams, multimodal, design canvas, web, MCP, computer use, memory/rules/skills, cost/usage, maintenance, safety, keyboard shortcuts). Linked prominently from the README.
+- README: documented Predict Next Edit (ghost-Tab flow) and its diff-review variant, plus the parley.nextEdit.autoTrigger and parley.coverageCommand settings; refreshed the test-count badge.
+
+
 ## 1.64.0
 
 ### Next Edit: Cursor-Tab-style ghost flow (prototype)

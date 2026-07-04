@@ -10,7 +10,7 @@ and every change diff-reviewed before it touches your files — all inside VS Co
   <a href="CHANGELOG.md"><img alt="Version" src="https://img.shields.io/badge/version-1.51.0-A31F34"></a>
   <img alt="VS Code" src="https://img.shields.io/badge/VS%20Code-%E2%89%A5%201.92-1F6FEB">
   <a href="https://opensource.org/licenses/MIT"><img alt="License" src="https://img.shields.io/badge/license-MIT-3FB950"></a>
-  <img alt="Tests" src="https://img.shields.io/badge/tests-378%20passing-2EA043">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-385%20passing-2EA043">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-3178C6">
 </p>
 
@@ -30,9 +30,11 @@ and every change diff-reviewed before it touches your files — all inside VS Co
 - **Local browser & parallel subagents** — drive a real headless Chromium, or fan out several scoped read-only investigations at once.
 - **MCP** — connect stdio, streamable-HTTP, and legacy-SSE Model Context Protocol servers, with a **status view** for connected servers, their tools, and any failures.
 - **Safety & privacy first** — sensitive-file filtering, **outbound secret redaction**, **prompt-injection defenses** on untrusted content, a per-segment command allowlist, and honest documentation of gateway limits.
-- **Transparent by design** — full on-disk JSONL transcripts, live cost/context gauges + status-bar ticker, a `/context` breakdown, and 378 automated tests. CI packages a GitHub Release on every version tag.
+- **Transparent by design** — full on-disk JSONL transcripts, live cost/context gauges + status-bar ticker, a `/context` breakdown, and 385 automated tests. CI packages a GitHub Release on every version tag.
 
 Built around a `ParleyProvider` abstraction, so the UI, context collection, diff review, and safety controls stay independent of the transport.
+
+> 📖 **Want the full tour?** See **[FEATURES.md](FEATURES.md)** — a complete, organized catalog of every feature.
 
 ---
 
@@ -576,6 +578,15 @@ exact error for a server that didn't connect.
 - **Inline edit (`Ctrl+Alt+K` / `Cmd+Alt+K`):** select code, describe the change,
   review the diff before applying. Multi‑change edits offer **Apply All / Choose… /
   Reject** — "Choose…" accepts/rejects **individual hunks**. Edits are checkpointed.
+- **Predict Next Edit (`Ctrl+Alt+N`, Cursor‑Tab style):** from your recent edits + the
+  current file, Parley predicts the single most likely next change (a sibling case, a
+  related call site, a type, a matching test) and marks its location with a decoration +
+  a status‑bar hint. **Tab** jumps the caret there — showing the change as native ghost
+  text — and a second **Tab** accepts it; **Escape** dismisses. The Tab binding is gated
+  by a `parley.hasNextEdit` context key, so it never interferes with normal Tab. Enable
+  **`parley.nextEdit.autoTrigger`** for a hands‑free feel (predicts after edits settle;
+  off by default — it's a model call per prediction). A modal‑diff variant is available
+  as **Predict Next Edit (Diff Review)**.
 
 ---
 
@@ -747,7 +758,8 @@ frontmatter‑less (or `alwaysApply: true`) rules always apply.
 | `Parley: Generate Tests for Uncovered Code`     | Run coverage, then write tests for the current file's uncovered lines (trusted ws) |
 | `Parley: Add Docs`                              | Add idiomatic doc comments to the selection/file (also in the `Ctrl+.` menu)       |
 | `Parley: Diagram This`                          | Render a Mermaid diagram (structure/class/sequence/deps) of the file inline        |
-| `Parley: Predict Next Edit`                     | Predict & diff-review your likely next edit from recent edits (`Ctrl+Alt+N`)       |
+| `Parley: Predict Next Edit`                     | Cursor-Tab-style ghost prediction of your next edit — Tab to jump/accept (`Ctrl+Alt+N`) |
+| `Parley: Predict Next Edit (Diff Review)`       | Same prediction, shown as a modal diff to review                                   |
 | `Parley: Triage TODOs`                          | Scan for TODO/FIXME/HACK/XXX markers and tackle one                                |
 | `Parley: Audit Dependencies`                    | Run npm/pnpm/yarn audit and explain the findings + remediation                     |
 | `Parley: Fix Diagnostics`                       | Fix reported problems minimally (also "Fix with Parley" in the `Ctrl+.` lightbulb) |
@@ -809,6 +821,7 @@ frontmatter‑less (or `alwaysApply: true`) rules always apply.
 | `parley.commandTimeoutSeconds`            | `300`                           | Timeout for agent shell commands                                         |
 | `parley.verifyCommand`                    | `""`                            | Command `/verify` runs (empty = auto-detect)                             |
 | `parley.testCommand`                      | `""`                            | Command for `run_tests` / `Fix Failing Tests` (empty = auto-detect)      |
+| `parley.coverageCommand`                  | `""`                            | Command for `Generate Tests for Uncovered Code` (empty = auto-derive)    |
 | `parley.statusBar.enabled`                | `true`                          | Status-bar ticker: sidebar tokens/cost + working spinner                 |
 | `parley.terminalFixHint.enabled`          | `true`                          | Transient "Fix with Parley" hint when a terminal command fails           |
 | `parley.voice.model`                      | `""`                            | Model for 🎤 transcription (empty = current; needs audio support)        |
@@ -824,6 +837,7 @@ frontmatter‑less (or `alwaysApply: true`) rules always apply.
 | `parley.inlineCompletion.disabledLanguages` | `[]`                          | Language IDs where completion is off (e.g. `["markdown"]`)               |
 | `parley.inlineCompletion.maxPrefixChars`  | `2000`                          | Chars of code before the cursor sent as context                         |
 | `parley.inlineCompletion.maxSuffixChars`  | `1000`                          | Chars of code after the cursor sent as context                          |
+| `parley.nextEdit.autoTrigger`             | `false`                         | Auto-predict the next edit after edits settle (Cursor-Tab style)         |
 | `parley.video.maxFrames`                  | `12`                            | Max sampled video frames                                                 |
 | `parley.video.frameWidth`                 | `768`                           | Downscale width for frames                                               |
 | `parley.video.maxAudioSeconds`            | `600`                           | Max seconds of extracted audio                                           |
