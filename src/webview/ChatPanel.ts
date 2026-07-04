@@ -130,6 +130,7 @@ interface ChatPanelMessage {
     | 'reviewChange'
     | 'unqueue'
     | 'rewind'
+    | 'regenerate'
     | 'dropPaths'
     | 'dropText'
     | 'dropUnsupported'
@@ -758,6 +759,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         return;
       case 'rewind':
         await this.rewindAtIndex(message.tindex ?? -1, asRewindChoice(message.what));
+        return;
+      case 'regenerate':
+        await this.regenerateLast();
         return;
       case 'openHistory':
         await this.openPastConversation();

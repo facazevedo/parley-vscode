@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.31.0
+
+### New — regenerate the last reply
+
+- Hover the most recent assistant reply and click **↻** to re-run your last message in place (it drops the old answer instead of duplicating the question). Want a different take? Switch the **model** or **mode** first, then hit ↻ to retry with it. Also available as the **Parley: Regenerate** command.
+
 ## 1.30.0
 
 ### Changed — fully continuous timeline (Codex-style)

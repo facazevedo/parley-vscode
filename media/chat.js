@@ -492,6 +492,24 @@ import hljs from 'highlight.js/lib/common';
     messageNode.appendChild(rw);
   }
 
+  // ↻ Regenerate — re-run the last user message (optionally after switching model/mode).
+  // Shown on the most recent assistant reply only.
+  function addRegenerateButton(messageNode) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'msgregen';
+    btn.title = 'Regenerate this reply (re-runs your last message — switch model/mode first to retry differently)';
+    btn.setAttribute('aria-label', 'Regenerate reply');
+    btn.textContent = '↻';
+    btn.addEventListener('click', () => {
+      if (busy) {
+        return;
+      }
+      vscode.postMessage({ type: 'regenerate' });
+    });
+    messageNode.appendChild(btn);
+  }
+
   // Copy (two overlapping squares) icon used on user prompts.
   const COPY_SVG =
     '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round">' +
@@ -1120,6 +1138,7 @@ import hljs from 'highlight.js/lib/common';
     pendingIds = pendingIds || [];
     let userOrdinal = 0;
     let tindex = -1;
+    let lastAssistantNode = null;
     for (const e of entries) {
       tindex += 1;
       if (e.kind === 'user') {
@@ -1143,6 +1162,7 @@ import hljs from 'highlight.js/lib/common';
         const c = bubble('assistant', renderMd(e.text));
         addRewindButton(c.parentNode, tindex);
         addSpeakButton(c.parentNode, e.text);
+        lastAssistantNode = c.parentNode;
         if (e.thinking) {
           const det = document.createElement('details');
           det.className = 'thinking';
@@ -1207,6 +1227,10 @@ import hljs from 'highlight.js/lib/common';
           c.append(wrap);
         }
       }
+    }
+    // Regenerate affordance on the most recent assistant reply (idle only).
+    if (lastAssistantNode && !busy) {
+      addRegenerateButton(lastAssistantNode);
     }
     maybeScroll();
   }
