@@ -1969,19 +1969,25 @@ button:disabled {
   opacity: 1;
   background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.2));
 }
-/* Slash-command button rendered as a keycap (framed), not a bare "/". */
+/* Slash button: full 28×26 footprint (uniform spacing) with a small inset keycap frame
+   hugging the "/", so the frame is snug even though the button matches the other icons. */
 .actions #slashBtn {
-  /* Keeps the shared 28×26 footprint (uniform spacing); the border frames it as a keycap. */
-  border: 1.5px solid var(--vscode-descriptionForeground, rgba(160, 160, 160, 0.9));
-  border-radius: 5px;
-  font-family: var(--vscode-editor-font-family, ui-monospace, monospace);
-  font-size: 0.85em;
-  line-height: 1;
   opacity: 1;
 }
-.actions #slashBtn:hover {
+.actions #slashBtn .slashkey {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border: 1.5px solid var(--vscode-descriptionForeground, rgba(160, 160, 160, 0.9));
+  border-radius: 4px;
+  font-family: var(--vscode-editor-font-family, ui-monospace, monospace);
+  font-size: 0.82em;
+  line-height: 1;
+}
+.actions #slashBtn:hover .slashkey {
   border-color: var(--vscode-foreground);
-  background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.2));
 }
 
 /* Styled tooltip (replaces the OS's native white title box) — matches VS Code's hover widget. */

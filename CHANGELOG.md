@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.40.4
+
+### Changed — smaller slash keycap
+
+- The `/` keycap frame is now a small inset badge hugging the glyph, while its button keeps the shared icon footprint — so it looks snug and the row stays evenly spaced.
+
+
 ## 1.40.3
 
 ### Changed — removed the textarea resize grip
