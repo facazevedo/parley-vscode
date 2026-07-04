@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { detectArtifacts, buildArtifactDocument } from '../src/artifacts/artifacts';
+import { detectArtifacts, buildArtifactDocument, needsTailwind } from '../src/artifacts/artifacts';
 
 test('detects an html artifact and titles it', () => {
   const a = detectArtifacts('Here you go:\n```html title="Landing"\n<h1>Hi</h1>\n```');
@@ -68,22 +68,37 @@ test('buildArtifactDocument centers an SVG', () => {
   assert.match(doc, /<svg\/>/);
 });
 
-test('buildArtifactDocument injects React/Babel runtime for react artifacts', () => {
+test('buildArtifactDocument inlines the React/Babel runtime for react artifacts', () => {
   const doc = buildArtifactDocument(
     { id: 'x', title: 't', kind: 'react', code: 'function App(){return <div/>;}', lang: 'jsx' },
-    { react: 'r.js', reactDom: 'rd.js', babel: 'b.js' }
+    { react: 'REACT_LIB', reactDom: 'REACTDOM_LIB', babel: 'BABEL_LIB' }
   );
-  assert.match(doc, /src="r\.js"/);
-  assert.match(doc, /src="b\.js"/);
+  assert.match(doc, /<script>REACT_LIB<\/script>/);
+  assert.match(doc, /<script>BABEL_LIB<\/script>/);
   assert.match(doc, /text\/babel/);
   assert.match(doc, /id="root"/);
 });
 
-test('tailwind runtime is injected into an existing document head when provided', () => {
+test('inlined runtime with a literal </script> is escaped so it cannot close the tag early', () => {
+  const doc = buildArtifactDocument({ id: 'x', title: 't', kind: 'react', code: 'x', lang: 'jsx' }, {
+    react: 'a</script>b'
+  });
+  assert.ok(!doc.includes('a</script>b'), 'the raw </script> must not survive');
+  assert.match(doc, /a<\\\/script>b/);
+});
+
+test('tailwind runtime is inlined into an existing document head when provided', () => {
   const full = '<!doctype html><html><head><title>t</title></head><body>x</body></html>';
   const doc = buildArtifactDocument(
     { id: 'x', title: 't', kind: 'html', code: full, lang: 'html' },
-    { tailwind: 'tw.js' }
+    { tailwind: 'TAILWIND_LIB' }
   );
-  assert.match(doc, /src="tw\.js"/);
+  assert.match(doc, /<script>TAILWIND_LIB<\/script>/);
+});
+
+test('needsTailwind detects utility classes and ignores plain markup', () => {
+  assert.equal(needsTailwind('<div class="flex items-center gap-4">'), true);
+  assert.equal(needsTailwind('<div className="bg-slate-900 rounded-lg p-6">'), true);
+  assert.equal(needsTailwind('<div class="my-custom-thing">plain</div>'), false);
+  assert.equal(needsTailwind('<section><h1>Hello</h1></section>'), false);
 });

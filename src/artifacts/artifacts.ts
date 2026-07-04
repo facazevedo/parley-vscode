@@ -97,46 +97,57 @@ function isFullDoc(code: string): boolean {
   return /^\s*(<!doctype html|<html[\s>])/i.test(code);
 }
 
-export interface RuntimeUris {
-  /** URIs (already webview-resolved) for the React/Babel/Tailwind runtime — react kind only. */
+/** Runtime library CODE (JS source) inlined into the preview — React kind and Tailwind. */
+export interface RuntimeCode {
   react?: string;
   reactDom?: string;
   babel?: string;
   tailwind?: string;
 }
 
+/** Inline JS as a <script>, escaping any literal </script> so it can't close the tag early. */
+function inlineScript(code?: string): string {
+  return code ? `<script>${code.replace(/<\/(script)/gi, '<\\/$1')}</script>` : '';
+}
+
 /**
- * Build the full HTML document rendered inside the preview's sandboxed <iframe srcdoc>.
- * `runtime` is only needed for react artifacts; html/svg are self-contained. `tailwind`,
- * when provided, is included for every kind so utility classes work in plain HTML too.
+ * Heuristic: does the code use Tailwind utility classes? We only inject Tailwind (and its
+ * Preflight reset, which would otherwise restyle plain markup) when it's actually wanted.
  */
-export function buildArtifactDocument(artifact: Artifact, runtime: RuntimeUris = {}): string {
-  const tw = runtime.tailwind ? `<script src="${runtime.tailwind}"></script>` : '';
+export function needsTailwind(code: string): boolean {
+  return /\bclass(?:Name)?\s*=\s*["'][^"']*\b(?:flex|grid|hidden|container|(?:m|p)[trblxy]?-\d|gap-\d|(?:w|h|min-w|min-h|max-w|max-h)-|text-(?:xs|sm|base|lg|xl|\d|left|center|right|white|black|gray|slate|zinc)|bg-|border(?:-|\b)|rounded|shadow|items-|justify-|font-(?:bold|semibold|medium|light)|space-[xy]-)/.test(
+    code
+  );
+}
+
+/**
+ * Build the full HTML document rendered inside the preview's sandboxed <iframe>. html/svg are
+ * self-contained; react artifacts get React + Babel inlined (so JSX/TSX runs in-browser), and
+ * Tailwind is inlined for react/html when `runtime.tailwind` is provided.
+ */
+export function buildArtifactDocument(artifact: Artifact, runtime: RuntimeCode = {}): string {
+  const tw = inlineScript(runtime.tailwind);
   const base = '<style>html,body{margin:0}body{font-family:system-ui,-apple-system,Segoe UI,sans-serif}</style>';
 
   if (artifact.kind === 'svg') {
     return (
       `<!doctype html><html><head><meta charset="utf-8">${base}` +
       `<style>body{display:grid;place-items:center;min-height:100vh;background:#fff}svg{max-width:100vw;max-height:100vh}</style>` +
-      `${tw}</head><body>${artifact.code}</body></html>`
+      `</head><body>${artifact.code}</body></html>`
     );
   }
 
   if (artifact.kind === 'react') {
-    const scripts =
-      runtime.react && runtime.reactDom && runtime.babel
-        ? `<script src="${runtime.react}"></script><script src="${runtime.reactDom}"></script><script src="${runtime.babel}"></script>`
-        : '';
-    // The component code renders into #root; support either an explicit render call or a
-    // default-exported/`App` component that we mount if the code didn't render itself.
+    const libs = inlineScript(runtime.react) + inlineScript(runtime.reactDom) + inlineScript(runtime.babel);
+    // The component renders into #root; if it didn't render itself, mount a top-level `App`.
     return (
-      `<!doctype html><html><head><meta charset="utf-8">${base}${tw}${scripts}</head><body>` +
+      `<!doctype html><html><head><meta charset="utf-8">${base}${tw}${libs}</head><body>` +
       `<div id="root"></div>` +
-      `<script type="text/babel" data-presets="react,typescript" data-type="module">\n${artifact.code}\n` +
+      `<script type="text/babel" data-presets="react,typescript">\n${artifact.code}\n` +
       `\n;(function(){try{var el=document.getElementById('root');` +
       `if(el&&!el.childNodes.length&&typeof App!=='undefined'){` +
       `(ReactDOM.createRoot?ReactDOM.createRoot(el).render(React.createElement(App)):ReactDOM.render(React.createElement(App),el));}}catch(e){` +
-      `document.body.insertAdjacentHTML('beforeend','<pre style=\\'color:#b00;white-space:pre-wrap\\'>'+ (e&&e.message||e) +'</pre>');}})();` +
+      `document.body.insertAdjacentHTML('beforeend','<pre style=\\'color:#b00;white-space:pre-wrap;padding:12px\\'>'+ (e&&e.message||e) +'</pre>');}})();` +
       `</script></body></html>`
     );
   }

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { Artifact, RuntimeUris, buildArtifactDocument } from './artifacts';
+import * as fs from 'fs';
+import { Artifact, RuntimeCode, buildArtifactDocument, needsTailwind } from './artifacts';
 
 /**
  * "Parley Preview" — a live design canvas beside the chat (Artifacts-style). Renders the
@@ -48,9 +49,37 @@ export class ArtifactPanel {
     this.render();
   }
 
-  /** Phase 2 fills these from media/artifacts/* (React 18 UMD + Babel + Tailwind). */
-  private runtimeUris(): RuntimeUris {
-    return {};
+  // Vendored runtime files (media/artifacts/*.js), read once and cached across renders.
+  private static runtimeCache: Record<string, string> = {};
+  private readRuntime(name: string): string {
+    if (ArtifactPanel.runtimeCache[name] === undefined) {
+      try {
+        ArtifactPanel.runtimeCache[name] = fs.readFileSync(
+          vscode.Uri.joinPath(this.extensionUri, 'media', 'artifacts', name).fsPath,
+          'utf8'
+        );
+      } catch {
+        ArtifactPanel.runtimeCache[name] = '';
+      }
+    }
+    return ArtifactPanel.runtimeCache[name];
+  }
+
+  /** Runtime to inline for this artifact: React+Babel for react, Tailwind when the code uses it. */
+  private runtimeFor(a: Artifact): RuntimeCode {
+    const rt: RuntimeCode = {};
+    const wantTailwind = needsTailwind(a.code);
+    if (a.kind === 'react') {
+      rt.react = this.readRuntime('react.js');
+      rt.reactDom = this.readRuntime('react-dom.js');
+      rt.babel = this.readRuntime('babel.js');
+      if (wantTailwind) {
+        rt.tailwind = this.readRuntime('tailwind.js');
+      }
+    } else if (a.kind === 'html' && wantTailwind) {
+      rt.tailwind = this.readRuntime('tailwind.js');
+    }
+    return rt;
   }
 
   private render(): void {
@@ -59,7 +88,7 @@ export class ArtifactPanel {
       return;
     }
     this.panel.title = `Preview · ${a.title}`;
-    this.panel.webview.html = this.shell(buildArtifactDocument(a, this.runtimeUris()));
+    this.panel.webview.html = this.shell(buildArtifactDocument(a, this.runtimeFor(a)));
   }
 
   private shell(doc: string): string {

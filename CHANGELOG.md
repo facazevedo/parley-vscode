@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.40.0
+
+### New — design canvas part 2: React/JSX + Tailwind
+
+- The preview panel now renders **React/JSX & TSX** artifacts: React 18 + Babel (standalone) are bundled and inlined into the sandboxed preview, so ```jsx / ```tsx / ```react blocks run in-browser (mount a top-level `App`, or render yourself). 
+- **Tailwind** utility classes now work in both React and HTML previews — the Tailwind browser runtime is inlined **only when the code actually uses Tailwind classes**, so plain HTML keeps its own styling (no surprise Preflight reset).
+- Runtimes are vendored locally (no CDN), so previews stay offline and CSP-safe. Doc assembly + the Tailwind heuristic are unit-tested (372 tests).
+
+### Changed
+
+- Tightened the `/` slash keycap frame.
+
+
 ## 1.39.0
 
 ### New — design-canvas icon in the composer
