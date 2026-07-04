@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.32.0
+
+### New — design canvas (Artifacts), part 1: live HTML/SVG preview
+
+- When a reply contains previewable code — a ```html, ```svg, or full HTML document — a **🎨 button** appears in the toolbar. Click it to open **Parley Preview** beside the chat: a live, sandboxed render of what the model built.
+- **Version history** (each re-emit is a new version, with ◀ ▶ / dropdown navigation), plus **Open code** (source in an editor) and **Export** (save to a file).
+- Model-agnostic — it renders whatever HTML/SVG any model produces. Detection is unit-tested (370 total).
+- *Next:* part 2 adds **React/JSX + Tailwind** rendering via bundled runtimes.
+
 ## 1.31.0
 
 ### New — regenerate the last reply

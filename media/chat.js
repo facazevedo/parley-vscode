@@ -1790,6 +1790,10 @@ import hljs from 'highlight.js/lib/common';
   $('export').addEventListener('click', () => toggleMenu('export', openExportMenu));
   $('usage').addEventListener('click', () => toggleMenu('usage', openUsageMenu));
   $('compact').addEventListener('click', () => toggleMenu('compact', openCompactMenu));
+  const artifactBtn = $('artifactBtn');
+  if (artifactBtn) {
+    artifactBtn.addEventListener('click', () => vscode.postMessage({ type: 'openArtifacts' }));
+  }
 
   // ---------- Current-conversation actions (title line + rename / archive / delete) ----------
   let convId = '';
@@ -3144,6 +3148,11 @@ import hljs from 'highlight.js/lib/common';
     if (archiveCurrentBtn) {
       archiveCurrentBtn.textContent = convArchived ? '⇪' : '🗄';
       archiveCurrentBtn.title = convArchived ? 'Unarchive this conversation' : 'Archive this conversation';
+    }
+    if (artifactBtn) {
+      const n = (msg.artifacts || []).length;
+      artifactBtn.style.display = n ? '' : 'none';
+      artifactBtn.title = n ? 'Open design preview (' + n + ')' : 'Open design preview';
     }
 
     stopBtn.style.display = msg.busy ? '' : 'none';

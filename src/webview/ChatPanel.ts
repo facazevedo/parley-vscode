@@ -24,6 +24,8 @@ import { installNutJs, isNutInstalled } from '../computer/nutControl';
 import { looksLikeScreenshotRequest, wantsPixelCoordinates } from '../computer/screenshotIntent';
 import { annotateWithGrid } from '../computer/gridOverlay';
 import { listMonitors, captureMonitor, pickMonitor, type Monitor } from '../computer/winControl';
+import { detectArtifacts, type Artifact } from '../artifacts/artifacts';
+import { ArtifactPanel } from '../artifacts/ArtifactPanel';
 import { isSensitiveFile } from '../context/sensitiveFileFilter';
 import { loadIgnoreMatcher, type IgnoreMatcher } from '../context/ignoreRules';
 import type { CheckpointStore } from '../diff/checkpoints';
@@ -131,6 +133,7 @@ interface ChatPanelMessage {
     | 'unqueue'
     | 'rewind'
     | 'regenerate'
+    | 'openArtifacts'
     | 'dropPaths'
     | 'dropText'
     | 'dropUnsupported'
@@ -349,6 +352,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   private screenshotPick?: AbortController;
   // Archived state of the live conversation (drives the header Archive/Unarchive toggle).
   private currentArchived = false;
+  // Previewable artifacts (HTML/SVG/React) from the latest assistant turn — opened in the
+  // "Parley Preview" design canvas via the 🎨 button.
+  private currentArtifacts: Artifact[] = [];
   // Workspace file/folder candidates for the @-mention autocomplete (short TTL so
   // per-keystroke queries don't re-walk the workspace).
   private mentionCache?: { at: number; files: string[]; dirs: string[] };
@@ -762,6 +768,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         return;
       case 'regenerate':
         await this.regenerateLast();
+        return;
+      case 'openArtifacts':
+        ArtifactPanel.show(this.extensionUri, this.currentArtifacts);
         return;
       case 'openHistory':
         await this.openPastConversation();
@@ -4050,6 +4059,25 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     }
   }
 
+  /** Previewable artifacts in the latest assistant turn (scans back to the last user msg). */
+  private detectLatestArtifacts(): Artifact[] {
+    for (let i = this.transcript.length - 1; i >= 0; i -= 1) {
+      const e = this.transcript[i];
+      if (e.kind === 'user') {
+        break; // only consider the most recent assistant turn
+      }
+      if (e.kind === 'assistant' || e.kind === 'note') {
+        const arts = detectArtifacts(e.text);
+        if (arts.length > 0) {
+          this.currentArtifacts = arts;
+          return arts;
+        }
+      }
+    }
+    this.currentArtifacts = [];
+    return [];
+  }
+
   private async postState(): Promise<void> {
     this.save();
     this.notifyStatus(); // busy flips and counter resets all funnel through here
@@ -4081,7 +4109,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       convTitle: this.currentTitle(),
       convId: this.conversationId,
       convBase: this.parleyBase(),
-      convArchived: this.currentArchived
+      convArchived: this.currentArchived,
+      artifacts: this.detectLatestArtifacts().map((a) => ({ id: a.id, title: a.title, kind: a.kind }))
     });
   }
 }

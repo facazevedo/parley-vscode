@@ -43,6 +43,7 @@ export function buildChatHtml(webview: vscode.Webview, extensionUri: vscode.Uri)
       <button id="usage" title="View usage (this month's billed spend)" aria-label="View usage">💰</button>
       <button id="compact" title="Compact conversation (summarize to free up context)" aria-label="Compact conversation">⊟</button>
       <button id="export" title="Export conversation" aria-label="Export conversation">⤓</button>
+      <button id="artifactBtn" title="Open the latest design preview" aria-label="Open design preview" style="display:none">🎨</button>
       <button id="archiveCurrent" title="Archive this conversation" aria-label="Archive this conversation">🗄</button>
       <button id="deleteCurrent" title="Delete this conversation" aria-label="Delete this conversation">🗑</button>
       <button id="refresh" title="Refresh model list" aria-label="Refresh model list">↻</button>
