@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.40.2
+
+### Changed — mode button matches the model selector
+
+- The mode button (Chat/Auto/…) now uses the dropdown background instead of black, so it matches the model selector next to it.
+
+
 ## 1.40.1
 
 ### Changed — uniform composer icon spacing

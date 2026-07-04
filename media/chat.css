@@ -1749,8 +1749,8 @@ button:disabled {
 
 .modebtn {
   white-space: nowrap;
-  background: #000;
-  /* Match the model selector's text color instead of pure white. */
+  /* Match the model selector exactly (same background, text, and border). */
+  background: var(--vscode-dropdown-background);
   color: var(--vscode-dropdown-foreground);
   border: 1px solid var(--vscode-dropdown-border, rgba(127, 127, 127, 0.4));
   border-radius: 6px;
@@ -1758,7 +1758,7 @@ button:disabled {
   cursor: pointer;
 }
 .modebtn:hover {
-  background: #1a1a1a;
+  border-color: var(--vscode-focusBorder);
 }
 .modebtn.caution {
   color: var(--vscode-errorForeground);
