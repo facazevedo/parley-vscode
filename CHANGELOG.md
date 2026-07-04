@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.34.1
+
+### Changed — your prompt starts a thread (no rail dot)
+
+- A user message now sits **off** the timeline rail — no dot and no connecting line into or out of it — because your input marks the start of a new thread. The rail (dots + line) belongs to the response beneath it, matching Claude Code. User prompts stay left-aligned and full-width.
+
 ## 1.34.0
 
 ### Changed — Codex-style conversation header
