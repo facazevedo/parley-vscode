@@ -73,14 +73,22 @@ export function runTestCommand(
       command,
       { cwd, timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024, windowsHide: true, signal },
       (error, stdout, stderr) => {
-        const err = error as (Error & { name?: string; killed?: boolean; signal?: string; code?: number }) | null;
+        const err = error as
+          | (Error & { name?: string; killed?: boolean; signal?: string; code?: number | string })
+          | null;
         const aborted = !!err && err.name === 'AbortError';
-        const timedOut = !!err && err.killed === true && !!err.signal;
+        // Output over maxBuffer also sets killed+SIGTERM, but it's not a timeout.
+        const maxBuffered = !!err && err.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER';
+        const timedOut = !!err && err.killed === true && !!err.signal && !maxBuffered;
         let out = `${stdout ?? ''}${stderr ? `\n${stderr}` : ''}`.trim();
         // A spawn failure (bad cwd, shell missing, etc.) yields an error with no
         // stdout/stderr — surface its message so the agent isn't handed "(no output)".
+        // Node's exec already prefixes "Command failed:", so don't double it.
         if (!out && err && !aborted) {
-          out = `Command failed: ${err.message}`;
+          out = /^Command failed/.test(err.message) ? err.message : `Command failed: ${err.message}`;
+        }
+        if (maxBuffered) {
+          out = `[Test output exceeded 16 MB and was truncated.]${out ? `\n${out}` : ''}`;
         }
         let exitCode: number | null;
         if (aborted || (timedOut && typeof err?.code !== 'number')) {

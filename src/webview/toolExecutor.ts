@@ -774,8 +774,17 @@ export class ToolExecutor {
     this.host.post({ type: 'status', text: `Waiting for your review of ${rel}…` });
 
     const finalText = await new Promise<string | undefined>((resolve) => {
+      const signal = this.host.getAbortSignal();
+      // If the turn was already stopped (e.g. the user hit Stop while reviewing an
+      // earlier edit in the same round, or during the diff open), the 'abort' event
+      // has already fired and would never fire again — resolve now so the tool loop
+      // doesn't hang the turn forever.
+      if (signal?.aborted) {
+        resolve(undefined);
+        return;
+      }
       this.pendingApprovals.set(id, { resolve, rel, original, proposedText });
-      this.host.getAbortSignal()?.addEventListener(
+      signal?.addEventListener(
         'abort',
         () => {
           if (this.pendingApprovals.delete(id)) {
@@ -1241,6 +1250,14 @@ export function runShellCommand(
         // Keep head + tail with an explicit marker — for command output the tail
         // (the actual error) matters most, so never cut it off silently.
         const body = clampMiddle(out, 16000);
+        // Output over maxBuffer also sets killed+SIGTERM, but it's not a timeout — say so.
+        if (error && (error as { code?: string }).code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
+          resolve(
+            `[Command produced too much output (over 16 MB) and was terminated. Narrow it (e.g. filter or limit the output).]` +
+              (body ? `\n\nPartial output:\n${body}` : '')
+          );
+          return;
+        }
         // exec kills on timeout with SIGTERM and sets error.killed — tell the model so it can retry/split.
         if (error && (error as { killed?: boolean }).killed && (error as { signal?: string }).signal) {
           const secs = Math.round(timeoutMs / 1000);

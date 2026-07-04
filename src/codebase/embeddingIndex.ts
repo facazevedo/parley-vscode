@@ -251,8 +251,10 @@ export class EmbeddingIndex {
 
   /**
    * Semantic search → top-N results with the matched chunk's start line, so the
-   * caller can attach the relevant region rather than the file head. `undefined`
-   * on failure (caller falls back to lexical).
+   * caller can attach the relevant region rather than the file head. Returns
+   * `undefined` when it can't help (not indexed, error, or every chunk's vector
+   * dimension mismatches the query after a model change) so the caller falls back
+   * to lexical — never an empty array, which the caller would treat as "0 results".
    */
   public async searchDetailed(root: string, query: string, topN: number): Promise<RankedChunk[] | undefined> {
     try {
@@ -262,7 +264,8 @@ export class EmbeddingIndex {
       }
       const embed = await this.getEmbedder(false);
       const [q] = await embed([query]);
-      return rankByQueryDetailed(q, this.files, topN);
+      const ranked = rankByQueryDetailed(q, this.files, topN);
+      return ranked.length > 0 ? ranked : undefined;
     } catch (error) {
       this.logger.warn(`Semantic codebase search failed: ${error instanceof Error ? error.message : 'error'}`);
       return undefined;

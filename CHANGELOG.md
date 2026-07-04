@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.54.0
+
+### Second deep recheck: fix a Stop-deadlock and review-pass regressions
+
+- **Fixed a turn deadlock (ask mode).** If you pressed Stop while an edit approval card was pending — or during a multi-edit round after stopping an earlier card — the next edit awaited an abort event that had already fired, hanging the turn as busy until reload. It now resolves immediately when the turn is already stopped.
+- **@codebase falls back to lexical after an embedding-model change.** The dimension-mismatch guard added in 1.53.0 made a fully stale semantic index return zero results instead of signalling failure, so lexical search never ran and @codebase attached nothing. It now falls back correctly.
+- **run_command / run_tests**: output that exceeds the 16 MB buffer is now reported as "too much output" instead of a misleading "exceeded the timeout"; a spawn failure no longer shows a doubled "Command failed:" prefix.
+- **Per-hunk edit review** ("Choose…") now works on CRLF files — previously EOL differences collapsed the change into one un-splittable hunk.
+- Hardened the inline-completion cache key against a document URI containing the delimiter character.
+
+
 ## 1.53.0
 
 ### Deep code recheck: bug fixes from a full review

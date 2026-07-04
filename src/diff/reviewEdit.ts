@@ -16,8 +16,12 @@ export async function reviewProposedEdit(
   original: string,
   proposedText: string
 ): Promise<string | undefined> {
-  const originalLines = original.split('\n');
-  const hunks = computeHunks(originalLines, proposedText.split('\n'));
+  // Normalize EOLs before diffing: proposals are LF while the original may be CRLF,
+  // and without this every line of a CRLF file compares unequal — collapsing the
+  // change into one giant hunk and defeating per-hunk "Choose…". The apply path
+  // re-normalizes EOL on write, so working in LF here is safe.
+  const originalLines = original.replace(/\r\n?/g, '\n').split('\n');
+  const hunks = computeHunks(originalLines, proposedText.replace(/\r\n?/g, '\n').split('\n'));
 
   if (hunks.length <= 1) {
     const answer = await vscode.window.showInformationMessage(

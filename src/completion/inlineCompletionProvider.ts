@@ -82,7 +82,7 @@ export class ParleyInlineCompletionProvider implements vscode.InlineCompletionIt
     // before is served instantly (same model input → same suggestion). Keying on
     // prefix.length pins the cursor split so two different splits of the same text
     // never collide.
-    const cacheKey = `${docKey}|${prefix.length}|${prefix}${suffix}`;
+    const cacheKey = `${encodeURIComponent(docKey)}|${prefix.length}|${prefix}${suffix}`;
     const cached = this.cache.get(cacheKey);
     if (cached !== undefined) {
       this.lastCompletion = { docKey, prefix: fullPrefix, completion: cached };
