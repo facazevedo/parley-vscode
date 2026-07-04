@@ -213,14 +213,17 @@ button:disabled {
   background: var(--vscode-foreground);
   opacity: 0.7;
 }
-/* Rail segment down to the next node (overshoots behind the next opaque dot, so a
-   slightly-too-long segment is invisible and the rail reads as continuous). */
+/* Rail segment down to the next node. It lives in the left gutter (not covered by any
+   message/card background), so it can overshoot generously to bridge the large gaps
+   between messages — each message reserves ~32px on top for its hover buttons, so the
+   node-to-next-dot distance runs ~60px. The next opaque dot + the next node's own
+   segment sit on top of the overshoot, so the rail reads as one continuous line. */
 .history > *:not(.divider):not(.empty):has(+ *:not(.divider):not(.empty))::before {
   content: '';
   position: absolute;
   left: -12px;
   top: 13px;
-  bottom: -22px;
+  bottom: -64px;
   width: 1px;
   background: var(--vscode-sideBar-border, rgba(127, 127, 127, 0.5));
 }

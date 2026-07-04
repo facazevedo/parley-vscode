@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.33.1
+
+### Fixed — timeline rail lines were cut between messages
+
+- The connecting line on the step rail stopped ~22px below each dot, far short of the next one (messages reserve ~32px on top for hover actions, so dots sit ~60px apart) — leaving visible gaps. The connector now bridges that full distance, so the rail reads as one continuous line.
+
 ## 1.33.0
 
 ### New — full image viewer
