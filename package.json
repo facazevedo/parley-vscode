@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "1.65.0",
+  "version": "1.66.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -88,6 +88,11 @@
       {
         "command": "parley.explainFile",
         "title": "Parley: Explain Current File",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.explainSymbol",
+        "title": "Parley: Explain Symbol",
         "category": "Parley"
       },
       {
@@ -995,6 +1000,11 @@
           "type": "boolean",
           "default": false,
           "markdownDescription": "Automatically predict the next edit (Cursor-Tab style) shortly after your edits settle, showing a Tab hint at the target. Off by default — trigger on demand with **Parley: Predict Next Edit** (`Ctrl+Alt+N`). Each auto-prediction is a model call, so enable only with a fast model."
+        },
+        "parley.hover.explain": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Add an \"Explain with Parley\" link to the hover of symbols. It's just an entry point — no model call until you click it."
         },
         "parley.video.maxFrames": {
           "type": "number",

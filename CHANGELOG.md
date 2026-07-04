@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.66.0
+
+### Hover to explain
+
+- Hovering a symbol now shows an **"$(sparkle) Explain with Parley"** link (no model call until you click it). Clicking — or running **Parley: Explain Symbol** — explains the symbol under the cursor using the current file as context. Toggle the hover link with parley.hover.explain.
+
+
 ## 1.65.0
 
 ### Docs

@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { registerAskSelectionCommand } from './commands/askSelection';
 import type { CommandDependencies } from './commands/common';
 import { registerExplainFileCommand } from './commands/explainFile';
+import { registerExplainSymbolCommand } from './commands/explainSymbol';
 import { registerAddDocsCommand } from './commands/addDocs';
 import { registerDiagramCommand } from './commands/diagram';
 import { registerTriageTodosCommand } from './commands/triageTodos';
@@ -288,6 +289,7 @@ export function activate(context: vscode.ExtensionContext): void {
   ).register(context);
   registerAskSelectionCommand(context, commandDeps);
   registerExplainFileCommand(context, commandDeps);
+  registerExplainSymbolCommand(context, commandDeps);
   registerRefactorSelectionCommand(context, commandDeps);
   registerGenerateTestsCommand(context, commandDeps);
   registerFixFailingTestsCommand(context, commandDeps);
