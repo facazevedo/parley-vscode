@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.55.0
+
+### Close the fetch_url DNS-rebinding SSRF gap
+
+- fetch_url now connects only to an address it has vetted at connect time. Previously the SSRF guard resolved and checked the host, then fetch re-resolved independently — a DNS-rebinding server could answer the check with a public IP and the connection with an internal one (e.g. 169.254.169.254 cloud metadata, loopback). The fetch now uses a custom DNS lookup that resolves, refuses if ANY resolved address is private/loopback/link-local, and connects only to that vetted address; literal-IP hosts are still checked up front, and every redirect hop is re-vetted.
+- The fetch also caps downloaded bytes (5 MB) and decompresses gzip/deflate/br responses.
+
+### Fixed
+
+- Hardened a flaky test helper (wall-clock deadline instead of a fixed tick count) so the suite is deterministic under parallel load.
+
+
 ## 1.54.0
 
 ### Second deep recheck: fix a Stop-deadlock and review-pass regressions

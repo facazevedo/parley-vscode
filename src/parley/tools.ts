@@ -1,8 +1,10 @@
 import * as dns from 'dns';
 import * as fs from 'fs';
+import * as https from 'https';
 import * as net from 'net';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import * as zlib from 'zlib';
 import { execFile, type ExecFileException } from 'child_process';
 import { isSensitiveFile, sensitiveExcludeGlobs } from '../context/sensitiveFileFilter';
 import { decodeText } from '../diff/fileFormat';
@@ -611,6 +613,7 @@ export function withSubagentTypes(
 
 const MAX_FETCH_CHARS = 12000;
 const MAX_FETCH_REDIRECTS = 5;
+const MAX_FETCH_BYTES = 5 * 1024 * 1024; // hard cap on bytes downloaded per hop
 const MAX_READ_LINES = 500;
 const MAX_SEARCH_FILES = 800;
 const MAX_SEARCH_RESULTS = 80;
@@ -1049,8 +1052,11 @@ export function isBlockedAddress(ip: string): boolean {
 }
 
 /**
- * SSRF guard for fetch_url: false when the URL's host is a blocked literal IP, or when any
- * address it resolves to is blocked. DNS/parse failures propagate to the caller's catch.
+ * SSRF pre-check for fetch_url: false when the URL's host is a blocked literal IP, or
+ * when any address it resolves to is blocked. This is the ONLY guard for literal-IP
+ * hosts (those skip the connect-time DNS lookup); hostnames are additionally vetted at
+ * connect time by `vettingLookup`, which closes the resolve-then-connect race.
+ * DNS/parse failures propagate to the caller's catch.
  */
 async function isAllowedFetchDestination(target: string): Promise<boolean> {
   const host = new URL(target).hostname.replace(/^\[|\]$/g, ''); // URL keeps IPv6 literals bracketed
@@ -1059,6 +1065,119 @@ async function isAllowedFetchDestination(target: string): Promise<boolean> {
   }
   const addresses = await dns.promises.lookup(host, { all: true });
   return addresses.every((a) => !isBlockedAddress(a.address));
+}
+
+/**
+ * A DNS lookup for the fetch connection that resolves the host, refuses if ANY resolved
+ * address is blocked, and returns only a vetted address — so the socket connects to
+ * exactly what was vetted. This closes the DNS-rebinding TOCTOU: a rebinding server
+ * cannot answer the pre-check with a public IP and the connection with an internal one,
+ * because the address used to connect is the one this function just validated. Literal-IP
+ * hosts never reach here (the stack skips lookup for them); they are vetted up front.
+ */
+function vettingLookup(
+  hostname: string,
+  options: dns.LookupOptions,
+  callback: (err: NodeJS.ErrnoException | null, address: string | dns.LookupAddress[], family?: number) => void
+): void {
+  dns.lookup(hostname, { all: true, verbatim: true }, (err, addresses) => {
+    if (err) {
+      callback(err, '', 0);
+      return;
+    }
+    if (addresses.length === 0 || addresses.some((a) => isBlockedAddress(a.address))) {
+      callback(new Error('refusing to connect to a private, loopback, or link-local address'), '', 0);
+      return;
+    }
+    // Node's happy-eyeballs (autoSelectFamily) calls lookup with `all` and expects the
+    // full address list back; otherwise return a single vetted address.
+    if (options && options.all) {
+      callback(null, addresses);
+    } else {
+      callback(null, addresses[0].address, addresses[0].family);
+    }
+  });
+}
+
+interface HttpResult {
+  readonly status: number;
+  readonly location: string | null;
+  readonly body: string;
+}
+
+/** One HTTPS GET that connects only to a `vettingLookup`-approved address, follows no
+ *  redirects itself (the caller re-vets each hop), decompresses gzip/deflate/br, and
+ *  caps the downloaded bytes. */
+function httpsGet(target: string, signal: AbortSignal): Promise<HttpResult> {
+  return new Promise<HttpResult>((resolve, reject) => {
+    let settled = false;
+    const finish = (r: HttpResult): void => {
+      if (!settled) {
+        settled = true;
+        resolve(r);
+      }
+    };
+    const fail = (e: Error): void => {
+      if (!settled) {
+        settled = true;
+        reject(e);
+      }
+    };
+    let u: URL;
+    try {
+      u = new URL(target);
+    } catch {
+      fail(new Error('invalid URL'));
+      return;
+    }
+    const req = https.get(
+      {
+        hostname: u.hostname,
+        port: u.port || 443,
+        path: `${u.pathname}${u.search}`,
+        headers: {
+          Accept: 'text/html,text/plain',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'User-Agent': 'parley-vscode'
+        },
+        lookup: vettingLookup,
+        signal
+      },
+      (res) => {
+        const status = res.statusCode ?? 0;
+        const locationHeader = res.headers.location;
+        const location = Array.isArray(locationHeader) ? (locationHeader[0] ?? null) : (locationHeader ?? null);
+        if (status >= 300 && status < 400 && location) {
+          res.resume(); // discard the redirect body
+          finish({ status, location, body: '' });
+          return;
+        }
+        const encoding = String(res.headers['content-encoding'] || '').toLowerCase();
+        let stream: NodeJS.ReadableStream = res;
+        if (encoding === 'gzip') {
+          stream = res.pipe(zlib.createGunzip());
+        } else if (encoding === 'deflate') {
+          stream = res.pipe(zlib.createInflate());
+        } else if (encoding === 'br') {
+          stream = res.pipe(zlib.createBrotliDecompress());
+        }
+        const chunks: Buffer[] = [];
+        let bytes = 0;
+        stream.on('data', (chunk: Buffer) => {
+          bytes += chunk.length;
+          if (bytes <= MAX_FETCH_BYTES) {
+            chunks.push(chunk);
+          } else {
+            req.destroy(); // stop downloading an over-large response
+            finish({ status, location: null, body: Buffer.concat(chunks).toString('utf8') });
+          }
+        });
+        stream.on('end', () => finish({ status, location: null, body: Buffer.concat(chunks).toString('utf8') }));
+        stream.on('error', fail);
+      }
+    );
+    req.on('error', fail);
+  });
 }
 
 async function fetchUrl(url: string): Promise<string> {
@@ -1075,24 +1194,18 @@ async function fetchUrl(url: string): Promise<string> {
       if (!(await isAllowedFetchDestination(current))) {
         return 'Error: refusing to fetch a private, loopback, or link-local address.';
       }
-      const response = await fetch(current, {
-        redirect: 'manual',
-        signal: controller.signal,
-        headers: { Accept: 'text/html,text/plain' }
-      });
-      const location = response.headers.get('location');
-      if (response.status >= 300 && response.status < 400 && location) {
-        current = new URL(location, current).toString();
+      const response = await httpsGet(current, controller.signal);
+      if (response.status >= 300 && response.status < 400 && response.location) {
+        current = new URL(response.location, current).toString();
         if (!/^https:\/\//i.test(current)) {
           return 'Error: only https:// URLs are allowed.';
         }
         continue;
       }
-      if (!response.ok) {
+      if (response.status < 200 || response.status >= 300) {
         return `Error: HTTP ${response.status} fetching ${url}.`;
       }
-      const raw = await response.text();
-      const text = raw
+      const text = response.body
         .replace(/<script[\s\S]*?<\/script>/gi, ' ')
         .replace(/<style[\s\S]*?<\/style>/gi, ' ')
         .replace(/<[^>]+>/g, ' ')

@@ -13,14 +13,17 @@ const { ToolExecutor } = require('../src/webview/toolExecutor') as typeof import
 // eslint-disable-next-line @typescript-eslint/no-var-requires -- loaded after the vscode stub is installed
 const { CheckpointStore } = require('../src/diff/checkpoints') as typeof import('../src/diff/checkpoints');
 
-async function waitFor<T>(fn: () => T | undefined, tries = 200): Promise<T> {
-  for (let i = 0; i < tries; i += 1) {
+// Wall-clock deadline (not a fixed tick count) so a busy machine running test files
+// in parallel can't starve the poller before the async approval chain posts.
+async function waitFor<T>(fn: () => T | undefined, timeoutMs = 5000): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  do {
     const v = fn();
     if (v !== undefined) {
       return v;
     }
-    await new Promise((r) => setImmediate(r));
-  }
+    await new Promise((r) => setTimeout(r, 5));
+  } while (Date.now() < deadline);
   throw new Error('waitFor: condition not met in time');
 }
 
