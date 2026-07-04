@@ -285,6 +285,19 @@ button:disabled {
   position: relative;
   margin: var(--chat-action-reserved-space) 0 8px;
 }
+/* Rendered mermaid diagram (replaces the ```mermaid code block). */
+.content .mermaid-fig {
+  margin: var(--chat-action-reserved-space) 0 10px;
+  text-align: center;
+  overflow-x: auto;
+  background: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.08));
+  border-radius: 8px;
+  padding: 10px;
+}
+.content .mermaid-fig svg {
+  max-width: 100%;
+  height: auto;
+}
 .content pre {
   background: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.15));
   padding: 10px 12px;

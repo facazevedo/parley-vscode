@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -939,5 +939,8 @@
   "overrides": {
     "diff": "^9.0.0",
     "serialize-javascript": "^7.0.7"
+  },
+  "dependencies": {
+    "mermaid": "^11.16.0"
   }
 }

@@ -5,6 +5,9 @@ import hljs from 'highlight.js/lib/common';
 
 (function () {
   const vscode = acquireVsCodeApi();
+  // Page nonce (from this script's own tag) — needed to inject the on-demand
+  // mermaid chunk past the CSP, which only allows nonce'd scripts.
+  const PAGE_NONCE = (document.currentScript && document.currentScript.nonce) || '';
   const $ = (id) => document.getElementById(id);
   const history = $('history');
   const agent = $('agent');
@@ -233,10 +236,89 @@ import hljs from 'highlight.js/lib/common';
   }
   // Fence languages where "apply to editor" makes no sense (prose, terminal output, diffs).
   const SKIP_APPLY_LANGS = new Set(['diff', 'text', 'plaintext', 'txt', 'console', 'output', 'markdown', 'md']);
+
+  // ---------- Mermaid diagrams (lazy-loaded chunk) ----------
+  let mermaidPromise = null;
+  function loadMermaid() {
+    if (window.__parleyMermaid) {
+      return Promise.resolve(window.__parleyMermaid);
+    }
+    if (mermaidPromise) {
+      return mermaidPromise;
+    }
+    const src = document.body.dataset.mermaidSrc;
+    if (!src) {
+      return Promise.reject(new Error('mermaid unavailable'));
+    }
+    mermaidPromise = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      if (PAGE_NONCE) {
+        s.setAttribute('nonce', PAGE_NONCE);
+      }
+      s.src = src;
+      s.onload = () => {
+        const m = window.__parleyMermaid;
+        if (!m) {
+          reject(new Error('mermaid failed to load'));
+          return;
+        }
+        try {
+          const dark =
+            document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast');
+          m.initialize({ startOnLoad: false, securityLevel: 'strict', theme: dark ? 'dark' : 'default' });
+        } catch (e) {
+          /* initialize best-effort */
+        }
+        resolve(m);
+      };
+      s.onerror = () => reject(new Error('mermaid failed to load'));
+      document.body.appendChild(s);
+    });
+    return mermaidPromise;
+  }
+  let mermaidSeq = 0;
+  // Replace a ```mermaid <pre> with the rendered SVG figure (async, best-effort:
+  // on any error the original code block is left in place).
+  async function renderMermaid(pre) {
+    const code = pre.querySelector('code');
+    const def = (code ? code.textContent : pre.textContent).trim();
+    if (!def) {
+      return;
+    }
+    let m;
+    try {
+      m = await loadMermaid();
+    } catch (e) {
+      return; // library unavailable — leave the code block as-is
+    }
+    const id = 'pmmd-' + ++mermaidSeq;
+    try {
+      const out = await m.render(id, def);
+      const fig = document.createElement('div');
+      fig.className = 'mermaid-fig';
+      fig.innerHTML = typeof out === 'string' ? out : out.svg;
+      pre.replaceWith(fig);
+      maybeScroll();
+    } catch (e) {
+      // Invalid diagram syntax — keep the code block; mermaid may inject an error node, remove it.
+      const orphan = document.getElementById('d' + id) || document.getElementById(id);
+      if (orphan && orphan.parentNode === document.body) {
+        orphan.remove();
+      }
+    }
+  }
+
   function enhanceContent(contentEl) {
     // Copy (and Apply) buttons on each fenced block. The buttons live outside the
     // scrollable <pre> so they stay pinned while long code lines are scrolled horizontally.
     contentEl.querySelectorAll('pre').forEach((pre) => {
+      const codeEl0 = pre.querySelector('code');
+      const lang0 = ((/language-([\w#+-]+)/.exec(codeEl0 ? codeEl0.className : '') || [])[1] || '').toLowerCase();
+      // Render mermaid diagrams as figures instead of code blocks (no Copy/Apply).
+      if (lang0 === 'mermaid') {
+        void renderMermaid(pre);
+        return;
+      }
       const wrapper = document.createElement('div');
       wrapper.className = 'codeblock';
       pre.parentNode.insertBefore(wrapper, pre);

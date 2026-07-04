@@ -10,6 +10,8 @@ export function buildChatHtml(webview: vscode.Webview, extensionUri: vscode.Uri)
   const mediaRoot = vscode.Uri.joinPath(extensionUri, 'media');
   // The webview script is bundled (media/chat.js + markdown-it + highlight.js → dist/webview.js).
   const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'dist', 'webview.js'));
+  // Mermaid is a separate on-demand chunk (loaded by chat.js when a diagram appears).
+  const mermaidUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'dist', 'mermaid.js'));
   const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(mediaRoot, 'chat.css'));
   const csp = [
     "default-src 'none'",
@@ -28,7 +30,7 @@ export function buildChatHtml(webview: vscode.Webview, extensionUri: vscode.Uri)
   <link rel="stylesheet" href="${styleUri}">
   <title>Parley</title>
 </head>
-<body>
+<body data-mermaid-src="${mermaidUri}">
   <div class="shell">
     <div class="toolbar">
       <span class="title">Parley</span>

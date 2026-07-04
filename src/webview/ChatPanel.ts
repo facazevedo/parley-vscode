@@ -1765,8 +1765,14 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       folders.length > 1
         ? `This is a MULTI-ROOT workspace (folders: ${folders.map((f) => f.name).join(', ')}). Tool paths may target any root — prefix with the folder name (e.g. "${folders[1].name}/src/…") when the first root isn't meant. run_command executes in the FIRST root (${folders[0].name}); use "cd <folder> && …" for the others.`
         : undefined;
+    // Always-on: how to produce figures. Applies in every mode (Chat included).
+    const figuresNote =
+      'Producing figures: when the user asks for a DIAGRAM (flowchart, sequence, class, ER, state, gantt, mind map, architecture), output a ```mermaid fenced code block — Parley renders it inline as a diagram. Use this for anything with precise text/structure.' +
+      (this.mode !== 'chat' && this.mode !== 'plan'
+        ? ' For illustrative pictures/logos/mockups instead, call the generate_image tool.'
+        : '');
     return (
-      [env, stylePrompt || undefined, modeNote, multiRootNote, rulesSection, memorySection]
+      [env, stylePrompt || undefined, modeNote, multiRootNote, rulesSection, memorySection, figuresNote]
         .filter(Boolean)
         .join('\n\n') || undefined
     );

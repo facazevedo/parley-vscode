@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.10.0
+
+### New — Mermaid diagrams render inline
+
+- ` ```mermaid ` code blocks in replies now **render as diagrams** in the chat (flowcharts, sequence, class, ER, state, gantt, mind maps, …). Ask any model "draw the architecture as a diagram" and you get a rendered figure, not a code block. Diagrams follow your light/dark theme.
+- Together with v1.9's `generate_image`, this gives you both halves cleanly: **Mermaid for precise technical diagrams**, **`generate_image` for illustrations/pictures** — and models are told which to use for what.
+- **Lazy-loaded to stay fast:** Mermaid (~3 MB) is a separate chunk (`dist/mermaid.js`) that the webview loads **only when a diagram first appears**, injected past the CSP with the page nonce — so the main chat UI's load time is unchanged for everyone who isn't rendering a diagram. Invalid diagram syntax falls back to showing the code block.
+
 ## 1.9.0
 
 ### New — agents can create images/figures (`generate_image` tool)

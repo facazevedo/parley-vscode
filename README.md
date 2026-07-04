@@ -258,6 +258,8 @@ In any tool mode the model runs an OpenAI tool‑calling loop. Built‑in tools:
 | `browser_*`                                          | Drive a local Chromium: `navigate`/`read`/`console`/`click`/`type`/`screenshot` (runs JS; installs on first use) |
 | `web_search`                                         | Search the web (see [Web search](#web-search))                                                                   |
 | `generate_image`                                     | Generate an image/figure/illustration from a description and show it inline (via the gateway's image model)      |
+
+Replies can also include **rendered figures**: a ` ```mermaid ` code block renders inline as a diagram (flowcharts, sequence, ER, …; lazy-loaded, theme-aware), and `generate_image` produces illustrations/pictures.
 | `run_subagent`                                       | Delegate a scoped read-only investigation to a subagent (fresh context; returns only its report)                 |
 | `run_subagents`                                      | Run several **independent** read-only investigations **concurrently** (up to 5); reports come back aggregated    |
 | `remember`                                           | Save a durable project fact to `.parley/memory.md` (injected into future conversations)                          |

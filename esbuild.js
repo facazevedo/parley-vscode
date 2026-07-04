@@ -42,11 +42,25 @@ async function main() {
     logLevel: 'info'
   });
 
+  // Mermaid is bundled separately (dist/mermaid.js) and loaded on demand by the
+  // webview only when a diagram appears — keeps the main chat bundle small/fast.
+  const mermaidCtx = await esbuild.context({
+    entryPoints: ['media/mermaidEntry.js'],
+    bundle: true,
+    format: 'iife',
+    platform: 'browser',
+    target: 'es2020',
+    outfile: 'dist/mermaid.js',
+    sourcemap: false,
+    minify: true,
+    logLevel: 'info'
+  });
+
   if (watch) {
-    await Promise.all([extensionCtx.watch(), webviewCtx.watch()]);
+    await Promise.all([extensionCtx.watch(), webviewCtx.watch(), mermaidCtx.watch()]);
   } else {
-    await Promise.all([extensionCtx.rebuild(), webviewCtx.rebuild()]);
-    await Promise.all([extensionCtx.dispose(), webviewCtx.dispose()]);
+    await Promise.all([extensionCtx.rebuild(), webviewCtx.rebuild(), mermaidCtx.rebuild()]);
+    await Promise.all([extensionCtx.dispose(), webviewCtx.dispose(), mermaidCtx.dispose()]);
   }
 }
 
