@@ -79,6 +79,8 @@ export interface ParleySettings {
   readonly inlineCompletionDisabledLanguages: string[];
   readonly inlineCompletionMaxPrefixChars: number;
   readonly inlineCompletionMaxSuffixChars: number;
+  /** Auto-run next-edit prediction shortly after edits settle (opt-in). */
+  readonly nextEditAutoTrigger: boolean;
   readonly videoMaxFrames: number;
   readonly videoFrameWidth: number;
   readonly videoMaxAudioSeconds: number;
@@ -143,6 +145,7 @@ export function getSettings(): ParleySettings {
       .map((l) => l.trim()),
     inlineCompletionMaxPrefixChars: clampInt(inline.get<number>('maxPrefixChars', 2000), 200, 8000),
     inlineCompletionMaxSuffixChars: clampInt(inline.get<number>('maxSuffixChars', 1000), 100, 4000),
+    nextEditAutoTrigger: config.get<boolean>('nextEdit.autoTrigger', false),
     videoMaxFrames: clampInt(video.get<number>('maxFrames', 12), 1, 60),
     videoFrameWidth: clampInt(video.get<number>('frameWidth', 768), 128, 2048),
     videoMaxAudioSeconds: clampInt(video.get<number>('maxAudioSeconds', 600), 5, 7200),

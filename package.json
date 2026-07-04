@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "1.63.0",
+  "version": "1.64.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -113,6 +113,21 @@
       {
         "command": "parley.predictNextEdit",
         "title": "Parley: Predict Next Edit",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.predictNextEditDiff",
+        "title": "Parley: Predict Next Edit (Diff Review)",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.jumpToNextEdit",
+        "title": "Parley: Jump to Predicted Edit",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.dismissNextEdit",
+        "title": "Parley: Dismiss Predicted Edit",
         "category": "Parley"
       },
       {
@@ -358,6 +373,16 @@
         "key": "ctrl+alt+n",
         "mac": "cmd+alt+n",
         "when": "editorTextFocus"
+      },
+      {
+        "command": "parley.jumpToNextEdit",
+        "key": "tab",
+        "when": "parley.hasNextEdit && editorTextFocus && !editorHasSelection && !inlineSuggestionVisible && !suggestWidgetVisible && !inSnippetMode && !editorReadonly"
+      },
+      {
+        "command": "parley.dismissNextEdit",
+        "key": "escape",
+        "when": "parley.hasNextEdit && editorTextFocus && !inlineSuggestionVisible && !suggestWidgetVisible"
       }
     ],
     "submenus": [
@@ -367,6 +392,16 @@
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "parley.jumpToNextEdit",
+          "when": "false"
+        },
+        {
+          "command": "parley.dismissNextEdit",
+          "when": "false"
+        }
+      ],
       "explorer/context": [
         {
           "command": "parley.addFileToChat",
@@ -955,6 +990,11 @@
           "minimum": 100,
           "maximum": 4000,
           "markdownDescription": "How many characters of code *after* the cursor are sent as context."
+        },
+        "parley.nextEdit.autoTrigger": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Automatically predict the next edit (Cursor-Tab style) shortly after your edits settle, showing a Tab hint at the target. Off by default — trigger on demand with **Parley: Predict Next Edit** (`Ctrl+Alt+N`). Each auto-prediction is a model call, so enable only with a fast model."
         },
         "parley.video.maxFrames": {
           "type": "number",

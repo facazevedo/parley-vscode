@@ -6,15 +6,12 @@ import type { CheckpointStore } from '../diff/checkpoints';
 import { reviewProposedEdit } from '../diff/reviewEdit';
 import { showProposedDiff } from '../diff/showDiff';
 import { recentEditsSummary } from '../completion/recentEdits';
-import { parsePrediction } from './predictionParse';
-
-const MAX_FILE_CHARS = 16000;
+import { parsePrediction, buildNextEditPrompt } from './predictionParse';
 
 /**
- * `Parley: Predict Next Edit` (Ctrl+Alt+N) — from your recent edits + the current file,
- * predict the single most likely next change (a sibling case, a related call site, a type,
- * a matching test…) and offer it as a reviewable diff at that location. Reuses the same
- * diff-review + checkpoint flow as inline edit, so nothing is applied without your OK.
+ * `Parley: Predict Next Edit (Diff Review)` — predict the likely next change and offer it
+ * as a reviewable diff at that location (checkpointed). This is the modal-review fallback;
+ * the default Ctrl+Alt+N flow is the inline ghost in NextEditController.
  */
 export function registerPredictNextEditCommand(
   context: vscode.ExtensionContext,
@@ -22,7 +19,7 @@ export function registerPredictNextEditCommand(
   checkpoints: CheckpointStore
 ): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand('parley.predictNextEdit', async () => {
+    vscode.commands.registerCommand('parley.predictNextEditDiff', async () => {
       const editor = vscode.window.activeTextEditor;
       if (!editor || editor.document.uri.scheme !== 'file') {
         await vscode.window.showInformationMessage('Parley: open a file to predict the next edit.');
@@ -31,16 +28,7 @@ export function registerPredictNextEditCommand(
       const doc = editor.document;
       const full = doc.getText();
       const recent = recentEditsSummary('') ?? '(no recent edits recorded yet)';
-      const capped = full.length > MAX_FILE_CHARS ? `${full.slice(0, MAX_FILE_CHARS)}\n/* …truncated… */` : full;
-      const prompt =
-        "You predict a developer's NEXT edit. Given their recent edits and the current file, predict the single most " +
-        'likely next change that continues the intent — e.g. update a sibling case/branch, a related call site, a type, ' +
-        'an import, or a matching test.\n\n' +
-        'Reply with EXACTLY one fenced ```json block and nothing else:\n' +
-        '{"find":"<exact snippet copied verbatim from the current file — must occur exactly once>","replace":"<replacement text>","why":"<one short line>"}\n' +
-        'or {"none":true} if there is no confident next edit.\n\n' +
-        `Recent edits:\n${recent}\n\n` +
-        `Current file — ${vscode.workspace.asRelativePath(doc.uri)} (${doc.languageId}):\n\`\`\`\n${capped}\n\`\`\``;
+      const prompt = buildNextEditPrompt(vscode.workspace.asRelativePath(doc.uri), doc.languageId, full, recent);
 
       let reply: string;
       try {

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.64.0
+
+### Next Edit: Cursor-Tab-style ghost flow (prototype)
+
+- **Parley: Predict Next Edit** (Ctrl+Alt+N) now shows the predicted change as an inline ghost instead of only a modal diff. The target location is marked with a decoration + a status-bar hint; **Tab** jumps the caret there (when no other suggestion is open), which renders the replacement as native ghost text, and a second **Tab** accepts it. **Escape** dismisses. The Tab binding is tightly gated by a `parley.hasNextEdit` context key, so it never interferes with normal Tab.
+- **parley.nextEdit.autoTrigger** (default off): auto-predict shortly after your edits settle, for a hands-free Cursor-Tab feel. Each prediction is a model call — enable with a fast model.
+- The previous modal flow is still available as **Parley: Predict Next Edit (Diff Review)**.
+
+_Prototype: the ghost/Tab interaction depends on live editor behavior I can't exercise headlessly — please try it and report anything off; Escape always clears it._
+
+
 ## 1.63.0
 
 ### Docs
