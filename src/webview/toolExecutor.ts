@@ -1099,7 +1099,8 @@ export class ToolExecutor {
     const folder = vscode.workspace.workspaceFolders?.[0];
     const root = folder?.uri.fsPath;
     const explicit = String(args.command ?? '').trim();
-    const command = explicit || detectTestCommand(root ?? '', this.host.getSettings().testCommand);
+    const settings = this.host.getSettings();
+    const command = explicit || detectTestCommand(root ?? '', settings.testCommand || settings.verifyCommand);
     if (!command) {
       return 'Error: no test command detected. Set the "parley.testCommand" setting, or pass an explicit command argument (e.g. "npm test", "pytest").';
     }

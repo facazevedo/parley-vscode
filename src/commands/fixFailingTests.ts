@@ -18,7 +18,8 @@ export function registerFixFailingTestsCommand(context: vscode.ExtensionContext,
         return;
       }
       const root = folder.uri.fsPath;
-      let command = detectTestCommand(root, deps.getSettings().testCommand);
+      const settings = deps.getSettings();
+      let command = detectTestCommand(root, settings.testCommand || settings.verifyCommand);
       if (!command) {
         const entered = await vscode.window.showInputBox({
           title: 'Parley: Fix Failing Tests',

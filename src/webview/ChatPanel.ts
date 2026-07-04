@@ -65,6 +65,7 @@ import type { McpManager } from '../mcp/McpManager';
 import { lexicalRank, type RankDoc } from '../codebase/lexicalSearch';
 import { EmbeddingIndex } from '../codebase/embeddingIndex';
 import { buildCodebaseRegion } from '../codebase/region';
+import { detectTestCommand } from '../testing/testRunner';
 import {
   indexOfUserMessage,
   transcriptToMarkdown,
@@ -2829,44 +2830,28 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       return;
     }
     const args = input.replace(/^\/\S+\s*/, '').trim();
-    let cmd = args || this.getSettings().verifyCommand;
-    if (!cmd) {
-      cmd = (await this.detectTestCommand()) ?? '';
+    const settings = this.getSettings();
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+    // Shared resolution with run_tests / Fix Failing Tests: explicit arg → either
+    // test-command setting → auto-detect (npm / pytest / cargo / go / maven / gradle).
+    let cmd = args || settings.verifyCommand || settings.testCommand;
+    if (!cmd && root) {
+      cmd = detectTestCommand(root.fsPath) ?? '';
     }
     if (!cmd) {
       await pushNote(
-        '🧪 No test command found — run `/verify <command>` (e.g. `/verify pytest -q`) or set `parley.verifyCommand`.'
+        '🧪 No test command found — run `/verify <command>` (e.g. `/verify pytest -q`) or set `parley.testCommand`.'
       );
       return;
     }
     const prompt =
       `Verify the project and fix it until it passes ("fix until green").\n\n` +
-      `1. Run the check command with run_command: \`${cmd}\`\n` +
+      `1. Run the tests with the run_tests tool (command: \`${cmd}\`); it reports PASS/FAIL plus the output.\n` +
       `2. If it fails, read the failure output carefully, inspect the relevant files, and make the SMALLEST safe fix. Do not weaken or delete tests to make them pass — fix the code under test (only fix a test when it is genuinely wrong, and say so).\n` +
-      `3. Re-run the command and repeat until it passes.\n` +
+      `3. Re-run run_tests and repeat until it passes.\n` +
       `4. Finish with a short summary: what failed, what you changed (files), and the tail of the final passing output.\n\n` +
       `If the same failure persists after several attempts, or the failure is environmental (missing dependency, no network), stop and explain what is blocking instead of thrashing.`;
     await this.runTurn(prompt, this.contextOptions);
-  }
-
-  /** Best-effort test-command detection for `/verify` (npm test when package.json has a real test script). */
-  private async detectTestCommand(): Promise<string | undefined> {
-    const root = vscode.workspace.workspaceFolders?.[0]?.uri;
-    if (!root) {
-      return undefined;
-    }
-    try {
-      const raw = Buffer.from(await vscode.workspace.fs.readFile(vscode.Uri.joinPath(root, 'package.json'))).toString(
-        'utf8'
-      );
-      const pkg = JSON.parse(raw) as { scripts?: Record<string, string> };
-      if (pkg.scripts?.test && !/no test specified/i.test(pkg.scripts.test)) {
-        return 'npm test';
-      }
-    } catch {
-      // No package.json — fall through.
-    }
-    return undefined;
   }
 
   /**

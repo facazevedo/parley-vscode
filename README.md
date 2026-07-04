@@ -7,10 +7,10 @@ A streaming chat sidebar, an agent that reads and edits your workspace, multimod
 and every change diff-reviewed before it touches your files — all inside VS Code.</p>
 
 <p>
-  <a href="CHANGELOG.md"><img alt="Version" src="https://img.shields.io/badge/version-1.5.0-A31F34"></a>
+  <a href="CHANGELOG.md"><img alt="Version" src="https://img.shields.io/badge/version-1.51.0-A31F34"></a>
   <img alt="VS Code" src="https://img.shields.io/badge/VS%20Code-%E2%89%A5%201.92-1F6FEB">
   <a href="https://opensource.org/licenses/MIT"><img alt="License" src="https://img.shields.io/badge/license-MIT-3FB950"></a>
-  <img alt="Tests" src="https://img.shields.io/badge/tests-330%20passing-2EA043">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-378%20passing-2EA043">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-3178C6">
 </p>
 
@@ -20,15 +20,17 @@ and every change diff-reviewed before it touches your files — all inside VS Co
 
 ## Highlights
 
-- **Agentic editing, safely** — six modes from plain chat to full autonomy; every edit is diff-reviewed, checkpointed, and **rewindable** per message. `/verify` runs your tests and fixes until green.
+- **Agentic editing, safely** — six modes from plain chat to full autonomy; every edit is diff-reviewed, checkpointed, and **rewindable** per message. **Review multiple changed files in one native multi-diff editor.**
+- **Test-runner loop** — **`/verify`** (in-chat) or **`Fix Failing Tests`** (command), backed by the `run_tests` tool, run your suite (auto-detected: npm / pytest / cargo / go / maven / gradle), read the failures, fix, and re-run until green.
 - **Any model on the gateway** — Claude, GPT, Gemini and more, switchable per conversation; `/compare` runs one prompt on two models side by side.
-- **Deep context** — `@file` / `@codebase` (lexical or on-device semantic) / `@terminal` / `@git` / `@browser` mentions, project rules, and **agent-maintained project memory** that compounds across conversations.
+- **Deep context** — `@file` / `@codebase` (lexical or on-device semantic, attaching the matched region) / `@problems` / `@terminal` / `@git` / `@browser` mentions, project rules, and **agent-maintained project memory** that compounds across conversations.
+- **Editor code actions** — right-click "Parley" submenu and the `Ctrl+.` lightbulb: Explain, Refactor, Generate tests, **Add docs**, Fix. Plus one-click **commit-message** and **PR-description** generation.
 - **Multimodal in & out** — attach images, PDFs, audio, **video**; **🎤 voice input**, **🔊 read-aloud + hands-free voice mode**, and **📷/🎥 screen capture** (screenshot or recording with narration).
 - **Computer use** ⚠ — with your explicit opt-in, `/computer` drives your real mouse & keyboard to do desktop tasks (built-in Windows backend or optional cross-platform nut.js), with a corner-slam kill switch and per-action confirm.
 - **Local browser & parallel subagents** — drive a real headless Chromium, or fan out several scoped read-only investigations at once.
-- **MCP** — connect stdio, streamable-HTTP, and legacy-SSE Model Context Protocol servers.
+- **MCP** — connect stdio, streamable-HTTP, and legacy-SSE Model Context Protocol servers, with a **status view** for connected servers, their tools, and any failures.
 - **Safety & privacy first** — sensitive-file filtering, **outbound secret redaction**, **prompt-injection defenses** on untrusted content, a per-segment command allowlist, and honest documentation of gateway limits.
-- **Transparent by design** — full on-disk JSONL transcripts, live cost/context gauges + status-bar ticker, a `/context` breakdown, and 323 automated tests. CI packages a GitHub Release on every version tag.
+- **Transparent by design** — full on-disk JSONL transcripts, live cost/context gauges + status-bar ticker, a `/context` breakdown, and 378 automated tests. CI packages a GitHub Release on every version tag.
 
 Built around a `ParleyProvider` abstraction, so the UI, context collection, diff review, and safety controls stay independent of the transport.
 
@@ -366,6 +368,7 @@ special mentions below:
 | `@path/to/folder/` | Attach a listing of the folder                                                      |
 | `@sym:<name>`      | Find a function/class/symbol by name via the language server; attaches its source   |
 | `@codebase`        | Retrieve the most relevant files for your question (see below)                      |
+| `@problems`        | Attach the current errors & warnings from the Problems panel (errors first)         |
 | `@git`             | Attach the uncommitted diff (vs HEAD)                                               |
 | `@terminal`        | Attach recent integrated-terminal commands + output (shell integration)             |
 | `@browser <url>`   | Open the URL in a local browser (runs JS) and attach rendered text + console errors |
@@ -403,6 +406,10 @@ Controlled by `parley.codebaseSearch.provider`:
 > needs nothing.
 
 `parley.codebaseSearch.maxFiles` (default 4) controls how many files are included.
+With the **`local`** provider, each hit attaches the **region around the matched chunk**
+(a little context + one window, labeled `@codebase path:from-to`) rather than the top of
+the file — so large files contribute the code that actually matched your question. The
+lexical provider (and small files) still attach the file head.
 
 ---
 
@@ -484,10 +491,14 @@ Both use the browser's capture APIs feeding the normal attachment pipeline — n
 ## Reviewing code (branch · staged · diagnostics)
 
 - **`Parley: Review Current Branch`** — diffs your branch against its merge-base with `main`/`master` and streams a severity-grouped review **plus a ready-to-paste PR title & description**.
+- **`Parley: Generate PR Description`** (also in the Source Control ⋯ menu) — writes _only_ a clean, paste-ready PR description (title · Summary · Changes · Test plan) from the branch diff; opens in a markdown doc and copies to the clipboard. Use this when you want the description without the code review.
+- **`Parley: Generate Commit Message`** (Source Control ⋯ menu) — summarizes the staged diff (or working tree) into a Conventional Commits message and drops it into the commit box.
 - **`Parley: Review Staged Changes`** (also in the Source Control ⋯ menu) — reviews exactly what you're about to commit, ending with a suggested commit message.
-- **`@git`** mention — the uncommitted diff, in-chat, for a quick look.
+- **`@git`** / **`@problems`** mentions — the uncommitted diff, or the current errors & warnings, in-chat for a quick look or a "fix these" turn.
 - **Fix with Parley** — any diagnostic squiggle offers a Quick Fix (`Ctrl+.`) that sends the specific problems + code excerpt to the chat.
+- **`Parley: Fix Failing Tests`** (command) / **`/verify`** (in-chat) — run your test suite (auto-detected: npm / pytest / cargo / go / maven / gradle, or set `parley.testCommand` / `parley.verifyCommand`); on failure the agent fixes and re-runs via the `run_tests` tool until green. Needs an agent mode that can run commands (Ask/Edit/Auto/Full).
 - **Fix Last Terminal Command** — when a terminal command fails, a transient status-bar hint (and `Parley: Fix Last Terminal Command`) sends the command + output to the chat for a fix.
+- **Multi-file review** — the end-of-turn "N files changed" card's **Review** button opens every changed file in VS Code's native multi-diff editor (one scrollable before/after view).
 
 ---
 
@@ -537,7 +548,9 @@ Parley launches/connects each server, runs the handshake, lists its tools, and e
 them to the agent as **`mcp__<server>__<tool>`** (available in every agent mode except Plan).
 Run **`Parley: Reconnect MCP Servers`** after editing the config; it also restarts
 automatically when the setting changes. A server that fails to start is skipped — chat
-keeps working.
+keeps working. **`Parley: MCP Server Status`** shows each server (connected vs failed,
+transport, tool count) in a QuickPick; drill into one to list its tools, or read the
+exact error for a server that didn't connect.
 
 ---
 
@@ -546,8 +559,13 @@ keeps working.
 - **Ghost‑text completion:** as you type, Parley suggests a completion at the cursor
   (fill‑in‑the‑middle). It's **diff‑aware** — the model is fed your recent edits as
   before→after deltas (`was X → now Y`), Cursor‑Tab style, so completions track what
-  you're actually changing. Toggle with **`Parley: Toggle Inline Completion`**; configure
-  with `parley.inlineCompletion.*` (use a fast model like `openai/gpt-5-nano`).
+  you're actually changing. A small **LRU cache** serves a cursor bounce or
+  backspace‑and‑retype instantly, and a duplicated trailing closer (`}`, `)`, `;`) the
+  text after the cursor already has is trimmed so completions don't double it. Toggle with
+  **`Parley: Toggle Inline Completion`**; configure with `parley.inlineCompletion.*` —
+  a fast `model` (default `openai/gpt-5-nano`), `debounceMs`, `maxPrefixChars`/
+  `maxSuffixChars` (context window), and `disabledLanguages` (turn it off per language,
+  e.g. markdown/plaintext).
 - **Inline edit (`Ctrl+Alt+K` / `Cmd+Alt+K`):** select code, describe the change,
   review the diff before applying. Multi‑change edits offer **Apply All / Choose… /
   Reject** — "Choose…" accepts/rejects **individual hunks**. Edits are checkpointed.
@@ -615,9 +633,12 @@ folder in your workspace, so it never depends on what's in memory:
 - **`Parley: Generate Image`** — `gpt-image-1`; choose size + quality; saves the PNG
   to `parley-images/`.
 - Selection/file commands stream their reply into the chat:
-  **`Ask About Selection`**, **`Explain Current File`**, **`Refactor Selection`**,
-  **`Generate Tests`**, **`Fix Diagnostics`**, **`Suggest Terminal Command`** (inserts
-  into a terminal; never auto‑runs).
+  **`Ask About Selection`**, **`Explain Current File`** (explains your selection when
+  you have one), **`Refactor Selection`**, **`Generate Tests`**, **`Add Docs`**,
+  **`Fix Diagnostics`**, **`Suggest Terminal Command`** (inserts into a terminal; never
+  auto‑runs). These live in the editor right‑click **Parley** submenu, and the
+  selection ones (Refactor / Edit / Generate tests / Add docs / Explain) also appear in
+  the **`Ctrl+.`** lightbulb (Refactor) menu.
 
 ---
 
@@ -716,10 +737,13 @@ frontmatter‑less (or `alwaysApply: true`) rules always apply.
 | `Parley: Explain Current File`                  | Explain the active file                                                            |
 | `Parley: Refactor Selection`                    | Refactor the selection (diff‑reviewed)                                             |
 | `Parley: Generate Tests`                        | Generate tests for the current file                                                |
+| `Parley: Add Docs`                              | Add idiomatic doc comments to the selection/file (also in the `Ctrl+.` menu)       |
 | `Parley: Fix Diagnostics`                       | Fix reported problems minimally (also "Fix with Parley" in the `Ctrl+.` lightbulb) |
+| `Parley: Fix Failing Tests`                     | Run the test suite; on failure, fix and re-run via `run_tests` until green          |
 | `Parley: Fix Last Terminal Command`             | Send the last failed terminal command + output to the chat for a fix               |
 | `Parley: Suggest Terminal Command`              | Suggest a shell command (manual confirm)                                           |
 | `Parley: Review Current Branch`                 | Review the branch vs its merge-base + draft a PR description                       |
+| `Parley: Generate PR Description`               | Paste-ready PR title/summary/changes/test-plan from the branch diff (also SCM ⋯)   |
 | `Parley: Review Staged Changes`                 | Review the staged diff before committing (also in the SCM ⋯ menu)                  |
 | `Parley: File Edit History`                     | Every Parley edit to the current file, each openable as a before/after diff        |
 | `Parley: Open Project Memory`                   | Open `.parley/memory.md` to review/prune what the agent has remembered             |
@@ -732,6 +756,7 @@ frontmatter‑less (or `alwaysApply: true`) rules always apply.
 | `Parley: Select Output Style`                   | Choose how Parley communicates (Default/Concise/Explanatory/Learning + custom)     |
 | `Parley: Show Context Breakdown`                | Per-component estimate of what fills the context window (also `/context`)          |
 | `Parley: Reconnect MCP Servers`                 | Restart MCP servers and show status                                                |
+| `Parley: MCP Server Status`                     | See connected servers, their tools, and any startup failures                       |
 | `Parley: Show Usage`                            | Real billed spend for the current month (from the gateway)                         |
 | `Parley: Usage History`                         | Estimated spend over time — by-day chart + by-model table from saved transcripts   |
 | `Parley: Set Token Limit`                       | Per‑conversation token budget                                                      |
@@ -769,7 +794,8 @@ frontmatter‑less (or `alwaysApply: true`) rules always apply.
 | `parley.codebaseSearch.provider`          | `lexical`                       | `lexical` or `local` (on‑device semantic)                                |
 | `parley.codebaseSearch.maxFiles`          | `4`                             | Files `@codebase` includes                                               |
 | `parley.commandTimeoutSeconds`            | `300`                           | Timeout for agent shell commands                                         |
-| `parley.verifyCommand`                    | `""`                            | Command `/verify` runs (empty = auto-detect `npm test`)                  |
+| `parley.verifyCommand`                    | `""`                            | Command `/verify` runs (empty = auto-detect)                             |
+| `parley.testCommand`                      | `""`                            | Command for `run_tests` / `Fix Failing Tests` (empty = auto-detect)      |
 | `parley.statusBar.enabled`                | `true`                          | Status-bar ticker: sidebar tokens/cost + working spinner                 |
 | `parley.terminalFixHint.enabled`          | `true`                          | Transient "Fix with Parley" hint when a terminal command fails           |
 | `parley.voice.model`                      | `""`                            | Model for 🎤 transcription (empty = current; needs audio support)        |
@@ -782,6 +808,9 @@ frontmatter‑less (or `alwaysApply: true`) rules always apply.
 | `parley.inlineCompletion.enabled`         | `true`                          | Ghost‑text completions                                                   |
 | `parley.inlineCompletion.model`           | `openai/gpt-5-nano`             | Completion model                                                         |
 | `parley.inlineCompletion.debounceMs`      | `350`                           | Idle delay before a completion                                           |
+| `parley.inlineCompletion.disabledLanguages` | `[]`                          | Language IDs where completion is off (e.g. `["markdown"]`)               |
+| `parley.inlineCompletion.maxPrefixChars`  | `2000`                          | Chars of code before the cursor sent as context                         |
+| `parley.inlineCompletion.maxSuffixChars`  | `1000`                          | Chars of code after the cursor sent as context                          |
 | `parley.video.maxFrames`                  | `12`                            | Max sampled video frames                                                 |
 | `parley.video.frameWidth`                 | `768`                           | Downscale width for frames                                               |
 | `parley.video.maxAudioSeconds`            | `600`                           | Max seconds of extracted audio                                           |

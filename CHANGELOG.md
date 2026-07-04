@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.52.0
+
+### Unify the test-runner with /verify + README refresh
+
+- /verify, the run_tests tool, and Fix Failing Tests now share one broad test-command detector (npm / pytest / cargo / go / maven / gradle) and honor either parley.testCommand or parley.verifyCommand — no more npm-only detection or two competing settings.
+- /verify now drives the tests through the run_tests tool (reliable PASS/FAIL via the real exit code) instead of a raw run_command.
+- README updated for @problems, PR-description, Add Docs + Ctrl+. code actions, the test-runner loop, MCP status view, @codebase matched-region attachment, native multi-file review, and inline-completion settings.
+
+
 ## 1.51.0
 
 ### Inline completion polish
