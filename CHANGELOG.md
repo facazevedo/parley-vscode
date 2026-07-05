@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.73.0
+
+### Test Explorer action & notebook cells
+
+- **Test Explorer integration** — right-click a test in the Test Explorer → **Parley: Fix / Explain Test**: opens the test file and has the agent run, diagnose, and fix it (or explain what it verifies).
+- **Parley: Ask About Notebook Cell** — explain or act on the selected Jupyter notebook cell(s).
+- README command reference synced (Onboard, Screenshot to UI, Ask About Notebook Cell, Fix/Explain Test, Explain Commit/Compare Refs).
+
+
 ## 1.72.0
 
 ### Screenshot to UI

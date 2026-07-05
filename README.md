@@ -754,6 +754,11 @@ frontmatter‑less (or `alwaysApply: true`) rules always apply.
 | `Parley: Ask About Selection`                   | Ask about the current selection                                                    |
 | `Parley: Explain Current File`                  | Explain the active file                                                            |
 | `Parley: Explain Symbol`                        | Explain the symbol under the cursor (also the hover "Explain with Parley" link)    |
+| `Parley: Onboard Me to This Repo`               | New-contributor briefing: architecture, key files, how to run + a diagram          |
+| `Parley: Screenshot to UI`                      | Pick a UI image → rebuild it as an HTML artifact in the design canvas              |
+| `Parley: Ask About Notebook Cell`               | Explain / act on the selected Jupyter notebook cell(s)                            |
+| `Parley: Fix / Explain Test`                    | From the Test Explorer item menu: run, diagnose, and fix a test                    |
+| `Parley: Explain Commit / Compare Refs`         | Explain a commit, or summarize the diff between two branches/refs                  |
 | `Parley: Refactor Selection`                    | Refactor the selection (diff‑reviewed)                                             |
 | `Parley: Port / Translate Code`                 | Translate the selection/file to another language into a new document               |
 | `Parley: Explain Stack Trace`                   | Parse a trace (selection/clipboard/input), open the top frame, explain + fix       |

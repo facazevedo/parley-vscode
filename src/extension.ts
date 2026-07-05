@@ -22,6 +22,8 @@ import { registerPortCodeCommand } from './commands/portCode';
 import { registerSplitCommitsCommand } from './commands/splitCommits';
 import { registerOnboardCommand } from './commands/onboard';
 import { registerExplainRefCommand } from './commands/explainRef';
+import { registerTestActionsCommand } from './commands/testActions';
+import { registerNotebookCellCommand } from './commands/notebookCell';
 import { registerFileEditHistoryCommand } from './commands/fileEditHistory';
 import { MEMORY_HEADER, memoryUri } from './context/projectMemory';
 import { registerFixLastCommandCommand } from './commands/fixLastCommand';
@@ -345,6 +347,8 @@ export function activate(context: vscode.ExtensionContext): void {
   registerSplitCommitsCommand(context, commandDeps);
   registerOnboardCommand(context, commandDeps);
   registerExplainRefCommand(context, commandDeps);
+  registerTestActionsCommand(context, commandDeps);
+  registerNotebookCellCommand(context, commandDeps);
   registerFileEditHistoryCommand(context, commandDeps);
   registerFixLastCommandCommand(context, commandDeps);
   registerUsageHistoryCommand(context, commandDeps);
