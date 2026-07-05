@@ -151,6 +151,8 @@ right-click a file → **Add File to Chat Context**.
   each openable as a before/after diff).
 - **Multi-file review** — the end-of-turn "N files changed" card's **Review** button opens
   every changed file in VS Code's native multi-file diff editor.
+- **Batch approval** — Ask-mode approval cards have **Apply all / Reject all**, which apply
+  (or reject) the rest of that turn's edits without another prompt (scoped to the turn).
 - **Format-preserving** — a CRLF file stays CRLF; BOM/encoding are preserved.
 
 ## Inline completion & next-edit prediction
@@ -210,6 +212,11 @@ Right-click **Parley** submenu and the **`Ctrl+.`** lightbulb (on a selection):
 - **Split Into Logical Commits** — propose grouping the uncommitted diff into clean,
   self-contained commits with messages (advisory).
 - **Explain Commit / Compare Refs** — explain what a commit changes, or diff two branches/refs.
+- **Review a Pull Request** — enter a PR number → fetch its diff via `gh pr diff` and run a
+  full severity-grouped review with an approve/request-changes recommendation (any PR, not
+  just your local branch).
+- **Generate / Update README** — write or update `README.md` from the code, as a reviewable,
+  checkpointed edit.
 - **Review Current Branch** bundles a review + PR description.
 - Context mentions **`@git`**, **`@blame`**, **`@issue`**, **`@pr`**.
 

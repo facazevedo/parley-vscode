@@ -135,6 +135,10 @@ Legend: ☐ not tested · ✅ works · ❌ has a problem.
 | 106 | Prompt-injection defenses (untrusted content) | ☐ |
 | 107 | Workspace Trust gating + Manage Allowed Commands | ☐ |
 | 108 | SSRF protection + `parley.allowedFetchHosts` | ☐ |
+| | **— Added in v1.76–1.77 —** | |
+| 109 | Review a Pull Request (by number, via `gh`) | ☐ |
+| 110 | Generate / Update README (reviewable edit) | ☐ |
+| 111 | Batch approval — Apply all / Reject all (Ask mode) | ☐ |
 
 ---
 
@@ -469,3 +473,15 @@ Legend: ☐ not tested · ✅ works · ❌ has a problem.
 
 ### 108. SSRF + allowedFetchHosts
 - fetch_url refuses `169.254.169.254`/loopback/private even via redirect/rebinding; setting `allowedFetchHosts` restricts egress to listed hosts.
+
+## Added in v1.76–1.77
+
+### 109. Review a Pull Request
+- With `gh` authed, run **Parley: Review a Pull Request** → enter a PR number → it fetches the diff (`gh pr diff`) and streams a severity-grouped review + an approve/request-changes recommendation. Non-numeric input rejected; no `gh` → clean error.
+
+### 110. Generate / Update README
+- Run **Parley: Generate / Update README** → it drafts (or updates) `README.md` from the code and shows it as a **diff to review** (create/overwrite), applied via checkpoint on approval. "Already up to date" when unchanged.
+
+### 111. Batch approval — Apply all / Reject all
+- In **Ask before edits** mode, trigger a turn that edits several files. On the first approval card, click **Apply all** → the remaining edits this turn auto-apply (no more cards); **Reject all** rejects the rest.
+- Verify it's scoped to the turn (the next turn asks again) and everything stays checkpointed/revertible.
