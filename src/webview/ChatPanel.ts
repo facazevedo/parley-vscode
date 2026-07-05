@@ -159,6 +159,8 @@ interface ChatPanelMessage {
   readonly mode?: string;
   readonly value?: boolean;
   readonly id?: string;
+  /** For 'applyChange'/'dismissChange': also apply/reject the rest of this turn's edits. */
+  readonly all?: boolean;
   readonly text?: string;
   readonly url?: string;
   readonly query?: string;
@@ -981,7 +983,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         await this.postState();
         return;
       case 'applyChange': {
-        if (this.executor.approveApproval(message.id ?? '')) {
+        if (this.executor.approveApproval(message.id ?? '', message.all === true)) {
           return;
         }
         await this.executor.applyPendingChange(message.id ?? '');
@@ -991,7 +993,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         await this.applyCodeBlock(message.text ?? '');
         return;
       case 'dismissChange': {
-        if (this.executor.rejectApproval(message.id ?? '')) {
+        if (this.executor.rejectApproval(message.id ?? '', message.all === true)) {
           return;
         }
         this.executor.dismissPendingChange(message.id ?? '');

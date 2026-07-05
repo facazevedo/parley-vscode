@@ -929,9 +929,9 @@ import hljs from 'highlight.js/lib/common';
     const actions = document.createElement('div');
     actions.className = 'diffactions';
     const buttons = [];
-    const act = (type) => {
+    const act = (type, extra) => {
       buttons.forEach((b) => (b.disabled = true));
-      vscode.postMessage({ type, id });
+      vscode.postMessage({ type, id, ...(extra || {}) });
     };
     const applyBtn = document.createElement('button');
     applyBtn.className = 'applybtn';
@@ -939,6 +939,12 @@ import hljs from 'highlight.js/lib/common';
     applyBtn.addEventListener('click', () => act('applyChange'));
     buttons.push(applyBtn);
     if (approval) {
+      const applyAllBtn = document.createElement('button');
+      applyAllBtn.className = 'applybtn';
+      applyAllBtn.textContent = 'Apply all';
+      applyAllBtn.title = "Apply this and the rest of this turn's edits without asking again";
+      applyAllBtn.addEventListener('click', () => act('applyChange', { all: true }));
+      buttons.push(applyAllBtn);
       const reviewBtn = document.createElement('button');
       reviewBtn.className = 'dismissbtn';
       reviewBtn.textContent = 'Choose hunks…';
@@ -951,6 +957,14 @@ import hljs from 'highlight.js/lib/common';
     dismissBtn.textContent = approval ? 'Reject' : 'Dismiss';
     dismissBtn.addEventListener('click', () => act('dismissChange'));
     buttons.push(dismissBtn);
+    if (approval) {
+      const rejectAllBtn = document.createElement('button');
+      rejectAllBtn.className = 'dismissbtn';
+      rejectAllBtn.textContent = 'Reject all';
+      rejectAllBtn.title = "Reject this and the rest of this turn's edits without asking again";
+      rejectAllBtn.addEventListener('click', () => act('dismissChange', { all: true }));
+      buttons.push(rejectAllBtn);
+    }
     actions.append(...buttons);
     proposedCards[id] = { card, actions };
     return actions;

@@ -98,8 +98,21 @@ export class ToolExecutor {
   // subagent's distilled report, so they must not authorize a parent overwrite.
   private readonly subagentReadHashes = new Map<string, string>();
   private commandChannel?: vscode.OutputChannel;
+  // "Apply all / Reject all" from an ask-mode card: applies to the REST of the current turn.
+  // Scoped to the turn's abort signal so it can't leak into the next turn.
+  private batch?: { decision: 'approve' | 'reject'; signal: AbortSignal | undefined };
 
   public constructor(private readonly host: ToolExecutorHost) {}
+
+  /** The active batch decision for THIS turn, or undefined (auto-expires when the turn's
+   *  abort signal changes). */
+  private currentBatchDecision(): 'approve' | 'reject' | undefined {
+    if (this.batch && this.batch.signal === this.host.getAbortSignal()) {
+      return this.batch.decision;
+    }
+    this.batch = undefined;
+    return undefined;
+  }
 
   /** Ids of interactive cards (chat-mode Apply cards + ask-mode approvals) still pending. */
   public pendingIds(): string[] {
@@ -112,6 +125,7 @@ export class ToolExecutor {
     this.fileReadHashes.clear();
     this.subagentReadHashes.clear();
     this.pendingImages = [];
+    this.batch = undefined;
   }
 
   /** Drain tool-produced images (capture_screen) for injection into the turn. */
@@ -755,9 +769,21 @@ export class ToolExecutor {
       return `Applied edit to ${rel} (auto).${await this.newProblemsAfterEdit(uri, preDiagnostics)}`;
     }
 
+    // Ask mode: honor a prior "Apply all / Reject all (this turn)" decision without another card.
+    const batch = this.currentBatchDecision();
+    if (batch === 'approve') {
+      await this.host.checkpoints.applyWithCheckpoint(uri, proposedText, `edit ${rel}`);
+      this.recordFileState(uri.fsPath, proposedText);
+      this.postFileEdit(rel, original, proposedText);
+      return `Applied edit to ${rel} (batch-approved).${await this.newProblemsAfterEdit(uri, preDiagnostics)}`;
+    }
+    if (batch === 'reject') {
+      return `User rejected the edit to ${rel} (batch — rejected the rest of this turn).`;
+    }
+
     // Ask mode: open the native diff for full context and render an in-chat approval
-    // card (Apply / Choose hunks… / Reject). The tool call awaits the click — no
-    // blocking modal, so the rest of the chat (and steering) stays usable.
+    // card (Apply / Apply all / Choose hunks… / Reject / Reject all). The tool call awaits
+    // the click — no blocking modal, so the rest of the chat (and steering) stays usable.
     await showProposedDiff(
       { filePath: uri.fsPath, originalText: original, proposedText, title: `Agent edit: ${rel}` },
       this.host.diffProvider
@@ -828,22 +854,30 @@ export class ToolExecutor {
 
   // ---------- ask-mode approval clicks (routed from the webview via the panel) ----------
 
-  /** Apply click on an approval card. Returns false when the id isn't a pending approval. */
-  public approveApproval(id: string): boolean {
+  /** Apply click on an approval card. `all` also auto-applies the rest of this turn's edits.
+   *  Returns false when the id isn't a pending approval. */
+  public approveApproval(id: string, all = false): boolean {
     const approval = this.pendingApprovals.get(id);
     if (!approval) {
       return false;
+    }
+    if (all) {
+      this.batch = { decision: 'approve', signal: this.host.getAbortSignal() };
     }
     this.pendingApprovals.delete(id);
     approval.resolve(approval.proposedText);
     return true;
   }
 
-  /** Reject click on an approval card. Returns false when the id isn't a pending approval. */
-  public rejectApproval(id: string): boolean {
+  /** Reject click on an approval card. `all` also auto-rejects the rest of this turn's edits.
+   *  Returns false when the id isn't a pending approval. */
+  public rejectApproval(id: string, all = false): boolean {
     const approval = this.pendingApprovals.get(id);
     if (!approval) {
       return false;
+    }
+    if (all) {
+      this.batch = { decision: 'reject', signal: this.host.getAbortSignal() };
     }
     this.pendingApprovals.delete(id);
     approval.resolve(undefined);

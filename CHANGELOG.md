@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.77.0
+
+### Batch approval in Ask mode
+
+- Ask-mode edit-approval cards now have **Apply all** and **Reject all** buttons. Clicking one applies (or rejects) the current edit AND auto-applies/-rejects the rest of that turn's edits without another prompt — so a multi-file turn is one decision instead of one click per file.
+- The decision is scoped to the current turn (it auto-expires next turn), and edits still apply sequentially + checkpointed, so ordering/correctness is unchanged and everything stays revertible.
+
+
 ## 1.76.0
 
 ### Review a PR & Generate README
