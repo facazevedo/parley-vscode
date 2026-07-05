@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.71.0
+
+### Onboard & explain commits
+
+- **Parley: Onboard Me to This Repo** — a new-contributor briefing: what the project is, its architecture and main modules, the key files/entry points, how to build/test/run, and a Mermaid structure diagram (from the README, manifest, and tracked-file tree).
+- **Parley: Explain Commit / Compare Refs** — explain what a specific commit changes and why, or summarize the differences between two branches/refs (refs are validated to block shell injection).
+
+
 ## 1.70.0
 
 ### Docs
