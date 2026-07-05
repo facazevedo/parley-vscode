@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.74.0
+
+### Docs & test plan
+
+- **FEATURES.md** brought fully current (Screenshot to UI, Fix / Explain Test, Explain Commit / Compare Refs, Ask About Notebook Cell, Onboard Me to This Repo).
+- **README** notes Screenshot → UI in the screen-capture section.
+- Added **manual_tests.md** — a 36-row test checklist (with a Tested column) plus a per-feature block of the key things to verify. Kept out of the published VSIX.
+
+
 ## 1.73.0
 
 ### Test Explorer action & notebook cells

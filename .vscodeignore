@@ -5,6 +5,7 @@ src/**
 test/**
 media/chat.js
 API_DISCOVERY.md
+manual_tests.md
 .parley/**
 out/**
 dist/**/*.map

@@ -483,6 +483,8 @@ Attachments show as removable chips and are cleared after sending.
 
 Both use the browser's capture APIs feeding the normal attachment pipeline — no ffmpeg, no files on disk.
 
+**Screenshot → UI:** **`Parley: Screenshot to UI`** takes it further — pick an image of a UI and Parley reproduces it as a self-contained HTML artifact rendered live in the **design canvas** (vision + artifact detection).
+
 ---
 
 ## Computer use ⚠

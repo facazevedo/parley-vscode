@@ -177,6 +177,9 @@ Right-click **Parley** submenu and the **`Ctrl+.`** lightbulb (on a selection):
 - **Port / Translate Code** — translate the selection/file to another language into a new doc.
 - **Explain Stack Trace** — paste a trace (selection/clipboard/input); Parley opens the top
   workspace frame and explains the failure + fix.
+- **Ask About Notebook Cell** — explain or act on the selected Jupyter notebook cell(s).
+- **Onboard Me to This Repo** — a new-contributor briefing (architecture, key files, how to
+  build/test/run) + a Mermaid structure diagram.
 
 ## Testing & quality
 
@@ -186,6 +189,7 @@ Right-click **Parley** submenu and the **`Ctrl+.`** lightbulb (on a selection):
 - **`/verify`** — in-chat fix-until-green loop.
 - **Generate Tests for Uncovered Code** — runs coverage and writes tests for the current
   file's uncovered lines.
+- **Fix / Explain Test** — from the Test Explorer item menu: open the test, run/diagnose, fix.
 - **Review Current Branch** / **Review Staged Changes** — severity-grouped code review of
   branch or staged changes.
 - **Run Diagnostics** — probes the live gateway API and reports what works.
@@ -202,6 +206,7 @@ Right-click **Parley** submenu and the **`Ctrl+.`** lightbulb (on a selection):
   version bump) from the commits since the last tag.
 - **Split Into Logical Commits** — propose grouping the uncommitted diff into clean,
   self-contained commits with messages (advisory).
+- **Explain Commit / Compare Refs** — explain what a commit changes, or diff two branches/refs.
 - **Review Current Branch** bundles a review + PR description.
 - Context mentions **`@git`**, **`@blame`**, **`@issue`**, **`@pr`**.
 
@@ -228,6 +233,8 @@ Right-click **Parley** submenu and the **`Ctrl+.`** lightbulb (on a selection):
   **version history**, open-in-editor, and export.
 - **Its own design chat** — iterate the artifact with messages kept separate from the main
   chat; each reply becomes a new version. Auto-opens when a design is ready.
+- **Screenshot to UI** — pick a UI image and Parley reproduces it as a self-contained HTML
+  artifact rendered live in the canvas (uses vision + artifact detection).
 
 ## Web: search, browser, fetch
 
