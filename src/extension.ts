@@ -16,6 +16,8 @@ import { registerGenerateCommitMessageCommand } from './commands/generateCommitM
 import { registerReviewBranchCommand } from './commands/reviewBranch';
 import { registerGeneratePrDescriptionCommand } from './commands/generatePrDescription';
 import { registerCreatePrCommand } from './commands/createPr';
+import { registerReviewPrCommand } from './commands/reviewPr';
+import { registerGenerateReadmeCommand } from './commands/generateReadme';
 import { registerReleaseNotesCommand } from './commands/releaseNotes';
 import { registerExplainStackTraceCommand } from './commands/explainStackTrace';
 import { registerPortCodeCommand } from './commands/portCode';
@@ -341,6 +343,8 @@ export function activate(context: vscode.ExtensionContext): void {
   registerReviewBranchCommand(context, commandDeps);
   registerGeneratePrDescriptionCommand(context, commandDeps);
   registerCreatePrCommand(context, commandDeps);
+  registerReviewPrCommand(context, commandDeps);
+  registerGenerateReadmeCommand(context, commandDeps, checkpoints);
   registerReleaseNotesCommand(context, commandDeps);
   registerExplainStackTraceCommand(context, commandDeps);
   registerPortCodeCommand(context, commandDeps);

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.76.0
+
+### Review a PR & Generate README
+
+- **Parley: Review a Pull Request** — enter a PR number; Parley fetches the diff via `gh pr diff` and runs a full severity-grouped code review with an approve/request-changes recommendation (reviews *any* PR, not just your local branch).
+- **Parley: Generate / Update README** — writes or updates `README.md` from the code (tree + manifest + existing README) and applies it through the diff-review + checkpoint flow (a reviewable edit).
+
+
 ## 1.75.0
 
 ### Docs: exhaustive feature + test coverage
