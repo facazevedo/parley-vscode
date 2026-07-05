@@ -91,8 +91,11 @@ In an agent mode the model can call these tools (results are secret-scanned befo
 them; untrusted content is fenced with an injection-defense boundary):
 
 - **Read / explore** — `read_file` (with line ranges), `list_directory`, `find_files`
-  (glob), `search_text` (substring), `grep` (regex, ripgrep), plus language-server symbol
-  lookup.
+  (glob), `search_text` (substring), `grep` (regex, ripgrep).
+- **Code navigation (language server)** — `document_symbols`, `find_symbol`,
+  `find_definition`, `find_references`.
+- **Subagents** — `run_subagent` / `run_subagents` fan out scoped, read-only investigations
+  in parallel and return just their reports.
 - **Edit** — `write_file`, `edit_file` (precise snippet replace), `multi_edit` (several
   atomic edits to one file). Every edit is diff-reviewed and checkpointed.
 - **Execute** — `run_command` (approved per command, with a per-workspace allowlist),
@@ -267,7 +270,9 @@ Right-click **Parley** submenu and the **`Ctrl+.`** lightbulb (on a selection):
   `AGENTS.md`.
 - **Skills** — reusable capabilities the agent loads on demand (`load_skill`); **Create Skill**.
 - **Custom slash commands** — drop `name.md` in `.parley/commands/` (or `.claude/commands/`,
-  or the global variants) → `/name`, with `$ARGS` and `$SELECTION` substitution.
+  or the global variants) → `/name`, with `$ARGS` and `$SELECTION` substitution. Built-in
+  slash commands: `/clear` (`/new`), `/compact`, `/cost`, `/model`, `/compare`, `/verify`,
+  `/computer`, `/init`, `/json` (force a JSON reply), `/help`.
 - **Output styles** — Default / Concise / Explanatory / Learning + custom (**Select Output
   Style**).
 - **Hooks** — `parley.hooks` runs your shell commands at lifecycle points (PreToolUse /
@@ -284,6 +289,15 @@ Right-click **Parley** submenu and the **`Ctrl+.`** lightbulb (on a selection):
 
 - **Triage TODOs** — scan the workspace for TODO/FIXME/HACK/XXX markers, pick one, tackle it.
 - **Audit Dependencies** — run npm/pnpm/yarn audit and get a plain-English remediation plan.
+
+## Terminal & misc
+
+- **Suggest Terminal Command** — describe a task → a shell command inserted into the terminal
+  (never auto-run).
+- **Fix Last Terminal Command** — when a command fails, a transient hint (and this command)
+  sends the command + output to chat for a fix.
+- **Report an Issue** — open a prefilled GitHub issue. **Open Debug Log** — the verbose log
+  (only created when you opt in). **Close Browser** — shut down the headless Chromium.
 
 ## Safety & privacy
 

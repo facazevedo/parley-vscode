@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.75.0
+
+### Docs: exhaustive feature + test coverage
+
+- **MANUAL_TESTS.md** expanded from this-session-only to the **entire extension** — 108 grouped, indexed features with a Tested column and a per-feature block of what to verify.
+- **FEATURES.md** completed: subagents, language-server code navigation, terminal helpers, built-in slash commands (/json, /help, …), Report an Issue, Open Debug Log, Close Browser.
+
+
 ## 1.74.0
 
 ### Docs & test plan
