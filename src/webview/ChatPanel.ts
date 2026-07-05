@@ -768,6 +768,24 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     await this.runTurn(prompt, { ...DEFAULT_CONTEXT_OPTIONS, ...options });
   }
 
+  /**
+   * Screenshot → UI: attach the image and prefill a "build this UI" prompt, then focus the
+   * chat. The user reviews and sends; the normal pipeline handles vision + artifact detection,
+   * and the design canvas auto-opens with the rendered result.
+   */
+  public async startImageToUi(dataUri: string, name: string): Promise<void> {
+    await vscode.commands.executeCommand('workbench.view.extension.parley');
+    await vscode.commands.executeCommand('parley.chatView.focus');
+    await this.ready;
+    await this.addPastedFile(dataUri, name);
+    await this.postToComposer({
+      type: 'insertText',
+      text:
+        'Build this UI as a single self-contained HTML file (inline CSS, no external assets) that matches the ' +
+        "screenshot's layout, spacing, colors, and text as closely as you can. Return it in one ```html code block."
+    });
+  }
+
   private async handleMessage(message: ChatPanelMessage): Promise<void> {
     ChatPanel.activeInstance = this; // any interaction makes this chat the command target
     switch (message.type) {

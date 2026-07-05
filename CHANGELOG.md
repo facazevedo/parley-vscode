@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.72.0
+
+### Screenshot to UI
+
+- New command **Parley: Screenshot to UI** — pick an image of a UI and Parley attaches it, prefills a "build this as self-contained HTML" prompt, and (on send) reproduces the layout/colors/text as an artifact that renders live in the design canvas. Reuses the existing vision + artifact-detection + design-canvas pipeline.
+
+
 ## 1.71.0
 
 ### Onboard & explain commits

@@ -265,6 +265,29 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('parley.openPastConversation', () => currentChat().openPastConversation()),
     vscode.commands.registerCommand('parley.revertLastEdit', () => currentChat().revertLastEdit()),
     vscode.commands.registerCommand('parley.revertAll', () => currentChat().revertAllEdits()),
+    vscode.commands.registerCommand('parley.screenshotToUi', async () => {
+      const picked = await vscode.window.showOpenDialog({
+        title: 'Parley: Screenshot to UI',
+        canSelectMany: false,
+        openLabel: 'Build UI from image',
+        filters: { Images: ['png', 'jpg', 'jpeg', 'webp', 'gif'] }
+      });
+      const uri = picked?.[0];
+      if (!uri) {
+        return;
+      }
+      try {
+        const bytes = await vscode.workspace.fs.readFile(uri);
+        const ext = (uri.path.split('.').pop() ?? 'png').toLowerCase();
+        const mime = ext === 'jpg' ? 'jpeg' : ext;
+        const dataUri = `data:image/${mime};base64,${Buffer.from(bytes).toString('base64')}`;
+        await currentChat().startImageToUi(dataUri, uri.path.split('/').pop() ?? 'screenshot.png');
+      } catch (error) {
+        await vscode.window.showErrorMessage(
+          `Parley: could not read the image (${error instanceof Error ? error.message : 'unknown'}).`
+        );
+      }
+    }),
     vscode.commands.registerCommand('parley.setTokenLimit', async () => {
       const current = getSettings().tokenLimit;
       const input = await vscode.window.showInputBox({
