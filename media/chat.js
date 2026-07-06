@@ -419,6 +419,7 @@ import hljs from 'highlight.js/lib/common';
   const editingEl = $('editing');
   let busy = false;
   let editingOrdinal = null;
+  let lastSteering = []; // steering queue mirror, so pending bubbles survive re-renders
   function renderQueued(steering, followUps) {
     queuedEl.replaceChildren();
     const addChip = (text, i, kind) => {
@@ -439,6 +440,28 @@ import hljs from 'highlight.js/lib/common';
     };
     (steering || []).forEach((t, i) => addChip(t, i, 'steer'));
     (followUps || []).forEach((t, i) => addChip(t, i, 'followUp'));
+  }
+  // Steer messages appear in the conversation immediately (like Claude), tagged as
+  // pending, until the agent picks them up at its next step. Derived entirely from
+  // the server's steering queue (lastSteering) so re-renders and cancels stay in sync;
+  // when the queue drains, 'steerInjected' + an empty 'queued' turn them into real
+  // user bubbles. Follow-ups (their own later turn) keep just the chip.
+  function renderPendingSteers() {
+    history.querySelectorAll('.message.user.pendingsteer').forEach((n) => n.remove());
+    (lastSteering || []).forEach((text) => {
+      const node = document.createElement('div');
+      node.className = 'message user pendingsteer';
+      const tag = document.createElement('div');
+      tag.className = 'steertag';
+      tag.textContent = '⏩ Steering — sends at the agent’s next step';
+      const c = document.createElement('div');
+      c.className = 'content';
+      c.innerHTML = renderMd(text);
+      enhanceContent(c);
+      node.append(tag, c);
+      history.append(node);
+    });
+    maybeScroll();
   }
   function setEditing(ordinal) {
     editingOrdinal = ordinal;
@@ -1255,6 +1278,7 @@ import hljs from 'highlight.js/lib/common';
     if (lastAssistantNode && !busy) {
       addRegenerateButton(lastAssistantNode);
     }
+    renderPendingSteers(); // keep pending steer bubbles across full re-renders
     maybeScroll();
   }
 
@@ -3405,6 +3429,8 @@ import hljs from 'highlight.js/lib/common';
     }
     if (msg.type === 'queued') {
       renderQueued(msg.steering || [], msg.followUps || []);
+      lastSteering = msg.steering || [];
+      renderPendingSteers();
       return;
     }
     if (msg.type === 'steerInjected') {

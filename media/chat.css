@@ -316,6 +316,20 @@ button:disabled {
   border-radius: 14px 14px 4px 14px;
   padding: 8px 12px;
 }
+/* A steer message shown in-conversation before the agent has picked it up: same
+   bubble, dashed + dimmed, with a small "steering" tag. Becomes a normal user
+   bubble once injected (the tag/dashed style drops away). */
+.message.user.pendingsteer {
+  opacity: 0.75;
+  border-style: dashed;
+  border-color: var(--vscode-focusBorder, var(--vscode-input-border));
+}
+.message.user.pendingsteer .steertag {
+  margin-bottom: 4px;
+  font-size: 0.72em;
+  letter-spacing: 0.02em;
+  color: var(--vscode-descriptionForeground);
+}
 .msgcopy {
   position: absolute;
   top: var(--chat-action-offset-y);

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.81.0
+
+### Steer messages show in the conversation immediately
+
+- When you steer while the agent is working, your message now appears **in the conversation right away** (Claude-style), tagged "⏩ Steering — sends at the agent's next step", instead of only as a chip above the composer. It turns into a normal user bubble once the agent picks it up.
+- The cancel chip stays, so you can still remove a steer message before it's injected. Pending steer bubbles are derived from the live steering queue, so they survive re-renders and disappear cleanly on cancel or injection. (Model/history ordering is unchanged — the message still enters the model's context exactly when the agent reaches its next step.)
+
+
 ## 1.80.0
 
 ### Clean command output (no more `ESC[A` / `BS` noise)
