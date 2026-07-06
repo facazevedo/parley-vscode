@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.80.0
+
+### Clean command output (no more `ESC[A` / `BS` noise)
+
+- `run_command` / `run_tests` output is now sanitized before it hits the **Parley Agent** output channel *and* the model: ANSI escapes (incl. cursor moves like `ESC[A`) are stripped, carriage-return progress-bar redraws collapse to their final frame, and backspaces (spinners like `-\b\`) are applied. Conda/apptainer/npm spinner noise that the Output panel used to render as red `ESC`/`BS` boxes now reads as clean log lines — and stops wasting tokens in the model's context.
+
+
 ## 1.79.0
 
 ### GEMINI.md support (Gemini CLI migration)

@@ -20,6 +20,7 @@ import { runSubagentTask } from '../agents/subagent';
 import { clampMiddle } from '../parley/clampText';
 import { isCommandAllowed, isSimpleCommand } from '../parley/commandSafety';
 import { redactSecrets, summarizeFindings } from '../context/secretScanner';
+import { sanitizeCommandOutput } from '../context/terminalText';
 import { isMcpTool } from '../mcp/naming';
 import type { ParleyProvider } from '../parley/ParleyProvider';
 import { estimateCostUsd } from '../parley/pricing';
@@ -1097,13 +1098,16 @@ export class ToolExecutor {
     if (!(await this.confirmRunCommand(command))) {
       return 'User declined to run the command.';
     }
-    const output = await runShellCommand(
+    const rawOutput = await runShellCommand(
       command,
       folder?.uri.fsPath,
       this.host.getSettings().commandTimeoutSeconds * 1000,
       this.host.getAbortSignal()
     );
-    // Mirror the command + its full output to a visible channel (Claude-Code/Cursor-style),
+    // Strip terminal control noise (spinners/progress bars: ESC[…, \r redraws, \b)
+    // so both the visible channel and the model context read cleanly.
+    const output = sanitizeCommandOutput(rawOutput);
+    // Mirror the command + its output to a visible channel (Claude-Code/Cursor-style),
     // while still returning the captured output to the model.
     const channel = this.agentChannel();
     channel.appendLine(`$ ${command}`);
@@ -1180,19 +1184,20 @@ export class ToolExecutor {
       this.host.getSettings().commandTimeoutSeconds * 1000,
       this.host.getAbortSignal()
     );
+    const output = sanitizeCommandOutput(run.output);
     const channel = this.agentChannel();
     channel.appendLine(`$ ${command}`);
-    channel.appendLine(run.output || '(no output)');
+    channel.appendLine(output || '(no output)');
     channel.appendLine('');
     channel.show(true);
     if (run.aborted) {
       return 'Tests were stopped by the user.';
     }
     if (run.timedOut) {
-      return `Tests exceeded the timeout and were terminated. Partial output:\n${run.output.slice(-8000)}`;
+      return `Tests exceeded the timeout and were terminated. Partial output:\n${output.slice(-8000)}`;
     }
     const status = run.exitCode === 0 ? 'PASSED ✅' : `FAILED ❌ (exit code ${run.exitCode})`;
-    const tail = run.output.length > 12000 ? `…(truncated)…\n${run.output.slice(-12000)}` : run.output;
+    const tail = output.length > 12000 ? `…(truncated)…\n${output.slice(-12000)}` : output;
     return `Test command: ${command}\nResult: ${status}\n\nOutput:\n${tail || '(no output)'}`;
   }
 
