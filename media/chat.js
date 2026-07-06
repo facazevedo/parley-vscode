@@ -139,9 +139,25 @@ import hljs from 'highlight.js/lib/common';
     includeSelection: $('includeSelection'),
     includeCurrentFile: $('includeCurrentFile'),
     includeOpenEditors: $('includeOpenEditors'),
-    includeDiagnostics: $('includeDiagnostics'),
-    includeUserSelectedFiles: $('includeUserSelectedFiles')
+    includeDiagnostics: $('includeDiagnostics')
   };
+  // Friendly names for the collapsed-state Context summary ("Context — Selection, …").
+  const CTX_LABELS = {
+    includeSelection: 'Selection',
+    includeCurrentFile: 'File',
+    includeOpenEditors: 'Open editors',
+    includeDiagnostics: 'Diagnostics'
+  };
+  const ctxSummaryEl = $('ctxSummary');
+  function renderCtxSummary() {
+    if (!ctxSummaryEl) {
+      return;
+    }
+    const on = Object.keys(CTX_LABELS)
+      .filter((k) => boxes[k] && boxes[k].checked)
+      .map((k) => CTX_LABELS[k]);
+    ctxSummaryEl.textContent = ' — ' + (on.length ? on.join(', ') : 'none');
+  }
   let streamNode = null;
   let streamContent = null;
   let currentSeg = null;
@@ -3070,8 +3086,10 @@ import hljs from 'highlight.js/lib/common';
         contextOptions: Object.fromEntries(Object.entries(boxes).map(([k, i]) => [k, i.checked]))
       });
       renderSelInfo(); // the pill mirrors the "Selection" checkbox
+      renderCtxSummary();
     })
   );
+  renderCtxSummary();
 
   // Open links from rendered Markdown externally.
   history.addEventListener('click', (e) => {
@@ -3638,6 +3656,7 @@ import hljs from 'highlight.js/lib/common';
         boxes[k].checked = v;
       }
     });
+    renderCtxSummary();
     if (msg.selectionInfo !== undefined) {
       selInfo = msg.selectionInfo;
     }

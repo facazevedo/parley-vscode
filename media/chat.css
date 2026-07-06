@@ -1272,44 +1272,53 @@ button:disabled {
 .ctx-wrap[open] > summary::before {
   content: '▾';
 }
+/* Collapsed-state summary of which context toggles are on ("Context — Selection, …"). */
+.ctx-summary {
+  color: var(--vscode-descriptionForeground);
+  opacity: 0.8;
+}
+.ctx-wrap[open] > summary .ctx-summary {
+  display: none; /* the chips themselves are visible when expanded */
+}
 .ctx {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 12px;
+  gap: 6px;
   padding: 6px 2px 2px;
 }
+/* Context toggles as pill chips: the whole chip is the switch, filled when active. */
 .ctx label {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 5px;
+  padding: 3px 10px;
+  border: 1px solid var(--vscode-input-border, rgba(127, 127, 127, 0.4));
+  border-radius: 999px;
   color: var(--vscode-descriptionForeground);
-}
-/* Custom checkbox: black background, white checkmark when ticked. */
-.ctx input[type='checkbox'] {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 14px;
-  height: 14px;
-  margin: 0;
-  border: 1px solid var(--vscode-checkbox-border, rgba(127, 127, 127, 0.6));
-  border-radius: 3px;
-  background: #000;
   cursor: pointer;
-  position: relative;
-  flex: none;
+  user-select: none;
+  transition:
+    background 0.1s,
+    border-color 0.1s,
+    color 0.1s;
 }
-.ctx input[type='checkbox']:checked::after {
-  content: '';
+.ctx label:hover {
+  background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.12));
+}
+.ctx label:has(input:checked) {
+  background: var(--vscode-inputOption-activeBackground, rgba(55, 148, 255, 0.25));
+  border-color: var(--vscode-inputOption-activeBorder, var(--vscode-focusBorder));
+  color: var(--vscode-inputOption-activeForeground, var(--vscode-foreground));
+}
+/* The checkbox drives state but the chip is the visible control. */
+.ctx label input[type='checkbox'] {
   position: absolute;
-  left: 4px;
-  top: 1px;
-  width: 3px;
-  height: 7px;
-  border: solid #fff;
-  border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
 }
-.ctx input[type='checkbox']:focus-visible {
+.ctx label:has(input:focus-visible) {
   outline: 1px solid var(--vscode-focusBorder);
   outline-offset: 1px;
 }

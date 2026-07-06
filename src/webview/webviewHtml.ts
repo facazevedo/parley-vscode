@@ -71,13 +71,12 @@ export function buildChatHtml(webview: vscode.Webview, extensionUri: vscode.Uri)
     <div id="status" class="status" style="display:none"><span class="feather" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><path d="M16 8 2 22"/><path d="M17.5 15H9"/></svg></span><span id="statusText"></span></div>
     <form id="composer" class="composer">
       <details class="ctx-wrap">
-        <summary>Context</summary>
+        <summary>Context<span id="ctxSummary" class="ctx-summary"></span></summary>
         <div class="ctx">
           <label><input id="includeSelection" type="checkbox" checked> Selection</label>
           <label><input id="includeCurrentFile" type="checkbox"> File</label>
           <label><input id="includeOpenEditors" type="checkbox"> Open editors</label>
           <label><input id="includeDiagnostics" type="checkbox"> Diagnostics</label>
-          <label><input id="includeUserSelectedFiles" type="checkbox"> Pick files</label>
         </div>
       </details>
       <div id="editing" class="editing" style="display:none"></div>

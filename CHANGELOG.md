@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.84.0
+
+### Context row cleanup — chips, and "Pick files" removed
+
+- The **Context** toggles are now **pill chips** that fill in when active (Selection · File · Open editors · Diagnostics) instead of a row of checkboxes — same one-click behavior, clearer state.
+- **Collapsed-state summary**: when the Context section is folded, the summary shows what's on (e.g., *"Context — Selection, Diagnostics"*) so you can see it at a glance.
+- **Removed "Pick files."** It wasn't a persistent toggle like the others — while checked it re-opened an OS file dialog on *every* message. Picking specific files to include is already covered by the **＋ Add → Attach files or images** action and `@file` mentions.
+
+
 ## 1.83.0
 
 ### Header & title-bar cleanup — overflow menus instead of icon strips
