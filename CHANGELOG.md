@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.86.0
+
+### Webview interaction tests (jsdom)
+
+- Added a **jsdom harness** that loads the real bundled webview (`dist/webview.js`) into the actual `buildChatHtml()` DOM with `acquireVsCodeApi` stubbed, and drives real interactions. First end-to-end coverage of the webview's DOM glue: composer send, the **＋ Add** menu open/close, context-chip toggle → summary + `contextOptionsChanged`, queued-steering → pending bubble + chip, the snippet insert round-trip, the app-bar overflow menu, and the diff-review keyboard shortcuts (Ctrl/Cmd+Enter apply / +Shift all / Ctrl/Cmd+Backspace reject; plain Enter still sends). 10 new tests (`test/webviewHarness.test.ts`); dev-only deps `jsdom` + `@types/jsdom`.
+
+
 ## 1.85.0
 
 ### Memory viewer, prompt snippets, diff-review shortcuts, and cleanup

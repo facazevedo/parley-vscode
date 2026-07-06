@@ -954,6 +954,12 @@ in the package; each is installed on demand into global storage the first time y
 that feature. Press **F5** for an Extension Development Host (run `npm run watch`
 alongside to keep `dist/` fresh).
 
+Tests are `node --test` over `out/test/*.test.js`: pure-logic unit tests plus a
+**jsdom webview harness** (`test/webviewHarness.test.ts`) that loads the real bundled
+`dist/webview.js` into the actual `buildChatHtml()` DOM and drives interactions
+(menus, chips, steer bubbles, snippet flow, diff-review shortcuts) with
+`acquireVsCodeApi` stubbed.
+
 CI (GitHub Actions) typechecks, unit‑tests, bundles/packages, and runs VS Code
 integration tests on every push to `main` (Node 22); a `vX.Y.Z` tag publishes a GitHub
 Release with the `.vsix` (and, if the `VSCE_PAT` / `OVSX_PAT` secrets are set, to the
