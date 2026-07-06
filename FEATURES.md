@@ -278,6 +278,10 @@ Right-click **Parley** submenu and the **`Ctrl+.`** lightbulb (on a selection):
 - **`CLAUDE.md` / `GEMINI.md` (Claude Code / Gemini CLI semantics)** — always-on memory: global
   (`~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md`) + project hierarchy (root → home) + subtree files, with recursive
   `@path` imports (≤5 hops, cycle-safe). Claude Code and Gemini CLI repos work as-is.
+- **View injected memory** — `/memory` (or **Show Memory & Rules**) opens exactly what's injected as rules +
+  memory, labeled by source and in injection order (precedence: more specific wins).
+- **Prompt snippets** — save the composer's text as a named snippet and reinsert it later from the **＋** menu;
+  stored globally; **Manage Prompt Snippets** to delete.
 - **Skills** — reusable capabilities the agent loads on demand (`load_skill`); **Create Skill**.
 - **Custom slash commands** — drop `name.md` in `.parley/commands/` (or `.claude/commands/`,
   or the global variants) → `/name`, with `$ARGS` and `$SELECTION` substitution. Built-in

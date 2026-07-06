@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.85.0
+
+### Memory viewer, prompt snippets, diff-review shortcuts, and cleanup
+
+- **`/memory` (and `Parley: Show Memory & Rules`)** — opens a read-only view of *exactly* what Parley injects as project rules + memory, **labeled by source and in injection order** (more general first; more specific wins on conflict). Covers `.parleyrules`/`AGENTS.md`/`.cursorrules`, `.parley/rules` (with their globs), `CLAUDE.md`/`GEMINI.md` (with `@imports` inlined), and `.parley/memory.md` — so you can finally see and debug what the agent is actually being told.
+- **Prompt snippets** — save the composer's text as a reusable, named snippet and insert it later, both from the **＋ Add** menu (*Insert snippet…* / *Save prompt as snippet…*). Stored globally (shared across workspaces); manage/delete via **`Parley: Manage Prompt Snippets`**.
+- **Diff-review keyboard shortcuts** — when an edit-approval card is open: **Ctrl/Cmd+Enter** applies (**+Shift** applies all), **Ctrl/Cmd+Backspace** rejects (**+Shift** rejects all). The card shows the hint.
+- **Cleanup:** removed the dead `includeUserSelectedFiles` context path (the "Pick files" toggle removed in 1.84) and the now-unused composer button handlers. Extracted the webview's pure logic into `src/webview/composerLogic.ts` with unit tests (context summary + review-key mapping) — the previously-untested webview surface now has coverage.
+
+
 ## 1.84.0
 
 ### Context row cleanup — chips, and "Pick files" removed

@@ -10,10 +10,7 @@ import {
 } from '../src/context/agentMemory';
 
 test('extractImports finds imports, dedupes, preserves order', () => {
-  assert.deepEqual(extractImports('See @docs/a.md and @docs/b.md, and @docs/a.md again.'), [
-    'docs/a.md',
-    'docs/b.md'
-  ]);
+  assert.deepEqual(extractImports('See @docs/a.md and @docs/b.md, and @docs/a.md again.'), ['docs/a.md', 'docs/b.md']);
 });
 
 test('extractImports skips fenced code blocks and inline code spans', () => {
@@ -71,7 +68,11 @@ test('collectAgentMemory orders global -> hierarchy -> subtree', async () => {
     order.every((i) => i >= 0),
     `all sections present: ${JSON.stringify(order)}`
   );
-  assert.deepEqual(order, [...order].sort((a, b) => a - b), 'sections in general->specific order');
+  assert.deepEqual(
+    order,
+    [...order].sort((a, b) => a - b),
+    'sections in general->specific order'
+  );
 });
 
 test('collectAgentMemory inlines @imports relative to the importing file', async () => {

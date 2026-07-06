@@ -377,6 +377,10 @@ export function activate(context: vscode.ExtensionContext): void {
   registerReportIssueCommand(context, commandDeps);
   registerRunDiagnosticsCommand(context, commandDeps);
   registerInitProjectRulesCommand(context, () => currentChat().startInit());
+  context.subscriptions.push(vscode.commands.registerCommand('parley.showMemory', () => currentChat().showMemory()));
+  context.subscriptions.push(
+    vscode.commands.registerCommand('parley.manageSnippets', () => currentChat().manageSnippets())
+  );
   registerSignOutCommand(context, commandDeps);
 
   // Scaffold a new Agent Skill: .parley/skills/<name>/SKILL.md with a template.

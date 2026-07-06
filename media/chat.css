@@ -1113,10 +1113,18 @@ button:disabled {
 }
 .diffactions {
   display: flex;
+  align-items: center;
   gap: 8px;
   padding: 7px 10px;
   background: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.12));
   border-top: 1px solid var(--vscode-editorWidget-border, rgba(127, 127, 127, 0.3));
+}
+/* Keyboard hint on agent edit-approval cards. */
+.diffkbd {
+  margin-left: auto;
+  font-size: 0.8em;
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
 }
 .applybtn {
   background: var(--vscode-button-background);

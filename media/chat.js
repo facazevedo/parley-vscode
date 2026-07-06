@@ -2,6 +2,7 @@
 // in markdown-it + highlight.js), loaded by the webview with a nonce.
 import MarkdownIt from 'markdown-it';
 import hljs from 'highlight.js/lib/common';
+import { contextSummary, mapReviewKey } from '../src/webview/composerLogic';
 
 (function () {
   const vscode = acquireVsCodeApi();
@@ -141,22 +142,18 @@ import hljs from 'highlight.js/lib/common';
     includeOpenEditors: $('includeOpenEditors'),
     includeDiagnostics: $('includeDiagnostics')
   };
-  // Friendly names for the collapsed-state Context summary ("Context — Selection, …").
-  const CTX_LABELS = {
-    includeSelection: 'Selection',
-    includeCurrentFile: 'File',
-    includeOpenEditors: 'Open editors',
-    includeDiagnostics: 'Diagnostics'
-  };
   const ctxSummaryEl = $('ctxSummary');
   function renderCtxSummary() {
     if (!ctxSummaryEl) {
       return;
     }
-    const on = Object.keys(CTX_LABELS)
-      .filter((k) => boxes[k] && boxes[k].checked)
-      .map((k) => CTX_LABELS[k]);
-    ctxSummaryEl.textContent = ' — ' + (on.length ? on.join(', ') : 'none');
+    // contextSummary() is the pure, unit-tested version in src/webview/composerLogic.
+    ctxSummaryEl.textContent = contextSummary({
+      includeSelection: boxes.includeSelection && boxes.includeSelection.checked,
+      includeCurrentFile: boxes.includeCurrentFile && boxes.includeCurrentFile.checked,
+      includeOpenEditors: boxes.includeOpenEditors && boxes.includeOpenEditors.checked,
+      includeDiagnostics: boxes.includeDiagnostics && boxes.includeDiagnostics.checked
+    });
   }
   let streamNode = null;
   let streamContent = null;
@@ -1004,6 +1001,13 @@ import hljs from 'highlight.js/lib/common';
       buttons.push(rejectAllBtn);
     }
     actions.append(...buttons);
+    if (approval) {
+      const hint = document.createElement('span');
+      hint.className = 'diffkbd';
+      hint.textContent = '⌃/⌘+↵ apply · +⇧ all · ⌃/⌘+⌫ reject';
+      hint.title = 'Keyboard: Ctrl/Cmd+Enter apply, +Shift apply all; Ctrl/Cmd+Backspace reject, +Shift reject all';
+      actions.append(hint);
+    }
     proposedCards[id] = { card, actions };
     return actions;
   }
@@ -1019,6 +1023,30 @@ import hljs from 'highlight.js/lib/common';
     entry.card.classList.add('resolved');
     delete proposedCards[id];
   }
+  // Keyboard review for a pending edit-approval card (agent-approval ids start "apr").
+  // Only active while one is open, so it never steals keys during normal composing:
+  //   Ctrl/Cmd+Enter apply · +Shift apply all · Ctrl/Cmd+Backspace reject · +Shift reject all.
+  function resolvePendingByKey(applying, all) {
+    const id = Object.keys(proposedCards).find((k) => /^apr/.test(k));
+    if (!id) {
+      return false;
+    }
+    const entry = proposedCards[id];
+    if (entry) {
+      entry.actions.querySelectorAll('button').forEach((b) => (b.disabled = true));
+    }
+    vscode.postMessage({ type: applying ? 'applyChange' : 'dismissChange', id, ...(all ? { all: true } : {}) });
+    return true;
+  }
+  document.addEventListener('keydown', (e) => {
+    if (menuIsOpen()) {
+      return;
+    }
+    const action = mapReviewKey(e); // pure, unit-tested key mapping
+    if (action && resolvePendingByKey(action.applying, action.all)) {
+      e.preventDefault();
+    }
+  });
 
   // ---------- full-transcript render (postState / past conversations) ----------
   // Renders everything that was shown — messages, tool activity, diffs, plans, notes —
@@ -2124,6 +2152,34 @@ import hljs from 'highlight.js/lib/common';
             hideSlash();
             break;
           }
+          case 'snippet-insert':
+            vscode.postMessage({ type: 'openSnippets' }); // host replies with { type:'snippetList' }
+            break;
+          case 'snippet-save': {
+            const body = prompt.value.trim();
+            if (!body) {
+              openMenu({
+                kind: 'snippet',
+                title: 'Save prompt as snippet',
+                note: 'Type a prompt first, then save it.'
+              });
+              break;
+            }
+            openMenu({
+              kind: 'snippet',
+              title: 'Save prompt as snippet',
+              input: {
+                placeholder: 'Snippet name…',
+                onSubmit: (name) => {
+                  const n = (name || '').trim();
+                  if (n) {
+                    vscode.postMessage({ type: 'saveSnippet', name: n, text: body });
+                  }
+                }
+              }
+            });
+            break;
+          }
         }
       });
     });
@@ -2378,8 +2434,6 @@ import hljs from 'highlight.js/lib/common';
   // getDisplayMedia lets the user pick any window/screen; a single frame becomes an
   // image attachment, a recording becomes sampled frames (vision) + a WAV narration
   // (both through the existing pasteFile attachment path — no new host plumbing).
-  const shotBtn = $('shot');
-  const recBtn = $('rec');
   const REC_MAX_MS = 60000;
   const REC_FRAME_EVERY_MS = 4000;
   const REC_MAX_FRAMES = 12;
@@ -2562,45 +2616,10 @@ import hljs from 'highlight.js/lib/common';
     recFrames = [];
     recMicChunks = [];
   }
-  if (shotBtn) {
-    // Plain click → host-side monitor flow (auto on one screen, click-a-screen on many).
-    // Shift+click → OS picker (getDisplayMedia) for capturing a single application window.
-    shotBtn.addEventListener('click', (e) => {
-      if (e.shiftKey) {
-        void takeScreenshot();
-      } else {
-        vscode.postMessage({ type: 'screenshotAttach' });
-      }
-    });
-  }
-  // Computer control: if the composer already has a task, run it now; otherwise
-  // prefill "/computer " and focus so the user types the task and presses Enter.
-  const computerBtn = $('computer');
-  if (computerBtn) {
-    computerBtn.addEventListener('click', () => {
-      const text = prompt.value.trim();
-      if (text && !text.startsWith('/')) {
-        prompt.value = '/computer ' + text;
-        sendPrompt();
-        return;
-      }
-      if (!prompt.value.trim()) {
-        prompt.value = '/computer ';
-      }
-      prompt.focus();
-      prompt.setSelectionRange(prompt.value.length, prompt.value.length);
-      hideSlash();
-    });
-  }
-  if (recBtn) {
-    recBtn.addEventListener('click', () => {
-      if (recState === 'idle') {
-        void startScreenRecording();
-      } else {
-        stopScreenRecording();
-      }
-    });
-  }
+  // Screenshot / screen-recording / computer-control actions are triggered from the
+  // "+ Add" menu (see the addMenu wiring above). takeScreenshot() stays as the OS-picker
+  // fallback used on the 'screenshotFallback' message; startScreenRecording() is called
+  // by the menu's rec item.
 
   if (voiceModeBtn) {
     voiceModeBtn.addEventListener('click', () => {
@@ -3546,6 +3565,27 @@ import hljs from 'highlight.js/lib/common';
       renderQueued(msg.steering || [], msg.followUps || []);
       lastSteering = msg.steering || [];
       renderPendingSteers();
+      return;
+    }
+    if (msg.type === 'snippetList') {
+      const items = msg.items || [];
+      if (!items.length) {
+        openMenu({
+          kind: 'snippet',
+          title: 'Insert snippet',
+          note: 'No snippets yet — save one from the ＋ menu → "Save prompt as snippet".'
+        });
+        return;
+      }
+      openMenu({
+        kind: 'snippet',
+        title: 'Insert snippet',
+        items: items.map((s) => ({
+          label: s.name,
+          detail: (s.text || '').replace(/\s+/g, ' ').slice(0, 80),
+          onPick: () => insertAtPrompt(s.text || '')
+        }))
+      });
       return;
     }
     if (msg.type === 'steerInjected') {

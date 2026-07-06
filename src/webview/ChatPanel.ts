@@ -120,6 +120,8 @@ interface ChatPanelMessage {
     | 'speedChanged'
     | 'attachFiles'
     | 'openSettings'
+    | 'saveSnippet'
+    | 'openSnippets'
     | 'pasteFile'
     | 'screenshotAttach'
     | 'cancelScreenshotPick'
@@ -276,8 +278,7 @@ const DEFAULT_CONTEXT_OPTIONS: Required<ContextOptions> = {
   includeSelection: true,
   includeCurrentFile: false,
   includeOpenEditors: false,
-  includeDiagnostics: false,
-  includeUserSelectedFiles: false
+  includeDiagnostics: false
 };
 
 interface PendingAttachment {
@@ -909,6 +910,15 @@ export class ChatPanel implements vscode.WebviewViewProvider {
           '@ext:mit-parley-community.parley-vscode'
         );
         return;
+      case 'saveSnippet':
+        if (message.name && message.text) {
+          await this.saveSnippet(message.name, message.text);
+          void vscode.window.showInformationMessage(`Parley: saved prompt snippet "${message.name}".`);
+        }
+        return;
+      case 'openSnippets':
+        this.post({ type: 'snippetList', items: await this.getSnippets() });
+        return;
       case 'pasteFile':
         await this.addPastedFile(message.dataUri, message.name);
         return;
@@ -1233,6 +1243,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
       case 'init':
         await this.startInit();
         return true;
+      case 'memory':
+        await this.showMemory();
+        return true;
       case 'json':
         this.jsonNext = true;
         this.history.push({
@@ -1246,7 +1259,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         this.history.push({
           role: 'assistant',
           content:
-            '**Slash commands**\n- `/clear` (or `/new`) — start a new conversation\n- `/compact` — summarize to free up context (choose keep-recent or all)\n- `/context` — breakdown of what is filling the context window\n- `/cost` — show this conversation\'s token/cost usage\n- `/model` — switch the model\n- `/compare [prompt]` — run a prompt on a second model, side by side (reuses your last message if omitted)\n- `/verify [command]` — run the project tests and fix failures until green (agent modes only)\n- `/computer <task>` — control your mouse & keyboard to do a desktop task (Windows; enable `parley.computerUse.enabled`)\n- `/screenshot` — capture your whole screen and attach it (no picker)\n- `/init` — analyze the repo and write a tailored AGENTS.md rules file (template in Chat/Plan mode)\n- `/json` — make the next reply a JSON object\n- `/help` — this list\n\n**Custom commands:** add a `name.md` file under `.parley/commands/` or `.claude/commands/` (workspace), or `~/.parley/commands/` / `~/.claude/commands/` (global — workspace wins on a name clash) and it becomes `/name` — its text is the prompt, with `$ARGS` replaced by anything typed after the command and `$SELECTION` by the active editor selection. Optional `description:` frontmatter shows in the slash menu.\n\n**Custom subagents:** add a `name.md` under `.parley/agents/` (frontmatter `description:` and optional `model:`; body = its extra system prompt) and the agent can delegate read-only investigations to it via run_subagent.\n\n**Skills:** add a `.parley/skills/<name>/SKILL.md` (frontmatter `description:`; body = full instructions; bundle any helper files in the folder). The agent sees the skill name + description always, and loads the full instructions on demand when a task matches (Claude-style) — see `Parley: Create Skill`.\n\nMost actions also have commands in the Command Palette (search "Parley").',
+            '**Slash commands**\n- `/clear` (or `/new`) — start a new conversation\n- `/compact` — summarize to free up context (choose keep-recent or all)\n- `/context` — breakdown of what is filling the context window\n- `/cost` — show this conversation\'s token/cost usage\n- `/model` — switch the model\n- `/compare [prompt]` — run a prompt on a second model, side by side (reuses your last message if omitted)\n- `/verify [command]` — run the project tests and fix failures until green (agent modes only)\n- `/computer <task>` — control your mouse & keyboard to do a desktop task (Windows; enable `parley.computerUse.enabled`)\n- `/screenshot` — capture your whole screen and attach it (no picker)\n- `/init` — analyze the repo and write a tailored AGENTS.md rules file (template in Chat/Plan mode)\n- `/memory` — show exactly what Parley injects as project rules + memory (labeled by source)\n- `/json` — make the next reply a JSON object\n- `/help` — this list\n\n**Custom commands:** add a `name.md` file under `.parley/commands/` or `.claude/commands/` (workspace), or `~/.parley/commands/` / `~/.claude/commands/` (global — workspace wins on a name clash) and it becomes `/name` — its text is the prompt, with `$ARGS` replaced by anything typed after the command and `$SELECTION` by the active editor selection. Optional `description:` frontmatter shows in the slash menu.\n\n**Custom subagents:** add a `name.md` under `.parley/agents/` (frontmatter `description:` and optional `model:`; body = its extra system prompt) and the agent can delegate read-only investigations to it via run_subagent.\n\n**Skills:** add a `.parley/skills/<name>/SKILL.md` (frontmatter `description:`; body = full instructions; bundle any helper files in the folder). The agent sees the skill name + description always, and loads the full instructions on demand when a task matches (Claude-style) — see `Parley: Create Skill`.\n\nMost actions also have commands in the Command Palette (search "Parley").',
           createdAt: new Date().toISOString()
         });
         await this.postState();
@@ -4118,12 +4131,12 @@ export class ChatPanel implements vscode.WebviewViewProvider {
    * with their full loading semantics (global + hierarchy + subtree + @imports)
    * so repos set up for those agents work as-is.
    */
-  private async readProjectRules(): Promise<string | undefined> {
+  private async gatherProjectRules(): Promise<Array<{ source: string; text: string }>> {
     const folders = vscode.workspace.workspaceFolders ?? [];
     if (folders.length === 0) {
-      return undefined;
+      return [];
     }
-    const parts: string[] = [];
+    const parts: Array<{ source: string; text: string }> = [];
     for (const folder of folders) {
       for (const name of PROJECT_RULES_FILES) {
         try {
@@ -4131,7 +4144,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
             'utf8'
           );
           if (raw.trim().length > 0) {
-            parts.push(raw.slice(0, 8000));
+            parts.push({ source: `${folder.name}/${name}`, text: raw.slice(0, 8000) });
             break; // one single-file rules file per root
           }
         } catch {
@@ -4168,7 +4181,10 @@ export class ChatPanel implements vscode.WebviewViewProvider {
             ).toString('utf8');
             const rule = parseRuleFile(raw);
             if (rule.body && ruleApplies(rule, candidates)) {
-              parts.push(`## Rule: ${rule.description ?? name}\n${rule.body.slice(0, 4000)}`);
+              parts.push({
+                source: `${dir}/${name}${rule.globs.length ? ` (globs: ${rule.globs.join(', ')})` : ''}`,
+                text: `## Rule: ${rule.description ?? name}\n${rule.body.slice(0, 4000)}`
+              });
             }
           } catch {
             // Unreadable rule — skip.
@@ -4193,14 +4209,114 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         }
       });
       if (agentMemory) {
-        parts.push(agentMemory);
+        parts.push({
+          source: 'CLAUDE.md / GEMINI.md (global + hierarchy + subtree + @imports)',
+          text: agentMemory
+        });
       }
     } catch {
       // Memory gathering is best-effort — never block a turn on it.
     }
 
-    const combined = parts.join('\n\n').trim();
+    return parts;
+  }
+
+  /** The project-rules block injected into the system prompt (joined + capped). */
+  private async readProjectRules(): Promise<string | undefined> {
+    const combined = (await this.gatherProjectRules())
+      .map((p) => p.text)
+      .join('\n\n')
+      .trim();
     return combined ? combined.slice(0, 16000) : undefined;
+  }
+
+  /**
+   * `/memory` (and `Parley: Show Memory & Rules`) — open a read-only view of exactly
+   * what Parley injects as project rules + memory, labeled by source and shown in
+   * injection order (more general first; more specific wins on conflict).
+   */
+  public async showMemory(): Promise<void> {
+    const parts = await this.gatherProjectRules();
+    const memory = (await loadProjectMemory()).trim();
+    const lines: string[] = [
+      '# Parley — memory & project rules',
+      '',
+      '_Exactly what Parley injects into the system prompt on every message, in injection order: earlier entries are more general; later and more specific entries win on conflict._',
+      ''
+    ];
+    if (parts.length === 0) {
+      lines.push(
+        '_No project rules found (.parleyrules / AGENTS.md / .cursorrules, .parley/rules, CLAUDE.md, GEMINI.md)._'
+      );
+    } else {
+      for (const p of parts) {
+        lines.push(`## ▸ ${p.source}`, '', p.text.trim(), '');
+      }
+    }
+    lines.push('---', '', '## ▸ Project memory (.parley/memory.md)', '');
+    lines.push(memory || '_(empty — the agent adds facts here via the remember tool)_');
+    const doc = await vscode.workspace.openTextDocument({ content: lines.join('\n'), language: 'markdown' });
+    await vscode.window.showTextDocument(doc, { preview: true });
+  }
+
+  // ---------- prompt snippets (reusable prompt text, stored globally) ----------
+  private snippetsUri(): vscode.Uri {
+    return vscode.Uri.joinPath(this.globalStorageUri, 'snippets.json');
+  }
+
+  /** Saved prompt snippets ([] on first use / parse error). Global across workspaces. */
+  public async getSnippets(): Promise<Array<{ name: string; text: string }>> {
+    try {
+      const raw = Buffer.from(await vscode.workspace.fs.readFile(this.snippetsUri())).toString('utf8');
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed)
+        ? parsed.filter((s) => s && typeof s.name === 'string' && typeof s.text === 'string')
+        : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private async writeSnippets(items: Array<{ name: string; text: string }>): Promise<void> {
+    await vscode.workspace.fs.createDirectory(this.globalStorageUri);
+    await vscode.workspace.fs.writeFile(this.snippetsUri(), Buffer.from(JSON.stringify(items, null, 2), 'utf8'));
+  }
+
+  /** Save (or overwrite by name) a prompt snippet. */
+  public async saveSnippet(name: string, text: string): Promise<void> {
+    const trimmed = name.trim();
+    if (!trimmed || !text.trim()) {
+      return;
+    }
+    const items = (await this.getSnippets()).filter((s) => s.name !== trimmed);
+    items.push({ name: trimmed, text });
+    items.sort((a, b) => a.name.localeCompare(b.name));
+    await this.writeSnippets(items);
+  }
+
+  /** `Parley: Manage Prompt Snippets` — multi-select to delete saved snippets. */
+  public async manageSnippets(): Promise<void> {
+    const items = await this.getSnippets();
+    if (items.length === 0) {
+      await vscode.window.showInformationMessage(
+        'Parley: no prompt snippets yet. Save one from the composer’s ＋ menu → "Save prompt as snippet".'
+      );
+      return;
+    }
+    const picks = await vscode.window.showQuickPick(
+      items.map((s) => ({ label: s.name, detail: s.text.replace(/\s+/g, ' ').slice(0, 80), picked: true })),
+      { canPickMany: true, title: 'Parley: prompt snippets (uncheck to delete)' }
+    );
+    if (!picks) {
+      return;
+    }
+    const keep = new Set(picks.map((p) => p.label));
+    const remaining = items.filter((s) => keep.has(s.name));
+    await this.writeSnippets(remaining);
+    const removed = items.length - remaining.length;
+    if (removed > 0) {
+      void vscode.window.showInformationMessage(`Parley: deleted ${removed} snippet${removed === 1 ? '' : 's'}.`);
+    }
   }
 
   private async refreshAgents(): Promise<void> {

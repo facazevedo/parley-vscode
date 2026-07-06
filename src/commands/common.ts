@@ -4,7 +4,6 @@ import { collectDiagnosticsContext } from '../context/collectDiagnosticsContext'
 import { collectFileContext } from '../context/collectFileContext';
 import { collectOpenEditorsContext } from '../context/collectOpenEditorsContext';
 import { collectSelectionContext } from '../context/collectSelectionContext';
-import { collectUserSelectedFilesContext } from '../context/collectUserSelectedFilesContext';
 import { renderContextPreview, totalCharacters } from '../context/contextPreview';
 import { loadIgnoreMatcher } from '../context/ignoreRules';
 import { confirmAndApplyChange } from '../diff/applyWorkspaceEdit';
@@ -41,7 +40,6 @@ export interface ContextOptions {
   readonly includeCurrentFile?: boolean;
   readonly includeOpenEditors?: boolean;
   readonly includeDiagnostics?: boolean;
-  readonly includeUserSelectedFiles?: boolean;
 }
 
 export async function collectCommandContext(
@@ -79,10 +77,6 @@ export async function collectCommandContext(
     if (diagnostics) {
       attachments.push(diagnostics);
     }
-  }
-
-  if (options.includeUserSelectedFiles) {
-    attachments.push(...(await collectUserSelectedFilesContext(settings.contextMaxCharacters, ignoreMatcher)));
   }
 
   return attachments;

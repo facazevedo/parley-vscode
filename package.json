@@ -2,7 +2,7 @@
   "name": "parley-vscode",
   "displayName": "Parley for VS Code",
   "description": "Interact with MIT Parley agents from Visual Studio Code with safe context sharing and diff review.",
-  "version": "1.84.0",
+  "version": "1.85.0",
   "publisher": "mit-parley-community",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -253,6 +253,16 @@
       {
         "command": "parley.openProjectMemory",
         "title": "Parley: Open Project Memory",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.showMemory",
+        "title": "Parley: Show Memory & Rules",
+        "category": "Parley"
+      },
+      {
+        "command": "parley.manageSnippets",
+        "title": "Parley: Manage Prompt Snippets",
         "category": "Parley"
       },
       {
