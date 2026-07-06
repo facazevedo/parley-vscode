@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 const TEMPLATE = `# Project rules for AI assistants
 
 These instructions are sent to Parley with every request in this workspace
-(Parley reads AGENTS.md, .parleyrules, or .cursorrules).
+(Parley reads AGENTS.md, .parleyrules, .cursorrules, or CLAUDE.md).
 
 ## Project
 - What this project is, the key directories, and how to build/run/test it.
@@ -15,9 +15,9 @@ These instructions are sent to Parley with every request in this workspace
 - Anything the assistant should always or never do.
 `;
 
-const CANDIDATES = ['AGENTS.md', '.parleyrules', '.cursorrules'];
+const CANDIDATES = ['AGENTS.md', '.parleyrules', '.cursorrules', 'CLAUDE.md'];
 
-/** The workspace's existing rules file, if any (AGENTS.md / .parleyrules / .cursorrules). */
+/** The workspace's existing rules file, if any (AGENTS.md / .parleyrules / .cursorrules / CLAUDE.md). */
 export async function findExistingRulesFile(): Promise<vscode.Uri | undefined> {
   const folder = vscode.workspace.workspaceFolders?.[0];
   if (!folder) {

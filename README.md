@@ -679,8 +679,25 @@ folder in your workspace, so it never depends on what's in memory:
 ## Project rules
 
 A **`.parleyrules`**, **`AGENTS.md`**, or **`.cursorrules`** file in the workspace
-root is auto‑injected into the system prompt as project rules. Scaffold one with
-**`Parley: Init Project Rules`** (or `/init`).
+root is auto‑injected into the system prompt as project rules (first match wins).
+Scaffold one with **`Parley: Init Project Rules`** (or `/init`). Reading
+`AGENTS.md` (Codex) and `.cursorrules` (Cursor) means repos set up for those
+agents work in Parley with zero migration.
+
+**`CLAUDE.md` (full Claude Code semantics).** `CLAUDE.md` is treated as always‑on
+memory — not one of the mutually‑exclusive files above — and Parley loads it the
+way Claude Code does:
+
+- **Global** `~/.claude/CLAUDE.md`, then the **project hierarchy** (`CLAUDE.md`
+  from each workspace root up to your home directory), then **subtree** files
+  (`CLAUDE.md` in the folders of files opened/edited this conversation — handy in
+  monorepos). More‑general files come first; more‑specific ones win.
+- **`@path` imports** — a `CLAUDE.md` can pull in other files with `@relative`,
+  `@/absolute`, or `@~/home` paths, resolved recursively (up to 5 hops,
+  cycle‑safe). Imports inside code fences / inline `code` and escaped `\@` are
+  ignored.
+
+So a repo already set up for Claude Code works in Parley with zero migration.
 
 **Rules directory (glob‑scoped).** Files in **`.parley/rules/`** or
 **`.cursor/rules/`** (`.md`/`.mdc`) are each one rule, with optional frontmatter:

@@ -14,6 +14,7 @@ import {
 } from '../commands/common';
 import { totalCharacters } from '../context/contextPreview';
 import { parseRuleFile, ruleApplies } from '../context/rulesDir';
+import { collectClaudeMemory } from '../context/claudeMemory';
 import { terminalSnapshot } from '../context/terminalLog';
 import { diagnosticsSnapshot } from '../context/diagnostics';
 import { loadProjectMemory } from '../context/projectMemory';
@@ -86,6 +87,9 @@ import type {
   ToolCall
 } from '../parley/types';
 
+// Mutually-exclusive single-file rules (first match per root wins). CLAUDE.md is
+// NOT here — it is always-on memory gathered separately with full Claude Code
+// loading semantics (hierarchy + subtree + @imports) via collectClaudeMemory().
 const PROJECT_RULES_FILES = ['.parleyrules', 'AGENTS.md', '.cursorrules'];
 // Directory rules (one file per rule, optional glob frontmatter — Cursor-compatible).
 const RULES_DIRS = ['.parley/rules', '.cursor/rules'];
@@ -4110,6 +4114,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
    * plus directory rules from `.parley/rules/` and `.cursor/rules/`. Glob-scoped
    * rules attach when the active editor file — or ANY file the agent has read or
    * edited this conversation — matches their frontmatter globs (Cursor-compatible).
+   * CLAUDE.md is gathered separately with full Claude Code loading semantics
+   * (global + hierarchy + subtree + @imports) so Claude Code repos work as-is.
    */
   private async readProjectRules(): Promise<string | undefined> {
     const folders = vscode.workspace.workspaceFolders ?? [];
@@ -4169,8 +4175,30 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         }
       }
     }
+    // CLAUDE.md memory (Claude Code semantics): global + hierarchy + subtree, imports inlined.
+    try {
+      const claudeMemory = await collectClaudeMemory({
+        workspaceFolders: folders.map((f) => f.uri.fsPath),
+        activeFile: active && active.uri.scheme === 'file' ? active.uri.fsPath : undefined,
+        touchedFiles: this.executor.touchedFiles(),
+        home: os.homedir(),
+        read: async (absPath) => {
+          try {
+            return Buffer.from(await vscode.workspace.fs.readFile(vscode.Uri.file(absPath))).toString('utf8');
+          } catch {
+            return undefined;
+          }
+        }
+      });
+      if (claudeMemory) {
+        parts.push(claudeMemory);
+      }
+    } catch {
+      // Memory gathering is best-effort — never block a turn on it.
+    }
+
     const combined = parts.join('\n\n').trim();
-    return combined ? combined.slice(0, 12000) : undefined;
+    return combined ? combined.slice(0, 16000) : undefined;
   }
 
   private async refreshAgents(): Promise<void> {

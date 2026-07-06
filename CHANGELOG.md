@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.78.0
+
+### CLAUDE.md support (full Claude Code loading semantics)
+
+- Parley now reads **`CLAUDE.md`** so repos already set up for **Claude Code** work with zero migration (joining `AGENTS.md` for Codex and `.cursorrules` for Cursor).
+- Unlike the mutually-exclusive `.parleyrules`/`AGENTS.md`/`.cursorrules` (first match wins), `CLAUDE.md` is **always-on memory** gathered the way Claude Code does it: **global** `~/.claude/CLAUDE.md`, then the **project hierarchy** (each workspace root up to your home dir), then **subtree** `CLAUDE.md` files in the folders of files opened/edited this conversation (monorepo-friendly). More-general files come first; more-specific ones win.
+- **`@path` imports** — a `CLAUDE.md` can pull in other files with `@relative`, `@/absolute`, or `@~/home` paths, resolved recursively (≤5 hops, cycle-safe). Imports inside code fences / inline `code` and escaped `\@` are ignored.
+
+
 ## 1.77.0
 
 ### Batch approval in Ask mode

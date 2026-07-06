@@ -74,7 +74,7 @@ export interface ChatRequest {
   readonly speed?: 'standard' | 'fast';
   /** OpenAI-style `response_format` (e.g. `{ type: 'json_object' }`) to constrain output. */
   readonly responseFormat?: Record<string, unknown>;
-  /** Extra system-prompt text (e.g. project rules from .parleyrules / AGENTS.md). */
+  /** Extra system-prompt text (e.g. project rules from .parleyrules / AGENTS.md / CLAUDE.md). */
   readonly systemExtra?: string;
 }
 

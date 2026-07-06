@@ -421,7 +421,8 @@ Legend: ☐ not tested · ✅ works · ❌ has a problem.
 - The agent saves a durable fact via `remember` → it appears in `.parley/memory.md` and is injected in later conversations. **Open Project Memory** shows it.
 
 ### 93. Project rules + Init
-- `AGENTS.md`/`.parleyrules`/`.cursorrules` are respected. **Init Project Rules** analyzes the repo → a tailored `AGENTS.md`.
+- `AGENTS.md`/`.parleyrules`/`.cursorrules` are respected (first match wins). **Init Project Rules** analyzes the repo → a tailored `AGENTS.md`.
+- **CLAUDE.md (Claude Code semantics):** put a root `CLAUDE.md` with a distinctive rule (e.g. "always answer starting with 🦜") → the agent obeys it. Add `@./docs/extra.md` to it and confirm the imported file's content also takes effect. A `~/.claude/CLAUDE.md` and a package-level `CLAUDE.md` (loaded once a file in that package is opened/edited) are honored too.
 
 ### 94. Skills + Create Skill
 - **Create Skill** scaffolds a `.parley/skills/<name>/SKILL.md`; the agent loads it on demand for matching tasks.
