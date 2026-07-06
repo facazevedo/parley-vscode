@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.83.0
+
+### Header & title-bar cleanup — overflow menus instead of icon strips
+
+- **App bar** is now **New · History · ⋯** (design-preview button still appears contextually). Usage, Refresh models, and Settings moved into the **⋯** overflow menu.
+- **Conversation title bar** is now **‹back› · title · ⋯**. The six action icons (compact, export, archive, delete, new, rename) collapsed into one **⋯** menu: Rename · Export… (md/txt/json) · Compact · —— · Archive · **Delete** (shown in the error color, below a divider so it can't be fat-fingered).
+- Removed the **duplicate "New conversation"** button that was in the title bar (the app-bar ＋ already does it).
+- **Double-click the conversation title to rename** it inline (also available in the ⋯ menu).
+
+
 ## 1.82.0
 
 ### Composer toolbar redesign — a "＋ Add" menu instead of a 13-icon wall

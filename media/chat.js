@@ -1622,9 +1622,9 @@ import hljs from 'highlight.js/lib/common';
     closeHistory();
     menuPanel.replaceChildren();
     menuKind = opts.kind || '';
-    menuItems = (opts.items || []).slice();
+    menuItems = []; // built during render so { separator: true } entries can be skipped
     menuRows = [];
-    menuActive = menuItems.length ? 0 : -1;
+    menuActive = 0;
 
     const head = document.createElement('div');
     head.className = 'hp-head';
@@ -1675,12 +1675,20 @@ import hljs from 'highlight.js/lib/common';
       });
       menuPanel.append(inputEl);
     }
-    if (menuItems.length) {
+    if (opts.items && opts.items.length) {
       const list = document.createElement('div');
       list.className = 'hp-list';
-      menuItems.forEach((it, i) => {
+      opts.items.forEach((it) => {
+        if (it.separator) {
+          const sep = document.createElement('div');
+          sep.className = 'mn-sep';
+          list.append(sep);
+          return;
+        }
+        const i = menuItems.length;
+        menuItems.push(it);
         const row = document.createElement('div');
-        row.className = 'hp-item mn-item' + (i === menuActive ? ' active' : '');
+        row.className = 'hp-item mn-item' + (i === menuActive ? ' active' : '') + (it.danger ? ' mn-danger' : '');
         row.setAttribute('role', 'menuitem');
         const label = document.createElement('div');
         label.className = 'hp-item-title';
@@ -1701,6 +1709,9 @@ import hljs from 'highlight.js/lib/common';
         menuRows.push(row);
       });
       menuPanel.append(list);
+    }
+    if (!menuItems.length) {
+      menuActive = -1;
     }
     menuPanel.style.display = 'flex';
     setTimeout(() => (inputEl ? inputEl.focus() : menuPanel.focus()), 0);
@@ -1830,12 +1841,41 @@ import hljs from 'highlight.js/lib/common';
     });
   }
 
-  $('refresh').addEventListener('click', () => vscode.postMessage({ type: 'refreshAgents' }));
+  // App-bar overflow (⋯): the low-frequency global/meta actions live behind one menu,
+  // so the bar stays New + History (+ the contextual design-preview button).
+  function openAppMoreMenu() {
+    openMenu({
+      kind: 'appmore',
+      title: 'Parley',
+      items: [
+        {
+          label: 'Usage — this month',
+          detail: 'Your billed spend this month',
+          onPick: () => openUsageMenu()
+        },
+        {
+          label: 'Refresh model list',
+          detail: busy ? 'Unavailable while Parley is working' : 'Re-fetch the available models',
+          onPick: () => {
+            if (!busy) {
+              vscode.postMessage({ type: 'refreshAgents' });
+            }
+          }
+        },
+        {
+          label: 'Settings',
+          detail: 'Open Parley settings',
+          onPick: () => vscode.postMessage({ type: 'openSettings' })
+        }
+      ]
+    });
+  }
   $('newChat').addEventListener('click', () => vscode.postMessage({ type: 'newChat' }));
   $('historyBtn').addEventListener('click', () => toggleHistory());
-  $('export').addEventListener('click', () => toggleMenu('export', openExportMenu));
-  $('usage').addEventListener('click', () => toggleMenu('usage', openUsageMenu));
-  $('compact').addEventListener('click', () => toggleMenu('compact', openCompactMenu));
+  const appMoreBtn = $('appMore');
+  if (appMoreBtn) {
+    appMoreBtn.addEventListener('click', () => toggleMenu('appmore', openAppMoreMenu));
+  }
   const artifactBtn = $('artifactBtn');
   if (artifactBtn) {
     artifactBtn.addEventListener('click', () => vscode.postMessage({ type: 'openArtifacts' }));
@@ -1882,8 +1922,12 @@ import hljs from 'highlight.js/lib/common';
   }
   if (convTitleText) {
     // Codex-style: clicking the conversation name opens the past-conversations list
-    // (search + relative dates). Renaming is on the ✎ button.
+    // (search + relative dates); double-click renames it inline (also in the ⋯ menu).
     convTitleText.addEventListener('click', () => toggleHistory());
+    convTitleText.addEventListener('dblclick', () => {
+      closeHistory();
+      startTitleEdit();
+    });
   }
   // Codex-style header controls: ‹back› to past conversations, and right-side actions.
   function openConvMoreMenu() {
@@ -1892,15 +1936,21 @@ import hljs from 'highlight.js/lib/common';
       title: 'Conversation',
       items: [
         {
-          label: 'Export as Markdown',
-          detail: 'Save this conversation to a .md file',
-          onPick: () => vscode.postMessage({ type: 'export', fmt: 'md' })
+          label: 'Rename',
+          detail: 'Rename this conversation',
+          onPick: () => startTitleEdit()
+        },
+        {
+          label: 'Export…',
+          detail: 'Save as Markdown, plain text, or JSON',
+          onPick: () => openExportMenu()
         },
         {
           label: 'Compact',
           detail: 'Summarize older messages to free up context',
           onPick: () => vscode.postMessage({ type: 'compact', keepRecent: 4 })
         },
+        { separator: true },
         {
           label: convArchived ? 'Unarchive' : 'Archive',
           detail: convArchived ? 'Show in the default list again' : 'Hide from the default list',
@@ -1918,6 +1968,7 @@ import hljs from 'highlight.js/lib/common';
         },
         {
           label: 'Delete…',
+          danger: true,
           detail: 'Permanently remove this conversation',
           onPick: () => {
             if (convId) {

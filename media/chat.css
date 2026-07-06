@@ -1549,6 +1549,16 @@ button:disabled {
 .mn-item .hp-item-title {
   font-weight: 500;
 }
+/* Divider before destructive actions in a menu. */
+.mn-sep {
+  height: 1px;
+  margin: 5px 6px;
+  background: var(--vscode-menu-separatorBackground, var(--vscode-widget-border, rgba(127, 127, 127, 0.25)));
+}
+/* Destructive menu items (e.g. Delete) read in the error color. */
+.mn-item.mn-danger .hp-item-title {
+  color: var(--vscode-errorForeground, #f66);
+}
 
 /* Read-aloud button on assistant messages (left of the ⏪ rewind). */
 .msgspeak {
