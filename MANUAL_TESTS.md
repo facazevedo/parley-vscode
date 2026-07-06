@@ -116,7 +116,7 @@ Legend: ☐ not tested · ✅ works · ❌ has a problem.
 | 91 | `/computer` (mouse/keyboard, kill switch, confirm) ⚠ | ☐ |
 | | **— Memory, rules, skills, commands, styles, hooks —** | |
 | 92 | Project memory (`remember` + Open Project Memory) | ☐ |
-| 93 | Project rules + Init Project Rules | ☐ |
+| 93 | Project rules + Init Project Rules (+ `CLAUDE.md`/`GEMINI.md` semantics) | ☐ |
 | 94 | Skills + Create Skill | ☐ |
 | 95 | Custom slash commands + `/json` + `/help` | ☐ |
 | 96 | Output styles (Select Output Style) | ☐ |
@@ -139,6 +139,15 @@ Legend: ☐ not tested · ✅ works · ❌ has a problem.
 | 109 | Review a Pull Request (by number, via `gh`) | ☐ |
 | 110 | Generate / Update README (reviewable edit) | ☐ |
 | 111 | Batch approval — Apply all / Reject all (Ask mode) | ☐ |
+| | **— Added in v1.78–1.86 —** | |
+| 112 | Clean command output (ANSI / spinner / progress noise stripped) | ☐ |
+| 113 | Steer vs Queue while the agent works (immediate steer bubble + cancel chip) | ☐ |
+| 114 | ＋ Add menu (context, files, web, screenshot, recording, computer, snippets) | ☐ |
+| 115 | Header ⋯ menu + conversation ⋯ menu + double-click-to-rename | ☐ |
+| 116 | Context pill toggles + collapsed summary | ☐ |
+| 117 | `/memory` — Show Memory & Rules (labeled by source, injection order) | ☐ |
+| 118 | Prompt snippets (save / insert / Manage Prompt Snippets) | ☐ |
+| 119 | Diff-review keyboard shortcuts (Ctrl/Cmd+Enter / +Shift / +Backspace) | ☐ |
 
 ---
 
@@ -486,3 +495,37 @@ Legend: ☐ not tested · ✅ works · ❌ has a problem.
 ### 111. Batch approval — Apply all / Reject all
 - In **Ask before edits** mode, trigger a turn that edits several files. On the first approval card, click **Apply all** → the remaining edits this turn auto-apply (no more cards); **Reject all** rejects the rest.
 - Verify it's scoped to the turn (the next turn asks again) and everything stays checkpointed/revertible.
+
+## Added in v1.78–1.86
+
+### 112. Clean command output
+- In an agent mode, run a command with a live spinner/progress bar (e.g. `npm install`, `conda …`, `pip install …`). In the **Parley Agent** output channel (View → Output → "Parley Agent") the log reads as clean lines — **no** red `ESC[`/`BS` control-character boxes, and progress bars collapse to their final state. The model's captured output is likewise clean.
+
+### 113. Steer vs Queue while the agent works
+- Start a long turn. The composer stays live and a **`⏳ Queue` / `⏩ Steer`** toggle appears.
+- **Steer:** toggle to `⏩ Steer`, send a message → it appears in the conversation **immediately** (dashed "⏩ Steering — sends at the agent's next step" bubble) **and** as a chip; the agent picks it up at its next step (the bubble becomes a normal message). The chip's **×** cancels a not-yet-injected steer (bubble disappears).
+- **Queue:** toggle to `⏳ Queue`, send → it runs as its own turn after the current one finishes.
+
+### 114. ＋ Add menu (composer)
+- Click the composer's **＋** button → a menu opens with **Add context**, **Attach files or images**, **Browse the web**, **Screenshot**, **Screen recording**, **Computer control**, and (Prompt) **Insert snippet…** / **Save prompt as snippet…**.
+- Each item does what its old standalone icon did (e.g. Add context inserts `@`; Attach opens the file picker; Screenshot attaches; Screen recording toggles — while recording, the ＋ button shows a red pulse and the item reads "Stop recording"). The menu closes on pick or outside click.
+
+### 115. Header & conversation overflow menus + rename
+- **App bar ⋯** (top right) opens **Usage**, **Refresh model list**, **Settings**. New (＋) and History (🕘) remain one-click; the 🎨 design-preview button appears only when the last turn produced an artifact.
+- **Conversation title bar ⋯** opens **Rename**, **Export…** (md/txt/json), **Compact**, then (below a divider) **Archive** and **Delete** (Delete shown in the error color). No duplicate "New" button remains in the title bar.
+- **Double-click the conversation title** → inline rename (Enter saves, Esc cancels); Rename in the ⋯ menu does the same. Single-click the title still opens the past-conversations list.
+
+### 116. Context pill toggles + summary
+- The **Context** disclosure shows **Selection / File / Open editors / Diagnostics** as pill toggles that fill in when active; toggling posts the change and persists across reloads. There is **no** "Pick files" toggle (use ＋ → Attach files / `@file`).
+- Collapse the section → the summary shows what's on, e.g. **"Context — Selection, Diagnostics"** (or "— none").
+
+### 117. `/memory` — Show Memory & Rules
+- Run `/memory` (or **Parley: Show Memory & Rules**) → a read-only markdown doc opens showing **exactly** what's injected as project rules + memory, each block **labeled by its source** and in **injection order** (more general first; more specific wins). It includes the matched `.parleyrules`/`AGENTS.md`/`.cursorrules`, `.parley/rules` (with their globs), `CLAUDE.md`/`GEMINI.md` (with `@imports` inlined), and `.parley/memory.md`. With no rules present, it says so.
+
+### 118. Prompt snippets
+- ＋ → **Save prompt as snippet…**: with text in the composer, enter a name → it's saved (globally). With an empty composer it tells you to type a prompt first.
+- ＋ → **Insert snippet…**: pick a saved snippet → its text is inserted into the composer. Empty list shows a hint.
+- **Parley: Manage Prompt Snippets** lists snippets with a multi-select; unchecking + OK deletes them. Snippets persist across workspaces and reloads.
+
+### 119. Diff-review keyboard shortcuts
+- With an edit-approval card open (Ask mode): **Ctrl/Cmd+Enter** applies it, **Ctrl/Cmd+Shift+Enter** applies all, **Ctrl/Cmd+Backspace** rejects it, **Ctrl/Cmd+Shift+Backspace** rejects all. The card shows the hint. Plain **Enter** still sends a composer message (does not apply).

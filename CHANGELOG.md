@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.87.0
+
+### Docs sync
+
+- Brought **README**, **FEATURES.md**, and **MANUAL_TESTS.md** up to date through v1.86: the ＋ Add menu and new composer/header/title-bar layout, context pill toggles + collapsed summary (and removal of "Pick files"), steer-vs-queue with immediate in-conversation display, `CLAUDE.md`/`GEMINI.md` memory, `/memory` viewer, prompt snippets, clean command output, and diff-review keyboard shortcuts. MANUAL_TESTS is exhaustive again (119 checks).
+
+
 ## 1.86.0
 
 ### Webview interaction tests (jsdom)

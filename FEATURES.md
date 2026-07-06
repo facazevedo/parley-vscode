@@ -55,6 +55,11 @@ every change diff-reviewed before it touches your files.
   context; the saved transcript keeps the full record.
 - **Regenerate** the last response; **rewind** the conversation (and optionally the files)
   to any earlier message.
+- **Steer or queue while working** — the composer stays live during a turn. A
+  **`⏳ Queue` / `⏩ Steer`** toggle decides how a mid-task message is handled: **Steer**
+  injects it into the current answer at the agent's next step (and shows it in the
+  conversation immediately, tagged "steering", with a cancel chip); **Queue** runs it as
+  its own turn after this one finishes.
 - Image attachments show as **clickable thumbnails**; click to open the full **image viewer**
   (zoom / pan / download / next-prev / thumbnails).
 
@@ -99,7 +104,9 @@ them; untrusted content is fenced with an injection-defense boundary):
 - **Edit** — `write_file`, `edit_file` (precise snippet replace), `multi_edit` (several
   atomic edits to one file). Every edit is diff-reviewed and checkpointed.
 - **Execute** — `run_command` (approved per command, with a per-workspace allowlist),
-  `run_tests` (auto-detected test runner, PASS/FAIL + output).
+  `run_tests` (auto-detected test runner, PASS/FAIL + output). Output is **sanitized**
+  (ANSI escapes, `\r` progress-bar redraws, and backspaces from spinners are stripped)
+  before it reaches the model or the **Parley Agent** output channel.
 - **Web** — `web_search`, `fetch_url`, and a headless-browser suite (`browser_navigate`,
   `browser_read`, `browser_click`, `browser_type`, `browser_console`, `browser_screenshot`).
 - **Media** — `generate_image` (gpt-image-1), `capture_screen`.
@@ -131,6 +138,16 @@ Type **`@`** in the composer for a fuzzy autocomplete. Mentions:
 Also: **`Alt+K`** drops an `@file#start-end` mention of the current selection into chat;
 right-click a file → **Add File to Chat Context**.
 
+**Auto-include toggles** — a **Context** disclosure of pill toggles (**Selection** /
+**File** / **Open editors** / **Diagnostics**) sets what rides along with every message;
+collapsed, it summarizes what's on. A **selection pill** shows the current selection with a
+👁 include/exclude toggle.
+
+**＋ Add menu** — one composer button gathers the insert/capture actions (add context `@`,
+attach files/images, browse the web, screenshot, screen recording, computer control) plus
+**prompt snippets**: save the composer's text as a named, globally-stored snippet and
+reinsert it later (delete via **Manage Prompt Snippets**).
+
 ## Codebase search
 
 `@codebase` pulls the most relevant workspace files into context. Controlled by
@@ -153,6 +170,8 @@ right-click a file → **Add File to Chat Context**.
   every changed file in VS Code's native multi-file diff editor.
 - **Batch approval** — Ask-mode approval cards have **Apply all / Reject all**, which apply
   (or reject) the rest of that turn's edits without another prompt (scoped to the turn).
+- **Keyboard review** — with an approval card open: **Ctrl/Cmd+Enter** apply (**+Shift**
+  apply all), **Ctrl/Cmd+Backspace** reject (**+Shift** reject all); plain Enter still sends.
 - **Format-preserving** — a CRLF file stays CRLF; BOM/encoding are preserved.
 
 ## Inline completion & next-edit prediction
@@ -341,6 +360,11 @@ Right-click **Parley** submenu and the **`Ctrl+.`** lightbulb (on a selection):
 | `Tab` | (when a next-edit is predicted) jump to / accept it |
 | `Esc` | (when a next-edit is predicted) dismiss it |
 | `Ctrl+.` | Parley code actions on a selection (lightbulb) |
+| `Ctrl/Cmd+Enter` | (with an edit-approval card open) apply it — **+Shift** applies all |
+| `Ctrl/Cmd+Backspace` | (with an edit-approval card open) reject it — **+Shift** rejects all |
+
+In the composer: **`Enter`** sends, **`Shift+Enter`** is a newline; **`@`** opens mentions,
+**`/`** opens commands.
 
 See the [README command reference](README.md#command-reference) for the full command list and
 the [settings reference](README.md#settings-reference) for every setting.

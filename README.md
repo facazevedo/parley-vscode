@@ -190,22 +190,28 @@ not hot‑swap an extension; the reload is required after every (re)install.
 **Header (top):** the title, a live **session counter** (`· 12,345 tok · ~$0.04`),
 an **always‑visible circular context gauge** that fills green → amber → red as the
 conversation approaches the model's context window (shows `–` when the window size is
-unknown for a model), and buttons: **＋** new conversation, **🕘**
-past conversations, **⊟** compact, **⤓** export, **↻** refresh model list.
+unknown for a model), and buttons: **＋** new conversation, **🕘** past conversations,
+and a **⋯** overflow (Usage, Refresh model list, Settings). A **🎨** design‑preview
+button appears when the last turn produced an artifact. The **conversation title bar**
+below shows **‹ back**, the title (**double‑click to rename**), and its own **⋯** menu
+(Rename · Export · Compact · Archive · Delete, with Delete separated).
 
 **Composer (bottom):**
 
-- A **Context** disclosure with checkboxes (Selection, File, Open editors,
-  Diagnostics, Pick files) controlling what's attached to commands. Your choices
-  persist across reloads.
+- A **Context** disclosure with pill toggles (**Selection**, **File**, **Open editors**,
+  **Diagnostics**) controlling what's auto‑attached; when collapsed it summarizes what's
+  on (e.g. *"Context — Selection, Diagnostics"*). Choices persist across reloads.
 - A **selection pill** — when you have text selected in an editor, the composer
   shows `file.ts:12-40 selected` with a **👁 toggle**, so you always know whether
   the selection will ride along with your next message.
 - The **prompt box**. `Enter` sends, `Shift+Enter` is a newline. Type **`@`** for
   fuzzy file/`@codebase`/`@git` mentions, **`/`** for the command menu, and
   **paste or drop** any file directly.
-- The **model dropdown**, a **`Mode ▾`** popover (mode + thinking + speed), and a
-  **📎** attach button.
+- A **＋ Add** menu (add context, attach files, browse the web, screenshot, screen
+  recording, computer control, and prompt snippets), a **🎤** mic (its **▾** caret
+  toggles hands‑free voice mode), a **`/`** slash button, and a **🎨** design‑canvas
+  button. On the right: the **model dropdown**, a **`Mode ▾`** popover (mode + thinking
+  + speed), and **Send**.
 
 **While the agent works** a pulsing **status line** shows what it's doing, the
 elapsed time, and a live token count. **Scrolling up pauses autoscroll** so you can
@@ -325,9 +331,11 @@ allowed — and any command using substitution (`$(…)`, backticks, `<(…)`) a
 prompts and can never be stored as a rule. Review rules with
 **`Parley: Manage Allowed Commands`**.
 
-**Steering.** The composer stays live while the agent works: send a message mid‑task
-and it's queued (a removable `⏩` chip) and **injected at the agent's next step** —
-redirect it without stopping it.
+**Steering.** The composer stays live while the agent works. A **`⏳ Queue`/`⏩ Steer`
+toggle** by the composer decides how a mid‑task message is handled: **Steer** injects it
+into the current answer at the agent's **next step** (redirect without stopping) — and it
+appears in the conversation **immediately** (tagged *"steering"*, with a removable chip to
+cancel); **Queue** runs it as its own turn after this one finishes.
 
 **Rewind & fork (⏪ / ✏️).** Hover any of your messages: **⏪** offers **Rewind
 conversation (fork)** — continue from before that message while the original stays
@@ -436,6 +444,7 @@ Type **`/`** in the composer for an autocomplete menu.
 | `/verify [command]`  | **Fix until green** — run the project's tests, fix failures, repeat (agent modes)                         |
 | `/computer <task>`   | **Computer use** ⚠ — drive your mouse & keyboard for a desktop task (opt-in; see below)                   |
 | `/init`              | **Analyze the repo** and write a tailored `AGENTS.md` (static template in Chat/Plan mode)                 |
+| `/memory`            | Show exactly what's injected as project rules + memory, labeled by source (precedence: specific wins)     |
 | `/json`              | Make the **next** reply a JSON object (`response_format`)                                                 |
 | `/help`              | List commands                                                                                             |
 
@@ -802,6 +811,8 @@ frontmatter‑less (or `alwaysApply: true`) rules always apply.
 | `Parley: Review Staged Changes`                 | Review the staged diff before committing (also in the SCM ⋯ menu)                  |
 | `Parley: File Edit History`                     | Every Parley edit to the current file, each openable as a before/after diff        |
 | `Parley: Open Project Memory`                   | Open `.parley/memory.md` to review/prune what the agent has remembered             |
+| `Parley: Show Memory & Rules`                   | View exactly what's injected as rules + memory, labeled by source (also `/memory`) |
+| `Parley: Manage Prompt Snippets`                | Delete saved prompt snippets (save/insert them from the composer's ＋ menu)         |
 | `Parley: Edit Selection (Inline)`               | Inline edit (`Ctrl+Alt+K` / `Cmd+Alt+K`)                                           |
 | `Parley: Revert Last Edit` / `Revert All Edits` | Undo checkpointed edits                                                            |
 | `Parley: Generate Image`                        | Generate an image with `gpt-image-1`                                               |
