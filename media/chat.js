@@ -16,7 +16,6 @@ import hljs from 'highlight.js/lib/common';
   const prompt = $('prompt');
   const stopBtn = $('stop');
   const sendBtn = $('sendBtn');
-  const attachBtn = $('attach');
   const modeBtn = $('modeBtn');
   const modePanel = $('modePanel');
   const attachmentsEl = $('attachments');
@@ -1984,11 +1983,6 @@ import hljs from 'highlight.js/lib/common';
       vscode.postMessage({ type: 'deleteConversation', id: convId, base: convBase, scope: 'repo' });
     });
   }
-  attachBtn.addEventListener('click', () => vscode.postMessage({ type: 'attachFiles' }));
-  const settingsBtn = $('settings');
-  if (settingsBtn) {
-    settingsBtn.addEventListener('click', () => vscode.postMessage({ type: 'openSettings' }));
-  }
   // Append text to the composer and re-fire the input handler so the slash / @-mention
   // menus open for what we just inserted.
   function insertAtPrompt(text) {
@@ -1998,18 +1992,74 @@ import hljs from 'highlight.js/lib/common';
     prompt.setSelectionRange(prompt.value.length, prompt.value.length);
     prompt.dispatchEvent(new Event('input'));
   }
-  // Codex/ChatGPT-style "add" affordances — three explicit icons in the composer bar.
-  const uploadBtn = $('upload');
-  if (uploadBtn) {
-    uploadBtn.addEventListener('click', () => vscode.postMessage({ type: 'attachFiles' }));
+  // "+ Add" menu — one entry point for the insert/capture actions, so the composer
+  // stays a few high-frequency buttons instead of a 13-icon wall. Mirrors the mode
+  // popover's show/close pattern. The individual actions reuse the same handlers as
+  // before (attach message, @-insert, screenshot, screen-record toggle, computer).
+  const addMenuBtn = $('addMenuBtn');
+  const addMenu = $('addMenu');
+  function toggleAddMenu(show) {
+    if (!addMenu || !addMenuBtn) {
+      return;
+    }
+    const open = show === undefined ? addMenu.style.display === 'none' : show;
+    addMenu.style.display = open ? 'block' : 'none';
+    addMenuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) {
+      const recLabel = addMenu.querySelector('.add-reclabel');
+      if (recLabel) {
+        recLabel.textContent = recState === 'recording' ? 'Stop recording' : 'Screen recording';
+      }
+    }
   }
-  const addContextBtn = $('addContext');
-  if (addContextBtn) {
-    addContextBtn.addEventListener('click', () => insertAtPrompt('@'));
-  }
-  const browseWebBtn = $('browseWeb');
-  if (browseWebBtn) {
-    browseWebBtn.addEventListener('click', () => insertAtPrompt('@browser '));
+  if (addMenuBtn && addMenu) {
+    addMenuBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleAddMenu();
+    });
+    addMenu.addEventListener('click', (e) => e.stopPropagation());
+    document.addEventListener('click', () => toggleAddMenu(false));
+    addMenu.querySelectorAll('.add-item').forEach((item) => {
+      item.addEventListener('click', () => {
+        toggleAddMenu(false);
+        switch (item.dataset.add) {
+          case 'context':
+            insertAtPrompt('@');
+            break;
+          case 'attach':
+            vscode.postMessage({ type: 'attachFiles' });
+            break;
+          case 'web':
+            insertAtPrompt('@browser ');
+            break;
+          case 'shot':
+            vscode.postMessage({ type: 'screenshotAttach' });
+            break;
+          case 'rec':
+            if (recState === 'idle') {
+              void startScreenRecording();
+            } else {
+              stopScreenRecording();
+            }
+            break;
+          case 'computer': {
+            const task = prompt.value.trim();
+            if (task && !task.startsWith('/')) {
+              prompt.value = '/computer ' + task;
+              sendPrompt();
+              break;
+            }
+            if (!prompt.value.trim()) {
+              prompt.value = '/computer ';
+            }
+            prompt.focus();
+            prompt.setSelectionRange(prompt.value.length, prompt.value.length);
+            hideSlash();
+            break;
+          }
+        }
+      });
+    });
   }
   let artifactCount = 0; // # of previewable artifacts in the latest turn (from state)
   const designBtn = $('designBtn');
@@ -2038,10 +2088,6 @@ import hljs from 'highlight.js/lib/common';
       prompt.setSelectionRange(prompt.value.length, prompt.value.length);
       prompt.dispatchEvent(new Event('input'));
     });
-  }
-  const regenBtn = $('regenBtn');
-  if (regenBtn) {
-    regenBtn.addEventListener('click', () => vscode.postMessage({ type: 'regenerate' }));
   }
 
   // ---------- Styled tooltips (replace the OS's native white title box) ----------
@@ -2386,9 +2432,9 @@ import hljs from 'highlight.js/lib/common';
       src.connect(recMicNode);
       recMicNode.connect(recMicCtx.destination);
     }
-    if (recBtn) {
-      recBtn.classList.add('recording'); // red pulse via CSS; icon stays
-      recBtn.title = 'Stop recording and attach frames + narration';
+    if (addMenuBtn) {
+      addMenuBtn.classList.add('recording'); // red pulse on the + button while recording
+      addMenuBtn.title = 'Recording your screen — open the + menu to stop';
     }
     recStopTimer = setTimeout(() => stopScreenRecording(), REC_MAX_MS);
     const track = recStream.getVideoTracks()[0];
@@ -2435,9 +2481,9 @@ import hljs from 'highlight.js/lib/common';
       recStream = null;
     }
     recVideo = null;
-    if (recBtn) {
-      recBtn.classList.remove('recording');
-      recBtn.title = 'Record your screen (frames + mic narration; click again to stop, max 60s)';
+    if (addMenuBtn) {
+      addMenuBtn.classList.remove('recording');
+      addMenuBtn.title = 'Add — context, files, web, screen…';
     }
     recFrames.forEach((dataUri, i) => {
       vscode.postMessage({ type: 'pasteFile', dataUri, name: 'screencap-' + (i + 1) + '.jpg' });

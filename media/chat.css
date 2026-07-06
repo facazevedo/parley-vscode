@@ -1614,7 +1614,8 @@ button:disabled {
 
 /* Voice-input mic + screen-record buttons: red pulse while recording. */
 #mic.recording,
-#rec.recording {
+#rec.recording,
+#addMenuBtn.recording {
   color: var(--vscode-errorForeground, #f66);
   animation: micpulse 1.2s ease-in-out infinite;
 }
@@ -1935,7 +1936,9 @@ button:disabled {
   min-width: 0;
 }
 .actions .model {
-  flex: 1 1 110px;
+  flex: 0 1 auto;
+  min-width: 92px;
+  max-width: 220px;
 }
 /* Icon buttons in the composer toolbar — flat/transparent, not filled buttons. */
 .actions #attach,
@@ -1950,7 +1953,9 @@ button:disabled {
 .actions #shot,
 .actions #rec,
 .actions #computer,
-.actions #settings {
+.actions #settings,
+.actions #addMenuBtn,
+.actions .miccaret {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2003,9 +2008,57 @@ button:disabled {
 .actions #shot:hover,
 .actions #rec:hover,
 .actions #computer:hover,
-.actions #settings:hover {
+.actions #settings:hover,
+.actions #addMenuBtn:hover,
+.actions .miccaret:hover {
   opacity: 1;
   background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.2));
+}
+/* Mic split-button: the mic sits next to a small caret that toggles voice mode. */
+.actions .micwrap {
+  display: inline-flex;
+  align-items: center;
+}
+.actions .miccaret {
+  width: 15px;
+  font-size: 0.7em;
+  line-height: 1;
+}
+.actions .miccaret.active {
+  color: var(--vscode-charts-blue, #3794ff);
+  opacity: 1;
+}
+/* "+ Add" popover — reuses .modepanel positioning/background; rows are labeled. */
+.addmenu {
+  width: min(248px, calc(100% - 12px));
+}
+.add-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  color: inherit;
+  border: 0;
+  border-radius: 6px;
+  padding: 7px 8px;
+  cursor: pointer;
+  font-size: 0.9em;
+}
+.add-item:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+.add-item svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  opacity: 0.85;
+}
+.add-hint {
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.85em;
+  margin-left: 4px;
 }
 /* Slash button: full 28×26 footprint (uniform spacing) with a small inset keycap frame
    hugging the "/", so the frame is snug even though the button matches the other icons. */

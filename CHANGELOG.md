@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.82.0
+
+### Composer toolbar redesign — a "＋ Add" menu instead of a 13-icon wall
+
+- The composer's action row is now scannable: **＋ Add** · **🎤 mic** (with a caret that toggles hands-free voice mode) · **/** slash · **🎨 Design canvas**, with the model picker, mode, and **Send** grouped on the right.
+- The **＋ Add** menu gathers the insert/capture actions under one entry point: Add context (`@`), Attach files/images, Browse the web, Screenshot, Screen recording, and Computer control. (While recording, the ＋ button shows the red pulse and the menu item flips to "Stop recording".)
+- Removed the redundant buttons: **Upload** (merged into Attach), **Settings** (already in the header), and **Regenerate** (already available on hover of the last reply). Design canvas stays a permanent button.
+
+
 ## 1.81.0
 
 ### Steer messages show in the conversation immediately
