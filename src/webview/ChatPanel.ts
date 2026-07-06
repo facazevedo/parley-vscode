@@ -14,7 +14,7 @@ import {
 } from '../commands/common';
 import { totalCharacters } from '../context/contextPreview';
 import { parseRuleFile, ruleApplies } from '../context/rulesDir';
-import { collectClaudeMemory } from '../context/claudeMemory';
+import { collectAgentMemory } from '../context/agentMemory';
 import { terminalSnapshot } from '../context/terminalLog';
 import { diagnosticsSnapshot } from '../context/diagnostics';
 import { loadProjectMemory } from '../context/projectMemory';
@@ -4114,8 +4114,9 @@ export class ChatPanel implements vscode.WebviewViewProvider {
    * plus directory rules from `.parley/rules/` and `.cursor/rules/`. Glob-scoped
    * rules attach when the active editor file — or ANY file the agent has read or
    * edited this conversation — matches their frontmatter globs (Cursor-compatible).
-   * CLAUDE.md is gathered separately with full Claude Code loading semantics
-   * (global + hierarchy + subtree + @imports) so Claude Code repos work as-is.
+   * CLAUDE.md (Claude Code) and GEMINI.md (Gemini CLI) are gathered separately
+   * with their full loading semantics (global + hierarchy + subtree + @imports)
+   * so repos set up for those agents work as-is.
    */
   private async readProjectRules(): Promise<string | undefined> {
     const folders = vscode.workspace.workspaceFolders ?? [];
@@ -4175,9 +4176,10 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         }
       }
     }
-    // CLAUDE.md memory (Claude Code semantics): global + hierarchy + subtree, imports inlined.
+    // Agent memory (Claude Code CLAUDE.md + Gemini CLI GEMINI.md semantics):
+    // global + hierarchy + subtree, imports inlined.
     try {
-      const claudeMemory = await collectClaudeMemory({
+      const agentMemory = await collectAgentMemory({
         workspaceFolders: folders.map((f) => f.uri.fsPath),
         activeFile: active && active.uri.scheme === 'file' ? active.uri.fsPath : undefined,
         touchedFiles: this.executor.touchedFiles(),
@@ -4190,8 +4192,8 @@ export class ChatPanel implements vscode.WebviewViewProvider {
           }
         }
       });
-      if (claudeMemory) {
-        parts.push(claudeMemory);
+      if (agentMemory) {
+        parts.push(agentMemory);
       }
     } catch {
       // Memory gathering is best-effort — never block a turn on it.

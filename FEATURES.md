@@ -275,8 +275,9 @@ Right-click **Parley** submenu and the **`Ctrl+.`** lightbulb (on a selection):
 - **Project rules** — `.parleyrules` / `AGENTS.md` / `.cursorrules` (first match wins), and per-rule
   files under `.parley/rules` / `.cursor/rules`. **Init Project Rules** analyzes the repo → a tailored
   `AGENTS.md`. Reading `AGENTS.md`/`.cursorrules` lets Codex/Cursor repos work with zero migration.
-- **`CLAUDE.md` (Claude Code semantics)** — always-on memory: global `~/.claude/CLAUDE.md` + project
-  hierarchy (root → home) + subtree files, with recursive `@path` imports (≤5 hops, cycle-safe). Claude Code repos work as-is.
+- **`CLAUDE.md` / `GEMINI.md` (Claude Code / Gemini CLI semantics)** — always-on memory: global
+  (`~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md`) + project hierarchy (root → home) + subtree files, with recursive
+  `@path` imports (≤5 hops, cycle-safe). Claude Code and Gemini CLI repos work as-is.
 - **Skills** — reusable capabilities the agent loads on demand (`load_skill`); **Create Skill**.
 - **Custom slash commands** — drop `name.md` in `.parley/commands/` (or `.claude/commands/`,
   or the global variants) → `/name`, with `$ARGS` and `$SELECTION` substitution. Built-in

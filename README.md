@@ -684,20 +684,21 @@ Scaffold one with **`Parley: Init Project Rules`** (or `/init`). Reading
 `AGENTS.md` (Codex) and `.cursorrules` (Cursor) means repos set up for those
 agents work in Parley with zero migration.
 
-**`CLAUDE.md` (full Claude Code semantics).** `CLAUDE.md` is treated as always‑on
-memory — not one of the mutually‑exclusive files above — and Parley loads it the
-way Claude Code does:
+**`CLAUDE.md` & `GEMINI.md` (Claude Code / Gemini CLI semantics).** These are
+treated as always‑on memory — not one of the mutually‑exclusive files above — and
+Parley loads them exactly the way those tools do:
 
-- **Global** `~/.claude/CLAUDE.md`, then the **project hierarchy** (`CLAUDE.md`
-  from each workspace root up to your home directory), then **subtree** files
-  (`CLAUDE.md` in the folders of files opened/edited this conversation — handy in
-  monorepos). More‑general files come first; more‑specific ones win.
-- **`@path` imports** — a `CLAUDE.md` can pull in other files with `@relative`,
+- **Global** (`~/.claude/CLAUDE.md`, `~/.gemini/GEMINI.md`), then the **project
+  hierarchy** (the file from each workspace root up to your home directory), then
+  **subtree** files (in the folders of files opened/edited this conversation —
+  handy in monorepos). More‑general files come first; more‑specific ones win.
+- **`@path` imports** — a memory file can pull in others with `@relative`,
   `@/absolute`, or `@~/home` paths, resolved recursively (up to 5 hops,
   cycle‑safe). Imports inside code fences / inline `code` and escaped `\@` are
   ignored.
 
-So a repo already set up for Claude Code works in Parley with zero migration.
+So a repo already set up for Claude Code or Gemini CLI works in Parley with zero
+migration.
 
 **Rules directory (glob‑scoped).** Files in **`.parley/rules/`** or
 **`.cursor/rules/`** (`.md`/`.mdc`) are each one rule, with optional frontmatter:

@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as path from 'path';
-import { collectClaudeMemory, expandTilde, extractImports, type FileReader } from '../src/context/claudeMemory';
+import {
+  collectAgentMemory,
+  expandTilde,
+  extractImports,
+  GEMINI_MEMORY,
+  type FileReader
+} from '../src/context/agentMemory';
 
 test('extractImports finds imports, dedupes, preserves order', () => {
   assert.deepEqual(extractImports('See @docs/a.md and @docs/b.md, and @docs/a.md again.'), [
@@ -26,7 +32,7 @@ test('expandTilde expands ~ and ~/... only', () => {
   assert.equal(expandTilde('foo/bar.md', home), 'foo/bar.md');
 });
 
-// ---- collectClaudeMemory (reader-injected, no real fs) ----
+// ---- collectAgentMemory (reader-injected, no real fs) ----
 
 const BASE = path.join(path.resolve('/'), 'pvsc-fake');
 const HOME = path.join(BASE, 'home', 'me');
@@ -45,7 +51,7 @@ function makeReader(files: Record<string, string>): FileReader {
   return async (absPath) => map.get(key(absPath));
 }
 
-test('collectClaudeMemory orders global -> hierarchy -> subtree', async () => {
+test('collectAgentMemory orders global -> hierarchy -> subtree', async () => {
   const read = makeReader({
     [path.join(HOME, '.claude', 'CLAUDE.md')]: 'GLOBAL',
     [path.join(HOME, 'CLAUDE.md')]: 'HOME',
@@ -54,7 +60,7 @@ test('collectClaudeMemory orders global -> hierarchy -> subtree', async () => {
     [path.join(ROOT, 'pkg', 'app', 'CLAUDE.md')]: 'APP'
   });
   const out =
-    (await collectClaudeMemory({
+    (await collectAgentMemory({
       workspaceFolders: [ROOT],
       activeFile: path.join(ROOT, 'pkg', 'app', 'index.ts'),
       home: HOME,
@@ -68,41 +74,65 @@ test('collectClaudeMemory orders global -> hierarchy -> subtree', async () => {
   assert.deepEqual(order, [...order].sort((a, b) => a - b), 'sections in general->specific order');
 });
 
-test('collectClaudeMemory inlines @imports relative to the importing file', async () => {
+test('collectAgentMemory inlines @imports relative to the importing file', async () => {
   const read = makeReader({
     [path.join(ROOT, 'CLAUDE.md')]: 'ROOT rules\n@./docs/extra.md',
     [path.join(ROOT, 'docs', 'extra.md')]: 'EXTRA CONTENT'
   });
-  const out = (await collectClaudeMemory({ workspaceFolders: [ROOT], home: HOME, read })) ?? '';
+  const out = (await collectAgentMemory({ workspaceFolders: [ROOT], home: HOME, read })) ?? '';
   assert.ok(out.includes('ROOT rules'));
   assert.ok(out.includes('EXTRA CONTENT'), 'imported file inlined');
 });
 
-test('collectClaudeMemory is cycle-safe', async () => {
+test('collectAgentMemory is cycle-safe', async () => {
   const read = makeReader({
     [path.join(ROOT, 'CLAUDE.md')]: 'A start @./b.md',
     [path.join(ROOT, 'b.md')]: 'B start @./CLAUDE.md'
   });
-  const out = (await collectClaudeMemory({ workspaceFolders: [ROOT], home: HOME, read })) ?? '';
+  const out = (await collectAgentMemory({ workspaceFolders: [ROOT], home: HOME, read })) ?? '';
   assert.ok(out.includes('A start'));
   assert.ok(out.includes('B start'));
   // 'A start' inlined once (the cycle back to CLAUDE.md is not re-expanded).
   assert.equal(out.split('A start').length - 1, 1);
 });
 
-test('collectClaudeMemory stops import recursion past the depth limit', async () => {
+test('collectAgentMemory stops import recursion past the depth limit', async () => {
   const files: Record<string, string> = {};
   for (let i = 0; i <= 7; i += 1) {
     files[path.join(ROOT, `f${i}.md`)] = `MARK${i} @./f${i + 1}.md`;
   }
   files[path.join(ROOT, 'CLAUDE.md')] = 'TOP @./f0.md';
   const read = makeReader(files);
-  const out = (await collectClaudeMemory({ workspaceFolders: [ROOT], home: HOME, read })) ?? '';
+  const out = (await collectAgentMemory({ workspaceFolders: [ROOT], home: HOME, read })) ?? '';
   assert.ok(out.includes('MARK4'), 'files within depth are inlined');
   assert.ok(!out.includes('MARK6'), 'files past the depth limit are not inlined');
 });
 
-test('collectClaudeMemory returns undefined when nothing is found', async () => {
-  const out = await collectClaudeMemory({ workspaceFolders: [ROOT], home: HOME, read: async () => undefined });
+test('collectAgentMemory returns undefined when nothing is found', async () => {
+  const out = await collectAgentMemory({ workspaceFolders: [ROOT], home: HOME, read: async () => undefined });
   assert.equal(out, undefined);
+});
+
+test('collectAgentMemory loads GEMINI.md (Gemini CLI) alongside CLAUDE.md by default', async () => {
+  const read = makeReader({
+    [path.join(HOME, '.claude', 'CLAUDE.md')]: 'CLAUDE GLOBAL',
+    [path.join(ROOT, 'CLAUDE.md')]: 'CLAUDE ROOT',
+    [path.join(HOME, '.gemini', 'GEMINI.md')]: 'GEMINI GLOBAL',
+    [path.join(ROOT, 'GEMINI.md')]: 'GEMINI ROOT'
+  });
+  const out = (await collectAgentMemory({ workspaceFolders: [ROOT], home: HOME, read })) ?? '';
+  for (const marker of ['CLAUDE GLOBAL', 'CLAUDE ROOT', 'GEMINI GLOBAL', 'GEMINI ROOT']) {
+    assert.ok(out.includes(marker), `${marker} present`);
+  }
+});
+
+test('collectAgentMemory honors a single spec (GEMINI.md only)', async () => {
+  const read = makeReader({
+    [path.join(ROOT, 'CLAUDE.md')]: 'CLAUDE ROOT',
+    [path.join(HOME, '.gemini', 'GEMINI.md')]: 'GEMINI GLOBAL',
+    [path.join(ROOT, 'GEMINI.md')]: 'GEMINI ROOT'
+  });
+  const out = (await collectAgentMemory({ workspaceFolders: [ROOT], home: HOME, read }, [GEMINI_MEMORY])) ?? '';
+  assert.ok(out.includes('GEMINI GLOBAL') && out.includes('GEMINI ROOT'));
+  assert.ok(!out.includes('CLAUDE ROOT'), 'CLAUDE.md not read when only the Gemini spec is requested');
 });

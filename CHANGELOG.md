@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.79.0
+
+### GEMINI.md support (Gemini CLI migration)
+
+- Parley now also reads **`GEMINI.md`** so repos set up for **Gemini CLI** work with zero migration — using the same always-on memory model as `CLAUDE.md`: global `~/.gemini/GEMINI.md`, the project hierarchy (each workspace root up to home), subtree files, and recursive `@path` imports (≤5 hops, cycle-safe).
+- Internally, the CLAUDE.md loader was generalized into a spec-driven agent-memory loader (`src/context/agentMemory.ts`) that handles both conventions (and is trivial to extend to future ones).
+
+
 ## 1.78.0
 
 ### CLAUDE.md support (full Claude Code loading semantics)

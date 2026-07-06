@@ -1,37 +1,53 @@
 import * as path from 'path';
 
 /**
- * Emulates Claude Code's `CLAUDE.md` loading semantics for the system prompt.
- * Unlike the single mutually-exclusive rules file (.parleyrules / AGENTS.md /
- * .cursorrules), CLAUDE.md is treated as always-on memory and is gathered from
- * several places, in order of increasing specificity:
+ * Emulates the "instruction/memory file" loading semantics shared by Claude Code
+ * (`CLAUDE.md`) and Gemini CLI (`GEMINI.md`). Unlike the single mutually-exclusive
+ * rules file (.parleyrules / AGENTS.md / .cursorrules), these files are always-on
+ * memory gathered from several places, in order of increasing specificity:
  *
- *   1. Global user memory — `~/.claude/CLAUDE.md`.
- *   2. Project hierarchy — `CLAUDE.md` from each workspace root walking UP to the
+ *   1. Global user memory — `~/<globalSubdir>/<fileName>` (e.g. ~/.claude/CLAUDE.md,
+ *      ~/.gemini/GEMINI.md).
+ *   2. Project hierarchy — `<fileName>` from each workspace root walking UP to the
  *      home directory (parent dirs are more general, so they come first).
- *   3. Subtree memory — `CLAUDE.md` in the directories of files opened or touched
+ *   3. Subtree memory — `<fileName>` in the directories of files opened or touched
  *      this conversation, loaded on demand (monorepo/package-level rules).
  *
  * Each file may pull in others with `@path` imports (relative, absolute, or
  * `~`-rooted), resolved recursively up to {@link MAX_IMPORT_DEPTH} hops and
  * cycle-safe. Imports inside fenced code blocks or inline `code spans`, and
- * escaped `\@` references, are ignored — matching Claude Code.
+ * escaped `\@` references, are ignored — matching both tools.
  *
  * The pure pieces ({@link extractImports}, {@link expandTilde}) and the reader-
- * injected {@link collectClaudeMemory} are unit-testable without a real fs.
+ * injected {@link collectAgentMemory} are unit-testable without a real fs.
  */
+
+/** An agent's instruction-file convention: the file name + its global home dir. */
+export interface MemorySpec {
+  /** The instruction file name (e.g. 'CLAUDE.md', 'GEMINI.md'). */
+  readonly fileName: string;
+  /** The home-relative dir holding the global file (e.g. '.claude', '.gemini'). */
+  readonly globalSubdir: string;
+}
+
+/** Claude Code — `~/.claude/CLAUDE.md` + the `CLAUDE.md` hierarchy. */
+export const CLAUDE_MEMORY: MemorySpec = { fileName: 'CLAUDE.md', globalSubdir: '.claude' };
+/** Gemini CLI — `~/.gemini/GEMINI.md` + the `GEMINI.md` hierarchy. */
+export const GEMINI_MEMORY: MemorySpec = { fileName: 'GEMINI.md', globalSubdir: '.gemini' };
+/** All agent-memory conventions Parley honors, so Claude Code / Gemini CLI repos work as-is. */
+export const AGENT_MEMORY_SPECS: readonly MemorySpec[] = [CLAUDE_MEMORY, GEMINI_MEMORY];
 
 /** Max `@import` recursion depth (Claude Code caps hops at 5). */
 export const MAX_IMPORT_DEPTH = 5;
 /** Per-file injection cap, matching the per-source cap used elsewhere. */
-export const MAX_CLAUDE_FILE_CHARS = 8000;
-/** Combined cap across all CLAUDE.md memory. */
-export const MAX_CLAUDE_MEMORY_CHARS = 12000;
+export const MAX_MEMORY_FILE_CHARS = 8000;
+/** Combined cap across all agent-memory files. */
+export const MAX_MEMORY_CHARS = 12000;
 
 /** Reads a file's UTF-8 content, or resolves to undefined when absent/unreadable. */
 export type FileReader = (absPath: string) => Promise<string | undefined>;
 
-export interface ClaudeMemoryInput {
+export interface AgentMemoryInput {
   /** Absolute fs paths of the workspace roots. */
   readonly workspaceFolders: readonly string[];
   /** Absolute fs path of the active editor file, if any. */
@@ -56,7 +72,7 @@ export function expandTilde(p: string, home: string): string {
 }
 
 /**
- * Extract `@path` import references from CLAUDE.md content. An import is `@` at
+ * Extract `@path` import references from memory-file content. An import is `@` at
  * line start or after whitespace; references inside fenced (``` / ~~~) code
  * blocks or inline `code spans` are skipped, and a leading backslash (`\@`)
  * escapes it. Order-preserving and de-duplicated.
@@ -107,7 +123,7 @@ function isUnder(child: string, parent: string): boolean {
 }
 
 /**
- * Read one CLAUDE.md and inline its imports recursively. `seen` guards against
+ * Read one memory file and inline its imports recursively. `seen` guards against
  * cycles and double-inclusion (shared across the whole collection). Returns
  * undefined when the file is missing, empty, or already included.
  */
@@ -127,7 +143,7 @@ async function resolveFile(
   if (raw === undefined || !raw.trim()) {
     return undefined;
   }
-  let out = raw.trim().slice(0, MAX_CLAUDE_FILE_CHARS);
+  let out = raw.trim().slice(0, MAX_MEMORY_FILE_CHARS);
   if (depth < MAX_IMPORT_DEPTH) {
     const baseDir = path.dirname(path.normalize(absPath));
     for (const imp of extractImports(raw)) {
@@ -142,20 +158,20 @@ async function resolveFile(
   return out;
 }
 
-/** Ordered list of candidate CLAUDE.md paths (general → specific), with duplicates removed later. */
-function candidatePaths(input: ClaudeMemoryInput): string[] {
+/** Ordered list of candidate memory-file paths for one spec (general → specific). */
+function candidatePaths(input: AgentMemoryInput, spec: MemorySpec): string[] {
   const { workspaceFolders, home } = input;
   const candidates: string[] = [];
 
   // 1. Global user memory.
-  candidates.push(path.join(home, '.claude', 'CLAUDE.md'));
+  candidates.push(path.join(home, spec.globalSubdir, spec.fileName));
 
   // 2. Project hierarchy: each root walking UP to the home dir (topmost first).
   for (const folder of workspaceFolders) {
     const chain: string[] = [];
     let dir = path.normalize(folder);
     for (let i = 0; i < 40; i += 1) {
-      chain.push(path.join(dir, 'CLAUDE.md'));
+      chain.push(path.join(dir, spec.fileName));
       if (samePath(dir, home)) {
         break;
       }
@@ -182,7 +198,7 @@ function candidatePaths(input: ClaudeMemoryInput): string[] {
     const chain: string[] = [];
     let dir = path.dirname(path.normalize(file));
     for (let i = 0; i < 40 && !samePath(dir, root) && isUnder(dir, root); i += 1) {
-      chain.push(path.join(dir, 'CLAUDE.md'));
+      chain.push(path.join(dir, spec.fileName));
       const parent = path.dirname(dir);
       if (parent === dir) {
         break;
@@ -197,18 +213,24 @@ function candidatePaths(input: ClaudeMemoryInput): string[] {
 }
 
 /**
- * Gather all applicable CLAUDE.md memory, imports inlined, capped for injection.
- * Returns undefined when nothing is found.
+ * Gather all applicable agent memory across the given specs (CLAUDE.md + GEMINI.md
+ * by default), imports inlined, deduped, and capped for injection. Returns
+ * undefined when nothing is found.
  */
-export async function collectClaudeMemory(input: ClaudeMemoryInput): Promise<string | undefined> {
-  const seen = new Set<string>();
+export async function collectAgentMemory(
+  input: AgentMemoryInput,
+  specs: readonly MemorySpec[] = AGENT_MEMORY_SPECS
+): Promise<string | undefined> {
+  const seen = new Set<string>(); // dedups shared imports across specs too
   const sections: string[] = [];
-  for (const candidate of candidatePaths(input)) {
-    const text = await resolveFile(candidate, input.read, input.home, 0, seen);
-    if (text && text.trim()) {
-      sections.push(text.trim());
+  for (const spec of specs) {
+    for (const candidate of candidatePaths(input, spec)) {
+      const text = await resolveFile(candidate, input.read, input.home, 0, seen);
+      if (text && text.trim()) {
+        sections.push(text.trim());
+      }
     }
   }
   const combined = sections.join('\n\n').trim();
-  return combined ? combined.slice(0, MAX_CLAUDE_MEMORY_CHARS) : undefined;
+  return combined ? combined.slice(0, MAX_MEMORY_CHARS) : undefined;
 }
