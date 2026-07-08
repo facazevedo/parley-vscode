@@ -79,6 +79,12 @@ export function activate(context: vscode.ExtensionContext): void {
     defaultAgent: settings.defaultAgent,
     mode: settings.defaultMode
   });
+  const secondarySidebarSupported = supportsSecondarySidebar(vscode.version);
+  void vscode.commands.executeCommand(
+    'setContext',
+    'parley.doesNotSupportSecondarySidebar',
+    !secondarySidebarSupported
+  );
   context.subscriptions.push(logger);
   activateTerminalLog(context); // for the @terminal mention (feature-detected)
   activateRecentEdits(context); // recent-edit context for ghost-text completions
@@ -171,6 +177,9 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.registerWebviewViewProvider(ChatPanel.viewType, chatPanel, {
       webviewOptions: { retainContextWhenHidden: true }
     }),
+    vscode.window.registerWebviewViewProvider(ChatPanel.secondaryViewType, chatPanel, {
+      webviewOptions: { retainContextWhenHidden: true }
+    }),
     vscode.languages.registerInlineCompletionItemProvider(
       { pattern: '**' },
       new ParleyInlineCompletionProvider(
@@ -181,10 +190,14 @@ export function activate(context: vscode.ExtensionContext): void {
       )
     ),
     vscode.commands.registerCommand('parley.openChatWindow', async () => {
+      if (secondarySidebarSupported) {
+        await vscode.commands.executeCommand(`${ChatPanel.secondaryViewType}.focus`);
+        return;
+      }
       await vscode.commands.executeCommand('workbench.view.extension.parley');
-      await vscode.commands.executeCommand('parley.chatView.focus');
-      await vscode.window.showInformationMessage(
-        'Parley is open. To dock it like Codex, drag the Parley view header into the Secondary Side Bar, or use View: Toggle Secondary Side Bar Visibility first.'
+      await vscode.commands.executeCommand(`${ChatPanel.viewType}.focus`);
+      await vscode.window.showWarningMessage(
+        'Secondary Sidebar is not supported in this VS Code version. Opening Parley in the Activity Bar instead.'
       );
     }),
     vscode.commands.registerCommand('parley.reconnectMcp', async () => {
@@ -423,6 +436,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
 /** Workspace-wide keys every chat shares (the command allowlist must not fragment per tab). */
 const SHARED_MEMENTO_KEYS = new Set(['parley.allowedCommands', 'parley.promptHistory']);
+
+function supportsSecondarySidebar(version: string): boolean {
+  const [major = 0, minor = 0] = version.split('.').map((part) => Number.parseInt(part, 10));
+  return major > 1 || (major === 1 && minor >= 106);
+}
 
 /** A Memento view whose keys are namespaced, so tab conversations don't share sidebar state. */
 function prefixedMemento(base: vscode.Memento, prefix: string): vscode.Memento {

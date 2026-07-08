@@ -61,7 +61,16 @@
         {
           "id": "parley",
           "title": "Parley",
-          "icon": "resources/parley.svg"
+          "icon": "resources/parley.svg",
+          "when": "parley.doesNotSupportSecondarySidebar"
+        }
+      ],
+      "secondarySidebar": [
+        {
+          "id": "parleySecondary",
+          "title": "Parley",
+          "icon": "resources/parley.svg",
+          "when": "!parley.doesNotSupportSecondarySidebar"
         }
       ]
     },
@@ -70,7 +79,16 @@
         {
           "type": "webview",
           "id": "parley.chatView",
-          "name": "Chat"
+          "name": "Parley",
+          "when": "parley.doesNotSupportSecondarySidebar"
+        }
+      ],
+      "parleySecondary": [
+        {
+          "type": "webview",
+          "id": "parley.chatViewSecondary",
+          "name": "Parley",
+          "when": "!parley.doesNotSupportSecondarySidebar"
         }
       ]
     },
@@ -594,7 +612,7 @@
           {
             "id": "parley.step.openChat",
             "title": "Open the chat",
-            "description": "The Parley chat lives in the activity bar. Ask anything about your code — replies stream in with token and cost counters in the header.\n[Open Parley Chat](command:parley.chatView.focus)",
+            "description": "The Parley chat opens beside VS Code Chat, Claude Code, and Codex when your VS Code version supports the secondary sidebar. Older builds use the Parley activity-bar view.\n[Open Parley Chat](command:parley.openChatWindow)",
             "media": {
               "markdown": "resources/walkthrough/open-chat.md"
             },

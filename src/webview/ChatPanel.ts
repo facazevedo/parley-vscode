@@ -305,6 +305,18 @@ interface SavedSession {
 
 export class ChatPanel implements vscode.WebviewViewProvider {
   public static readonly viewType = 'parley.chatView';
+  public static readonly secondaryViewType = 'parley.chatViewSecondary';
+
+  public static async revealSidebarChat(): Promise<void> {
+    try {
+      await vscode.commands.executeCommand(`${ChatPanel.secondaryViewType}.focus`);
+      return;
+    } catch {
+      // Older VS Code builds do not know the secondary sidebar contribution.
+    }
+    await vscode.commands.executeCommand('workbench.view.extension.parley');
+    await vscode.commands.executeCommand(`${ChatPanel.viewType}.focus`);
+  }
 
   // The hosting surface: the sidebar WebviewView, or an editor-tab WebviewPanel.
   private view?: { readonly webview: vscode.Webview };
@@ -684,8 +696,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
   public async newConversation(): Promise<void> {
     this.turns.abort();
     await this.startNewConversation();
-    await vscode.commands.executeCommand('workbench.view.extension.parley');
-    await vscode.commands.executeCommand('parley.chatView.focus');
+    await ChatPanel.revealSidebarChat();
   }
 
   /** Reveal the auto-save folder in the OS file manager. */
@@ -769,8 +780,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
    * turn into the conversation using the supplied context options.
    */
   public async submitExternalPrompt(prompt: string, options: ContextOptions): Promise<void> {
-    await vscode.commands.executeCommand('workbench.view.extension.parley');
-    await vscode.commands.executeCommand('parley.chatView.focus');
+    await ChatPanel.revealSidebarChat();
     await this.ready;
     await this.runTurn(prompt, { ...DEFAULT_CONTEXT_OPTIONS, ...options });
   }
@@ -781,8 +791,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
    * and the design canvas auto-opens with the rendered result.
    */
   public async startImageToUi(dataUri: string, name: string): Promise<void> {
-    await vscode.commands.executeCommand('workbench.view.extension.parley');
-    await vscode.commands.executeCommand('parley.chatView.focus');
+    await ChatPanel.revealSidebarChat();
     await this.ready;
     await this.addPastedFile(dataUri, name);
     await this.postToComposer({
@@ -2134,8 +2143,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
         this.hostPanel.reveal(undefined, false);
       }
     } else {
-      await vscode.commands.executeCommand('workbench.view.extension.parley');
-      await vscode.commands.executeCommand('parley.chatView.focus');
+      await ChatPanel.revealSidebarChat();
     }
     await this.ready;
   }
@@ -3463,8 +3471,7 @@ export class ChatPanel implements vscode.WebviewViewProvider {
     this.sessionCost = 0;
     this.highUsageWarned = false;
     await this.checkpoints.bind(this.parleyBase(), this.conversationId);
-    await vscode.commands.executeCommand('workbench.view.extension.parley');
-    await vscode.commands.executeCommand('parley.chatView.focus');
+    await ChatPanel.revealSidebarChat();
     await this.ready;
     await this.postState();
   }
