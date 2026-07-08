@@ -150,9 +150,17 @@ for the API itself**. Touchstone only gates the Parley web app where you create 
 
 **From a packaged VSIX:**
 
+Download the latest `parley-vscode-<version>.vsix` from the
+[GitHub Releases](https://github.com/facazevedo/parley-vscode/releases) page.
+
+Install it from the command line:
+
 ```bash
 code --install-extension parley-vscode-<version>.vsix
 ```
+
+Or in VS Code: open **Extensions** → **...** → **Install from VSIX...** and choose
+the downloaded file.
 
 Then reload the window (Command Palette → **Developer: Reload Window**). VS Code does
 not hot‑swap an extension; the reload is required after every (re)install.
