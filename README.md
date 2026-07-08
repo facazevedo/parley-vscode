@@ -81,9 +81,7 @@ Built around a `ParleyProvider` abstraction, so the UI, context collection, diff
 
 ## How Parley compares
 
-Parley is a VS Code **extension** over MIT's OpenAI‑compatible **Parley** gateway. Compare it
-with the surfaces users are likely to choose alongside it: Anthropic's
-**Claude Code for VS Code**, OpenAI's **Codex for VS Code**, and **Cursor**. At a glance:
+Parley is a VS Code **extension** over MIT's OpenAI‑compatible **Parley** gateway. At a glance:
 
 | Capability                              | Parley for VS Code                                  | Claude Code for VS Code | Codex for VS Code | Cursor            |
 | --------------------------------------- | --------------------------------------------------- | ----------------------- | ----------------- | ----------------- |
