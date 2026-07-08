@@ -85,11 +85,9 @@ Parley for VS Code is a VS Code **extension** over MIT's OpenAI‑compatible **P
 
 | Capability                              | Parley for VS Code                                  | Claude Code for VS Code | Codex for VS Code | Cursor            |
 | --------------------------------------- | --------------------------------------------------- | ----------------------- | ----------------- | ----------------- |
-| **Form & backend**                      |                                                     |                         |                   |                   |
 | Delivery                                | VS Code extension                                   | VS Code extension       | VS Code extension | Standalone editor |
 | Models                                  | Any on the Parley gateway (Claude · GPT · Gemini …) | Anthropic Claude        | OpenAI            | Multiple (hosted) |
 | Source                                  | Open (MIT)                                          | Proprietary             | OpenAI            | Proprietary       |
-| **Agent**                               |                                                     |                         |                   |                   |
 | Agentic edit loop + modes               | ✅ (6 modes)                                        | ✅                      | ✅                | ✅                |
 | Diff‑review + checkpoints / rewind      | ✅                                                  | ✅                      | ◐                 | ✅                |
 | Command execution                       | ✅ allowlist                                        | ✅ allowlist/sandbox    | ✅ OS sandbox     | ✅                |
@@ -97,19 +95,16 @@ Parley for VS Code is a VS Code **extension** over MIT's OpenAI‑compatible **P
 | In‑session subagents                    | ✅ local (+ parallel)                               | ✅                      | ✅                | ✅                |
 | Computer use (mouse/keyboard)           | ✅ opt‑in (Win / nut.js)                            | ◐ (beta)                | ◐ cloud           | ✗                 |
 | Background / cloud agents               | ✗ (out of scope)                                    | ✅                      | ✅                | ✅                |
-| **Context & retrieval**                 |                                                     |                         |                   |                   |
 | @‑mentions + codebase retrieval         | ✅                                                  | ✅                      | ✅                | ✅                |
 | Semantic index                          | ✅ on‑device                                        | ◐ agentic grep          | ◐ agentic grep    | ✅ server‑side    |
 | Rules files                             | ✅ (+ globs)                                        | ✅ (CLAUDE.md)          | ✅ (AGENTS.md)    | ✅ (+ memories)   |
 | MCP                                     | ✅ stdio · HTTP · SSE                               | ✅ (+ OAuth)            | ✅                | ✅                |
-| **Editor UX**                           |                                                     |                         |                   |                   |
 | Inline "Tab" completion (trained model) | ◐ ghost‑text                                        | ✗                       | ✗                 | ✅                |
 | Multimodal in / out                     | ✅ image·PDF·audio·**video**·**voice·screen**       | ◐ image · PDF           | ◐ image           | ◐ image           |
-| **Ecosystem & safety**                  |                                                     |                         |                   |                   |
 | Hooks                                   | ✅ (4 events)                                       | ✅                      | ◐                 | ✗                 |
 | Browser control                         | ✅ local Chromium                                   | ✅ (companion)          | ◐                 | ◐                 |
 | Outbound secret scanning                | ✅ redact                                           | ◐ file‑level            | ◐ file‑level      | ◐ file‑level      |
-| Full on‑disk event transcripts          | ✅ (JSONL + export)                                 | ◐                      | ◐                 | ◐                 |
+| Full on‑disk event transcripts          | ✅ (JSONL + export)                                 | ◐                       | ◐                 | ◐                 |
 
 **✅ supported · ◐ partial or different approach · ✗ not available.** Parley's column reflects
 the current code (v1.5.0). Competitor columns reflect publicly documented capabilities as of
