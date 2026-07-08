@@ -58,7 +58,7 @@ export interface SendMessageOptions {
 
 export interface ParleyProvider {
   readonly id: string;
-  listAgents(): Promise<readonly AgentInfo[]>;
+  listAgents(signal?: AbortSignal): Promise<readonly AgentInfo[]>;
   sendMessage(request: ChatRequest, options?: SendMessageOptions): Promise<ChatResponse>;
   complete(request: CompletionRequest, signal?: AbortSignal): Promise<string>;
   generateImage(request: ImageRequest, signal?: AbortSignal): Promise<ImageResult>;

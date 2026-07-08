@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import type { CommandDependencies } from './common';
 
+const VERIFY_API_KEY_TIMEOUT_MS = 15_000;
+
 export function registerSetApiKeyCommand(context: vscode.ExtensionContext, deps: CommandDependencies): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('parley.setApiKey', async () => {
@@ -32,24 +34,38 @@ export function registerSetApiKeyCommand(context: vscode.ExtensionContext, deps:
       deps.logger.info('Parley API key stored in SecretStorage.');
 
       // Verify the key against the live endpoint so the user gets immediate feedback.
-      await vscode.window.withProgress(
+      const result = await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: 'Verifying Parley API key…' },
         async () => {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), VERIFY_API_KEY_TIMEOUT_MS);
           try {
-            const agents = await deps.getProvider().listAgents();
-            await vscode.window.showInformationMessage(
-              `Parley API key saved and verified. ${agents.length} model(s) available.`
-            );
+            const agents = await deps.getProvider().listAgents(controller.signal);
+            return { ok: true as const, agents: agents.length };
           } catch (error) {
-            deps.logger.warn(error instanceof Error ? error.message : 'Could not verify Parley API key.');
-            await vscode.window.showWarningMessage(
-              `Parley API key saved, but verification failed: ${
-                error instanceof Error ? error.message : 'unknown error'
-              }`
-            );
+            const message = verificationErrorMessage(error);
+            deps.logger.warn(message);
+            return { ok: false as const, message };
+          } finally {
+            clearTimeout(timeout);
           }
         }
       );
+
+      if (result.ok) {
+        await vscode.window.showInformationMessage(
+          `Parley API key saved and verified. ${result.agents} model(s) available.`
+        );
+      } else {
+        await vscode.window.showWarningMessage(`Parley API key saved, but verification failed: ${result.message}`);
+      }
     })
   );
+}
+
+function verificationErrorMessage(error: unknown): string {
+  if ((error as { name?: string })?.name === 'AbortError') {
+    return `verification timed out after ${VERIFY_API_KEY_TIMEOUT_MS / 1000}s. Check your network or VPN, then try the model picker or run "Parley: Set API Key" again.`;
+  }
+  return error instanceof Error ? error.message : 'unknown error';
 }

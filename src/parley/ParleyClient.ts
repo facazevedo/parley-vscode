@@ -130,8 +130,8 @@ export class ParleyClient implements ParleyProvider {
     this.baseUrl = endpoint.replace(/\/+$/, '');
   }
 
-  public async listAgents(): Promise<readonly AgentInfo[]> {
-    const response = await this.request('/models', { method: 'GET' });
+  public async listAgents(signal?: AbortSignal): Promise<readonly AgentInfo[]> {
+    const response = await this.request('/models', { method: 'GET', signal });
     const payload = (await response.json()) as OpenAiModelList;
 
     const agents: AgentInfo[] = (payload.data ?? [])
