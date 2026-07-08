@@ -1,8 +1,10 @@
-# Parley for VS Code
+<div align="center">
 
-A workspace-aware AI coding assistant for VS Code, powered by MIT’s Parley gateway.
+<h1>Parley for VS Code</h1>
 
-Parley for VS Code brings streaming chat, multimodal context, agentic code editing, and diff-reviewed changes directly into VS Code.
+<p><strong>A workspace-aware AI coding assistant for VS Code, powered by MIT’s Parley gateway.</strong><br/>
+Parley for VS Code brings streaming chat, multimodal context, agentic code editing,<br/>
+and diff-reviewed changes directly into VS Code.</p>
 
 <p>
   <a href="CHANGELOG.md"><img alt="Version" src="https://img.shields.io/badge/version-1.51.0-A31F34"></a>
@@ -11,6 +13,8 @@ Parley for VS Code brings streaming chat, multimodal context, agentic code editi
   <img alt="Tests" src="https://img.shields.io/badge/tests-388%20passing-2EA043">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-3178C6">
 </p>
+
+</div>
 
 ---
 
