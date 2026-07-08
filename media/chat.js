@@ -2213,6 +2213,39 @@ import { contextSummary, mapReviewKey } from '../src/webview/composerLogic';
     });
   }
 
+  // Question navigator: step through YOUR messages (Prev = older, Next = newer),
+  // highlighting the target and pinning it to the top of the conversation. The index
+  // resets when a message is sent or the transcript re-renders.
+  let navQIdx = null;
+  function userQuestions() {
+    return [...history.querySelectorAll('.message.user:not(.pendingsteer)')];
+  }
+  function resetQNav() {
+    navQIdx = null;
+  }
+  function gotoQuestion(delta) {
+    const qs = userQuestions();
+    if (!qs.length) {
+      return;
+    }
+    if (navQIdx === null) {
+      navQIdx = delta < 0 ? qs.length : -1; // Prev starts at the newest, Next at the oldest
+    }
+    navQIdx = Math.max(0, Math.min(qs.length - 1, navQIdx + delta));
+    qs.forEach((q) => q.classList.remove('qnav-highlight'));
+    const el = qs[navQIdx];
+    el.classList.add('qnav-highlight');
+    el.scrollIntoView({ block: 'start' });
+  }
+  const prevQBtn = $('prevQuestion');
+  if (prevQBtn) {
+    prevQBtn.addEventListener('click', () => gotoQuestion(-1));
+  }
+  const nextQBtn = $('nextQuestion');
+  if (nextQBtn) {
+    nextQBtn.addEventListener('click', () => gotoQuestion(1));
+  }
+
   // ---------- Styled tooltips (replace the OS's native white title box) ----------
   // Any element with a `title` gets a dark, theme-matched tooltip instead. We steal the
   // native title into data-tip on first hover so the OS tooltip never appears; a delegated
