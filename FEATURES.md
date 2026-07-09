@@ -43,7 +43,10 @@ every change diff-reviewed before it touches your files.
   with state-colored dots (message / tool-done / error / running), a "Thought for _N_s"
   reasoning label, and a "Switched to _model_" divider when the model changes mid-turn.
 - **Tool-step inspector** — click any tool step (⏺) to expand the exact arguments and the
-  full raw result.
+  full raw result, **syntax-highlighted** (a `run_command`/`run_tests` command as a shell
+  block, other tools' arguments as JSON, the result auto-detected).
+- **Syntax-highlighted code** — fenced code blocks in replies are colorized via highlight.js,
+  auto-detecting the language when the fence has no tag (works across ~40 common languages).
 - **Conversation switcher** — click the title to search past conversations. Search is
   **full-text across transcripts** (not just titles), with matching snippets, scoped to
   this repo or all repos.

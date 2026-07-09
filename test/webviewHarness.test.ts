@@ -154,3 +154,21 @@ test('diff-review shortcut: plain Enter does not resolve a card (it sends)', () 
   w.doc.dispatchEvent(new w.win.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
   assert.ok(!w.posted.some((m) => m.type === 'applyChange'), 'plain Enter must not apply the pending edit');
 });
+
+test('code fences are syntax-highlighted, including auto-detected (no language tag)', () => {
+  const w = loadWebview();
+  // A user (steer) bubble goes through renderMd; a language-less fence must still colorize.
+  w.send({ type: 'queued', steering: ['```\nfunction hi() { return 42; }\n```'], followUps: [] });
+  const bubble = w.doc.querySelector('.message.user.pendingsteer');
+  assert.ok(bubble, 'bubble rendered');
+  assert.match(bubble!.innerHTML, /class="hljs-/, 'code is auto-highlighted with hljs token spans');
+});
+
+test('run_command tool step shows the command syntax-highlighted', () => {
+  const w = loadWebview();
+  w.send({ type: 'toolEvent', name: 'run_command', args: '{"command":"echo hello world"}' });
+  w.send({ type: 'toolResult', text: 'ok', detail: 'hello world' });
+  const pre = w.doc.querySelector('.toolstep .tooldetail pre');
+  assert.ok(pre, 'expanded command/arguments pane present');
+  assert.match(pre!.innerHTML, /class="hljs-/, 'the command is syntax-highlighted');
+});

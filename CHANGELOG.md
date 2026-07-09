@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.88.0
+
+### Syntax-highlighted code everywhere
+
+- Fenced code blocks in replies now colorize even **without a language tag** — the language is auto-detected across ~40 common languages (previously only tagged fences were highlighted).
+- **Tool steps** are highlighted too: expand a step and the **command** (`run_command`/`run_tests`) is shown as a syntax-highlighted shell block, other tools show their **arguments** as highlighted JSON, and the **result** is auto-highlighted.
+- **Fix:** the tool-step inspector was silently failing to attach (a `settleToolStep()` ordering bug nulled the step before the args/result panes were built), so expanding a step showed nothing — expanding now reliably reveals the (now highlighted) arguments and result.
+
 ## 1.87.1
 
 ### API key verification progress

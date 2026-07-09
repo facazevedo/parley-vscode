@@ -221,20 +221,36 @@ import { contextSummary, mapReviewKey } from '../src/webview/composerLogic';
   }
 
   // ---------- Markdown (markdown-it + highlight.js) ----------
+  function escapeHtml(s) {
+    return String(s).replace(
+      /[&<>"']/g,
+      (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
+    );
+  }
+  // Syntax-highlight to HTML (hljs escapes the code, so the result is safe to inject).
+  // Uses the given language when known, else auto-detects across the bundled ("common")
+  // languages so fences without a tag — and tool output — still get colored. Very large
+  // blocks skip auto-detection (it's O(n·langs)); they just get escaped.
+  function highlightBlock(code, langHint) {
+    const src = String(code);
+    try {
+      if (langHint && hljs.getLanguage(langHint)) {
+        return hljs.highlight(src, { language: langHint, ignoreIllegals: true }).value;
+      }
+      if (src.length <= 50000) {
+        return hljs.highlightAuto(src).value;
+      }
+    } catch (e) {
+      /* fall through to plain escaping */
+    }
+    return escapeHtml(src);
+  }
   const md = new MarkdownIt({
     html: false, // never render raw HTML from the model
     linkify: true,
     breaks: true, // single newlines are line breaks, matching the streamed plain-text look
-    highlight: (code, lang) => {
-      if (lang && hljs.getLanguage(lang)) {
-        try {
-          return hljs.highlight(code, { language: lang, ignoreIllegals: true }).value;
-        } catch (e) {
-          // Fall through to markdown-it's own escaping.
-        }
-      }
-      return '';
-    }
+    // Colour fenced code by its language tag, or auto-detect when none is given.
+    highlight: (code, lang) => highlightBlock(code, lang)
   });
   // Some models (esp. local/open ones without native tool-calling) emit tool calls as
   // TEXT tags — <tool_call>{…}</tool_call> / <tool_response>…</tool_response> — instead of
@@ -747,17 +763,27 @@ import { contextSummary, mapReviewKey } from '../src/webview/composerLogic';
     detail.className = 'tooldetail';
     detail.style.display = 'none';
     if (argsJson) {
+      let parsed = null;
       let pretty = argsJson;
       try {
-        pretty = JSON.stringify(JSON.parse(argsJson), null, 2);
+        parsed = JSON.parse(argsJson);
+        pretty = JSON.stringify(parsed, null, 2);
       } catch {
         /* keep raw */
       }
       const h = document.createElement('div');
       h.className = 'tooldetail-h';
-      h.textContent = 'Arguments';
       const pre = document.createElement('pre');
-      pre.textContent = pretty;
+      pre.className = 'hljs';
+      // For run_command / run_tests the command itself is the star — show it as a
+      // syntax-highlighted shell block; other tools show their JSON args, highlighted.
+      if (parsed && typeof parsed.command === 'string') {
+        h.textContent = 'Command';
+        pre.innerHTML = highlightBlock(parsed.command);
+      } else {
+        h.textContent = 'Arguments';
+        pre.innerHTML = highlightBlock(pretty, 'json');
+      }
       detail.append(h, pre);
     }
     if (detailText) {
@@ -765,7 +791,8 @@ import { contextSummary, mapReviewKey } from '../src/webview/composerLogic';
       h.className = 'tooldetail-h';
       h.textContent = 'Result';
       const pre = document.createElement('pre');
-      pre.textContent = detailText;
+      pre.className = 'hljs';
+      pre.innerHTML = highlightBlock(detailText);
       detail.append(h, pre);
     }
     row.querySelector('.content').append(detail);
@@ -796,15 +823,16 @@ import { contextSummary, mapReviewKey } from '../src/webview/composerLogic';
   }
   // Claude-style "⎿ result" line under its action; settles the step's dot green/red.
   function streamResultLine(text, detailText) {
-    if (!lastToolStep) {
+    const step = lastToolStep; // settleToolStep() nulls lastToolStep — capture it first
+    if (!step) {
       return;
     }
     const line = document.createElement('div');
     line.className = 'toolresult';
     line.textContent = '⎿ ' + text;
-    lastToolStep.querySelector('.content').append(line);
+    step.querySelector('.content').append(line);
     settleToolStep(/^(error|✗|failed|denied)/i.test(text || '') ? 'err' : 'ok');
-    attachToolInspector(lastToolStep, lastToolStep.dataset.args || '', detailText || '');
+    attachToolInspector(step, step.dataset.args || '', detailText || '');
     maybeScroll();
   }
   // Centered "Switched to <model>" divider with wavy rules on both sides.

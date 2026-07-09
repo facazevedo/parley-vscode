@@ -148,6 +148,7 @@ Legend: ☐ not tested · ✅ works · ❌ has a problem.
 | 117 | `/memory` — Show Memory & Rules (labeled by source, injection order) | ☐ |
 | 118 | Prompt snippets (save / insert / Manage Prompt Snippets) | ☐ |
 | 119 | Diff-review keyboard shortcuts (Ctrl/Cmd+Enter / +Shift / +Backspace) | ☐ |
+| 120 | Syntax-highlighted code (fences incl. auto-detect; tool command/args/result) | ☐ |
 
 ---
 
@@ -529,3 +530,7 @@ Legend: ☐ not tested · ✅ works · ❌ has a problem.
 
 ### 119. Diff-review keyboard shortcuts
 - With an edit-approval card open (Ask mode): **Ctrl/Cmd+Enter** applies it, **Ctrl/Cmd+Shift+Enter** applies all, **Ctrl/Cmd+Backspace** rejects it, **Ctrl/Cmd+Shift+Backspace** rejects all. The card shows the hint. Plain **Enter** still sends a composer message (does not apply).
+
+### 120. Syntax-highlighted code
+- Ask for a code snippet in several languages → fenced code blocks in the reply are **colorized**, including a fence with **no language tag** (auto-detected).
+- In an agent mode, run a command → **expand** the tool step: the **Command** is shown as a syntax-highlighted shell block; for other tools the **Arguments** show highlighted JSON and the **Result** is auto-highlighted. (Expanding reliably reveals the panes — the earlier inspector-attach bug is fixed.)
