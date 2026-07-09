@@ -24,6 +24,7 @@ function loadWebview() {
   const dom = new JSDOM(html, { runScripts: 'outside-only', pretendToBeVisual: true, url: 'https://localhost/' });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const win = dom.window as any;
+  win.Element.prototype.scrollIntoView = () => {}; // jsdom doesn't implement it
   const posted: Array<Record<string, unknown>> = [];
   win.acquireVsCodeApi = () => ({
     postMessage: (m: Record<string, unknown>) => posted.push(m),
@@ -171,4 +172,27 @@ test('run_command tool step shows the command syntax-highlighted', () => {
   const pre = w.doc.querySelector('.toolstep .tooldetail pre');
   assert.ok(pre, 'expanded command/arguments pane present');
   assert.match(pre!.innerHTML, /class="hljs-/, 'the command is syntax-highlighted');
+});
+
+test('question navigator: prev/next highlights your messages one at a time', () => {
+  const w = loadWebview();
+  const hist = w.$('history');
+  hist.innerHTML =
+    '<div class="message user"><div class="content">Q1</div></div>' +
+    '<div class="message user"><div class="content">Q2</div></div>' +
+    '<div class="message user"><div class="content">Q3</div></div>';
+  const qs = () => [...hist.querySelectorAll('.message.user')];
+  const highlighted = () => qs().findIndex((q: Element) => q.classList.contains('qnav-highlight'));
+
+  w.click(w.$('prevQuestion')); // first Prev → newest (Q3)
+  assert.equal(highlighted(), 2);
+  w.click(w.$('prevQuestion')); // → Q2 (only one highlighted at a time)
+  assert.equal(highlighted(), 1);
+  assert.equal(hist.querySelectorAll('.qnav-highlight').length, 1);
+  w.click(w.$('nextQuestion')); // → Q3
+  assert.equal(highlighted(), 2);
+  w.click(w.$('prevQuestion')); // Q2
+  w.click(w.$('prevQuestion')); // Q1 (oldest)
+  w.click(w.$('prevQuestion')); // clamps at Q1
+  assert.equal(highlighted(), 0);
 });

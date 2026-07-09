@@ -1350,6 +1350,7 @@ import { contextSummary, mapReviewKey } from '../src/webview/composerLogic';
       addRegenerateButton(lastAssistantNode);
     }
     renderPendingSteers(); // keep pending steer bubbles across full re-renders
+    resetQNav(); // the re-render rebuilt the message nodes — drop any stale nav index
     maybeScroll();
   }
 
@@ -1521,6 +1522,7 @@ import { contextSummary, mapReviewKey } from '../src/webview/composerLogic';
     }
     recallIndex = -1;
     recallDraft = '';
+    resetQNav(); // a new message restarts question navigation from the newest
     const msg = { type: 'send', prompt: value };
     if (editingOrdinal !== null && !busy) {
       msg.editOrdinal = editingOrdinal;

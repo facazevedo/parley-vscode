@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.89.0
+
+### Finish the question navigator (▲/▼ in the composer)
+
+- The composer's **previous/next question** buttons now actually work end-to-end: the target message gets a **visible highlight** (outline + a brief flash) pinned to the top — previously the highlight class was applied but had **no CSS**, so nothing showed.
+- The two chevron buttons are now **styled** like the rest of the toolbar icons (they were rendering as default browser buttons).
+- The navigation index now **resets** when you send a message or the transcript re-renders, so stepping never lands on a stale position.
+
 ## 1.88.0
 
 ### Syntax-highlighted code everywhere

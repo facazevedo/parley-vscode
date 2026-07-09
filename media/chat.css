@@ -1982,6 +1982,8 @@ button:disabled {
 .actions #computer,
 .actions #settings,
 .actions #addMenuBtn,
+.actions #prevQuestion,
+.actions #nextQuestion,
 .actions .miccaret {
   display: inline-flex;
   align-items: center;
@@ -2037,9 +2039,30 @@ button:disabled {
 .actions #computer:hover,
 .actions #settings:hover,
 .actions #addMenuBtn:hover,
+.actions #prevQuestion:hover,
+.actions #nextQuestion:hover,
 .actions .miccaret:hover {
   opacity: 1;
   background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.2));
+}
+/* Prev/Next question stepper — the two chevrons sit together as one control. */
+.actions .qnav {
+  display: inline-flex;
+  align-items: center;
+}
+/* The user message the question-navigator jumped to, highlighted at the top. */
+.message.user.qnav-highlight {
+  outline: 2px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
+  animation: qnavflash 1.2s ease-out;
+}
+@keyframes qnavflash {
+  0% {
+    background: var(--vscode-editor-findMatchHighlightBackground, rgba(255, 214, 0, 0.35));
+  }
+  100% {
+    background: transparent;
+  }
 }
 /* Mic split-button: the mic sits next to a small caret that toggles voice mode. */
 .actions .micwrap {
